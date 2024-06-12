@@ -1,0 +1,9 @@
+cff-version: 0.0.1
+message: "If you use this software, please cite it as below."
+authors:
+  - family-names: "Hofmann"
+    given-names: "Phil-Alexander"
+title: "NewFun"
+version: 0.0.1
+date-released: 2024-06-04
+repository-code: "https://gitlab.com/philhofmann/newfun"

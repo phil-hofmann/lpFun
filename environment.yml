@@ -1,0 +1,11 @@
+name: newfun 
+
+channels:
+  - defaults
+
+dependencies:
+  - python=3.8
+  - numpy=1.24.3
+  - numba=0.58.1
+  - pytest
+  - setuptools
