@@ -1,6 +1,6 @@
 import numpy as np
-from typing import Tuple
-from newfun.utils import unisolvent_nodes_1d, unisolvent_nodes, tiling, l2n, n2l, rmo
+from newfun.utils_njit import eval_at_point
+from newfun.utils import unisolvent_nodes_1d, unisolvent_nodes, cheb, tiling, l2n, n2l, rmo
 from newfun.transform_utils import transform, transform_diag
 from newfun import NP_ARRAY, EXPENSIVE
 
@@ -8,7 +8,7 @@ class Transform:
 
     """Transform class."""
 
-    def __init__(self, dimension: int, polynomial_degree: int, p: float = 2.0, expensive=EXPENSIVE) -> None:
+    def __init__(self, dimension: int, polynomial_degree: int, p: float = 2.0, nodes:callable=cheb, expensive=EXPENSIVE) -> None:
         
         self._m = dimension
         self._n = polynomial_degree
@@ -34,19 +34,19 @@ class Transform:
                     raise ValueError(f"Operation too expensive: {length} > {expensive}. If this operation should be executed anyways, please set expensive to None.")
         
         # One dimensional unisolvent nodes
-        nodes = unisolvent_nodes_1d(self._n + 1)
+        self._nodes = unisolvent_nodes_1d(self._n + 1, nodes)
 
         # Multi-dimensional unisolvent nodes
-        self._unisolvent_nodes = unisolvent_nodes(nodes, self._m, self._n, self._p)
+        self._unisolvent_nodes = unisolvent_nodes(self._nodes, self._m, self._n, self._p)
 
         # Lagrange to Newton transformation 1D
-        self._l2n = rmo(l2n(nodes))
+        self._l2n = rmo(l2n(self._nodes))
 
         # Newton to Lagrange transformation 1D
-        self._n2l = rmo(n2l(nodes))
+        self._n2l = rmo(n2l(self._nodes))
 
         # Newton differentiation matrix
-        # self._dx = rmo(dx(nodes)) # TODO
+        # self._dx = rmo(dx(self._nodes)) # TODO
     
     @property
     def dimension(self) -> int:
@@ -60,6 +60,10 @@ class Transform:
     def p(self) -> int:
         return self._p
     
+    @property
+    def nodes(self) -> NP_ARRAY:
+        return self._nodes
+
     @property
     def unisolvent_nodes(self) -> NP_ARRAY:
         return self._unisolvent_nodes
@@ -83,9 +87,9 @@ class Transform:
         # return d_coefficients
         raise NotImplementedError("Not implemented yet.")
     
-    def eval(self, coefficients: NP_ARRAY, point: NP_ARRAY):
+    def eval(self, coefficients: NP_ARRAY, x: NP_ARRAY): # TODO ADD TESTS!
         """Point Evaluation"""
-        raise NotImplementedError("Not implemented yet.")
+        return eval_at_point(coefficients, self._nodes, x, self._m, self._p)
     
     def __len__(self) -> int:
         return len(self._unisolvent_nodes)

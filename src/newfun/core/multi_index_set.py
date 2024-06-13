@@ -31,7 +31,7 @@ class MultiIndexSet(object):
         self.clear()
 
     @property
-    def multi_index(self) -> np.ndarray:
+    def multi_index(self) -> NP_ARRAY:
         return self._multi_index
 
     @property

@@ -85,21 +85,30 @@ reconstruction = t.ifnt(coeffs)
 
 # Print the L1 norm of the difference between the reconstruction and the original function values
 print(f"||reconstruction-function_values||_1: {np.linalg.norm(reconstruction-function_values)}")
+
+# Evaluate at single point
+x = np.array([0.1, 0.2, 0.3], dtype=np.float64)
+fx = f(*x)
+reconstruction_fx = t.eval(coeffs, x)
+
+# Print the absolute error
+print(f"|reconstruction_fx-fx| = {np.abs(fx-reconstruction_fx)}")
 ```
 
-When you run this code, you should see the following output:
+When you run this code, you should see an output similar to the following:
 
 ```
 N = 54
 ||reconstruction-function_values||_1: 7.685725819700564e-15
+|reconstruction_fx-fx| = 1.1102230246251565e-15
 ```
 
 ## Acknowledgments
 
 I would like to acknowledge:
 
-- [Prof. Dr. Peter Stadler](https://www.uni-leipzig.de/personenprofil/mitarbeiter/prof-dr-peter-florian-stadler) - [University of Leipzig](https://www.uni-leipzig.de/),
 - [Prof. Dr. Michael Hecht](https://www.casus.science/de-de/team-members/michael-hecht/) - [CASUS](https://www.casus.science/) ([HZDR](https://www.hzdr.de/)),
 - [Dr. Damar Wicakson](https://www.casus.science/de-de/team-members/dr-damar-wicaksono/) - [CASUS](https://www.casus.science/) ([HZDR](https://www.hzdr.de/)),
+- [Prof. Dr. Peter Stadler](https://www.uni-leipzig.de/personenprofil/mitarbeiter/prof-dr-peter-florian-stadler) - [University of Leipzig](https://www.uni-leipzig.de/),
 
 and the support and resources provided by the [Center for Advanced Systems Understanding](https://www.casus.science/) ([Helmholtz-Zentrum Dreden-Rossendorf](https://www.hzdr.de/)) where the development of this project took place.

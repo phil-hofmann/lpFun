@@ -16,7 +16,7 @@ def test_n2l_l2n():
     ns = gen_ns(1)
     for n in ns:
         # Generate unisolvent nodes 1d
-        nodes = nf.utils.unisolvent_nodes_1d(n)
+        nodes = nf.utils.unisolvent_nodes_1d(n, nf.utils.cheb)
 
         # Forward and backward transformations
         l2n = nf.utils.l2n(nodes)

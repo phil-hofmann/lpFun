@@ -4,7 +4,6 @@ from newfun.utils_njit import (
     n2l_subroutine,
     l2n_subroutine,
     rmo_subroutine,
-    cheb_n,
     leja_order,
     unisolvent_nodes_subroutine,
     tiling_subroutine,
@@ -45,9 +44,20 @@ def unisolvent_nodes(nodes: NP_ARRAY, m: int, n: int, p: float) -> NP_ARRAY:
         return unisolvent_nodes_subroutine(nodes, m, n, p)
 
 
-def unisolvent_nodes_1d(n: int) -> NP_ARRAY:
-    cheb_nodes = cheb_n(n)
-    return cheb_nodes[leja_order(cheb_nodes)]
+def unisolvent_nodes_1d(n: int, nodes: callable) -> NP_ARRAY:
+    nodes_n = nodes(n)
+    return nodes_n[leja_order(nodes_n)]
+
+
+def cheb(n: int) -> NP_ARRAY:
+    """O(n)"""
+    if n < 0:
+        raise ValueError("The parameter ``n`` should be non-negative.")
+    if n == 0:
+        return np.zeros(1, dtype=NP_FLOAT)
+    if n == 1:
+        return np.array([-1.0, 1.0], dtype=NP_FLOAT)
+    return np.cos(np.arange(n, dtype=NP_FLOAT) * np.pi / (n - 1))
 
 
 def tiling(m: int, n: int, p: NP_FLOAT) -> NP_ARRAY:

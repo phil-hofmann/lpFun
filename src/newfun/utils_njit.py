@@ -5,7 +5,8 @@ from newfun import NP_INT, NP_FLOAT, NP_ARRAY
 
 # TODO parallelize these loops
 
-@njit
+
+@njit # parallelizable!
 def n2l_subroutine(nodes: NP_ARRAY) -> NP_ARRAY:
     """O(n^2)"""
     x = np.asarray(nodes).astype(NP_FLOAT)
@@ -18,11 +19,31 @@ def n2l_subroutine(nodes: NP_ARRAY) -> NP_ARRAY:
 
 
 @njit
+def eval_at_point(
+    coefficients: NP_ARRAY, nodes: NP_ARRAY, x: NP_ARRAY, m: int, p: float
+):
+    """O(m*k_{m,n,p})"""
+    coefficients = np.asarray(coefficients).astype(NP_FLOAT)
+    x = np.asarray(x).astype(NP_FLOAT)
+    n = len(nodes) - 1
+    monomials = [_eval(nodes, x[i]) for i in range(m)]  # O(m*n)
+    result = 0.0
+    mis = MultiIndexSet(m, n, p)
+    while mis.next():  #  O(k_mnp)
+        mi = mis.multi_index
+        result += coefficients[mis.i] * np.prod(
+            np.array([monomials[i][mi[i]] for i in range(m)], dtype=NP_FLOAT)
+        )  # O(m)
+    return result
+
+
+@njit
 def _eval(nodes: NP_ARRAY, x: NP_FLOAT) -> NP_FLOAT:
     """O(n)"""
     nodes = np.asarray(nodes).astype(NP_FLOAT)
     n = len(nodes)
     monomials = np.ones(n, dtype=NP_FLOAT)
+    # caution -- loop not parallelizable
     for i in range(1, n):
         monomials[i] *= monomials[i - 1] * (x - nodes[i - 1])
     return monomials
@@ -97,18 +118,6 @@ def leja_order(nodes: NP_ARRAY):
 
 
 @njit
-def cheb_n(n: int) -> NP_ARRAY:
-    """O(n)"""
-    if n < 0:
-        raise ValueError("The parameter ``n`` should be non-negative.")
-    if n == 0:
-        return np.zeros(1, dtype=NP_FLOAT)
-    if n == 1:
-        return np.array([-1.0, 1.0], dtype=NP_FLOAT)
-    return np.cos(np.arange(n, dtype=NP_FLOAT) * np.pi / (n - 1))
-
-
-@njit
 def tiling_subroutine(m: int, n: int, p: float) -> NP_ARRAY:
     """O(|A_{m, n, p}| + ... + |A_{1, n, p}|)"""
     mis = MultiIndexSet(m, n, p)
@@ -161,6 +170,7 @@ def rmo_subroutine(A: NP_ARRAY):
             k += 1
     return result
 
+
 @njit
 def concatenate_arrays(chunk_dot):
     total_length = sum([len(arr) for arr in chunk_dot])
@@ -171,6 +181,7 @@ def concatenate_arrays(chunk_dot):
         result[start:end] = arr
         start = end
     return result
+
 
 @njit
 def reduceat(array, split_indices):
