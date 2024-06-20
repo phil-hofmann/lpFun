@@ -8,5 +8,5 @@ NP_FLOAT = np.float64
 NB_FLOAT = nb.float64
 NP_ARRAY = np.ndarray
 EXPENSIVE = 20_000_000
-PARALLEL = True
+PARALLEL = False
 from .transform import Transform

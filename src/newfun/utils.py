@@ -3,7 +3,9 @@ import numpy as np
 from newfun.utils_njit import (
     n2l_subroutine,
     l2n_subroutine,
-    rmo_subroutine,
+    ndx_subroutine,
+    rmo_upper_subroutine,
+    rmo_lower_subroutine,
     leja_order,
     unisolvent_nodes_subroutine,
     tiling_subroutine,
@@ -32,8 +34,17 @@ def l2n(nodes: NP_ARRAY) -> NP_ARRAY:
     return l2n_subroutine(nodes)
 
 
-def rmo(A: NP_ARRAY) -> NP_ARRAY:
-    return rmo_subroutine(A)
+def ndx(nodes: NP_ARRAY) -> NP_ARRAY:
+    return ndx_subroutine(nodes)
+
+
+def rmo(A: NP_ARRAY, mode: str = "lower") -> NP_ARRAY:
+    if mode == "upper":
+        return rmo_upper_subroutine(A)
+    elif mode == "lower":
+        return rmo_lower_subroutine(A)
+    else:
+        raise ValueError("The parameter mode should be either 'upper' or 'lower'.")
 
 
 def unisolvent_nodes(nodes: NP_ARRAY, m: int, n: int, p: float) -> NP_ARRAY:

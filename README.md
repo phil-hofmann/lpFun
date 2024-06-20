@@ -93,6 +93,24 @@ reconstruction_fx = t.eval(coeffs, x)
 
 # Print the absolute error
 print(f"|reconstruction_fx-fx| = {np.abs(fx-reconstruction_fx)}")
+
+# Define the derivative
+def dx_f(x, y, z):
+    return 2 * x + 6 * x**2 + np.zeros_like(y) + np.zeros_like(z)
+
+# Generate derivative function values from the unisolvent nodes
+dx_function_values = [dx_f(*x) for x in t.unisolvent_nodes]
+
+# Perform the derivative fast Newton transformation
+dx_coeffs = t.dfnt(coeffs, 0)
+
+# Perform the inverse fast Newton transformation
+dx_reconstruction = t.ifnt(dx_coeffs)
+
+# Print the L1 norm of the difference between the reconstruction of the derivative and the original derivative function values
+print(
+    f"||dx_reconstruction-dx_function_values||_1: {np.linalg.norm(dx_reconstruction-dx_function_values)}"
+)
 ```
 
 When you run this code, you should see an output similar to the following:

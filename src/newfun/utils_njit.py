@@ -5,8 +5,7 @@ from newfun import NP_INT, NP_FLOAT, NP_ARRAY
 
 # TODO parallelize these loops
 
-
-@njit # parallelizable!
+@njit
 def n2l_subroutine(nodes: NP_ARRAY) -> NP_ARRAY:
     """O(n^2)"""
     x = np.asarray(nodes).astype(NP_FLOAT)
@@ -22,7 +21,7 @@ def n2l_subroutine(nodes: NP_ARRAY) -> NP_ARRAY:
 def eval_at_point(
     coefficients: NP_ARRAY, nodes: NP_ARRAY, x: NP_ARRAY, m: int, p: float
 ):
-    """O(m*k_{m,n,p})"""
+    """O(m*k_m,n,p)"""
     coefficients = np.asarray(coefficients).astype(NP_FLOAT)
     x = np.asarray(x).astype(NP_FLOAT)
     n = len(nodes) - 1
@@ -118,8 +117,57 @@ def leja_order(nodes: NP_ARRAY):
 
 
 @njit
+def ndx_subroutine(nodes: NP_ARRAY):
+    """O(n^2)"""
+    n = nodes.shape[0]
+    dx = np.zeros((n, n), dtype=NP_FLOAT)
+    for i in range(1, n):
+        for j in range(i):
+            if i == j + 1:
+                dx[i, j] = i
+            else:
+                dx[i, j] = (nodes[j] - nodes[i - 1]) * dx[i - 1, j] + dx[i - 1, j - 1]
+    return dx.T
+
+
+@njit
+def permutation_maximal(m: int, n: int, i: int):
+    """O(N)"""
+    N = (n + 1) ** m
+    mat = np.zeros(N, dtype=NP_INT)
+    iter_len = (n + 1) ** i
+    step_len = (n + 1) ** (m - i)
+    k = 0
+    for j in range(step_len):
+        for i in range(iter_len):
+            val = i * step_len + j
+            mat[k] = val
+            k += 1
+    return mat
+
+
+@njit
+def permutation(m: int, n: int, T: NP_ARRAY, i: int):
+    """O(A_m,n,p)"""
+    raise NotImplementedError("Not implemented yet.")
+
+
+@njit
+def apply_permutation(P: NP_ARRAY, x: NP_ARRAY, invert: bool = False):
+    """O(n)"""
+    x_p = np.zeros_like(x)
+    if invert:
+        for i, j in enumerate(P):
+            x_p[i] = x[j]
+    else:
+        for i, j in enumerate(P):
+            x_p[j] = x[i]
+    return x_p
+
+
+@njit
 def tiling_subroutine(m: int, n: int, p: float) -> NP_ARRAY:
-    """O(|A_{m, n, p}| + ... + |A_{1, n, p}|)"""
+    """O(k_m,n,p)"""
     mis = MultiIndexSet(m, n, p)
     memory_allocation = _memory_allocation(m - 1, n, p)
     tiling = np.zeros(memory_allocation, dtype=NP_INT)
@@ -148,6 +196,7 @@ def _memory_allocation(m: int, n: int, p: float) -> int:
 
 @njit
 def _binomial(n: int, m: int) -> int:
+    """O(min(m, n-m))"""
     if m < 0 or m > n:
         return 0
     result = 1
@@ -157,7 +206,7 @@ def _binomial(n: int, m: int) -> int:
 
 
 @njit
-def rmo_subroutine(A: NP_ARRAY):
+def rmo_lower_subroutine(A: NP_ARRAY):
     """O(n^2)"""
     A = np.asarray(A).astype(NP_FLOAT)
     n = A.shape[0]
@@ -167,6 +216,21 @@ def rmo_subroutine(A: NP_ARRAY):
     for i in range(n):
         for j in range(i + 1):
             result[k] = A[i, j]
+            k += 1
+    return result
+
+
+@njit
+def rmo_upper_subroutine(A: NP_ARRAY):
+    """O(n^2)"""
+    A = np.asarray(A).astype(NP_FLOAT)
+    n = A.shape[0]
+    N = int(n * (n + 1) / 2)
+    result = np.zeros(N, dtype=NP_FLOAT)
+    k = 0
+    for i in range(n):
+        for j in range(n - i):
+            result[k] = A[i, i + j]
             k += 1
     return result
 
@@ -185,6 +249,7 @@ def concatenate_arrays(chunk_dot):
 
 @njit
 def reduceat(array, split_indices):
+    """O(???)"""
     sums = np.zeros(len(split_indices) - 1, dtype=array.dtype)
     for i in range(len(split_indices) - 1):
         start = split_indices[i]
