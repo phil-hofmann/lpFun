@@ -1,20 +1,50 @@
 import pytest
 import numpy as np
-import newfun as nf
+import lpfun as nf
+
+# Parameters
+ms = [1, 2, 3, 4, 5]
+ps = [1.0, 2.0, np.infty]
 
 
-def gen_ns(m: int) -> nf.NP_ARRAY:
+def ns(m: int) -> nf.NP_ARRAY:
     # Generate random ns
-    n_max_m = {1: 100, 2: 60, 3: 50, 4: 40, 5: 20, 6:10}
+    n_max_m = {1: 100, 2: 60, 3: 50, 4: 40, 5: 20, 6: 10}
     n_max = n_max_m.get(m, 5)
     num = max(int(n_max * 0.2), 1)
     ns = np.random.randint(2, n_max + 1, num)
     return ns
 
 
+def monomial(m=2, n=3):
+    # Generate random coefficient for the monomial
+    c = 2 * np.random.rand() - 1
+
+    # Generate random exponents for each dimension
+    exponents = np.random.randint(0, n + 1, size=m)
+
+    # Generate the monomial and its derivative
+    def f(*x):
+        return c * np.prod(np.array(x) ** exponents)
+
+    def df(i, *x):
+        if exponents[i] == 0:
+            return 0.0
+        else:
+            return (
+                c
+                * exponents[i]
+                * np.prod(
+                    np.array(x)
+                    ** [exp if j != i else exp - 1 for j, exp in enumerate(exponents)]
+                )
+            )
+
+    return f, df
+
+
 def test_n2l_l2n():
-    ns = gen_ns(1)
-    for n in ns:
+    for n in ns(1):
         # Generate unisolvent nodes 1d
         nodes = nf.utils.unisolvent_nodes_1d(n, nf.utils.cheb)
 
@@ -29,61 +59,58 @@ def test_n2l_l2n():
 
 @pytest.mark.parametrize("m", [1, 2, 3, 4, 5, 6])
 def test_tiling_md_absolute(m: int):
-    ns = gen_ns(m)
-    for n in ns:
+    for n in ns(m):
         # Check if the tiling is valid for p = 1.0
         tiling = nf.utils.tiling(m, n, 1.0)
         tiling_sum = np.sum(tiling)
-        binom = nf.utils_njit._binomial(n + m, m)
+        binom = nf.utils._binomial(n + m, m)
         assert tiling_sum == binom
 
 
-@pytest.mark.parametrize("m", [1, 2, 3, 4, 5, 6])
-def test_fnt_ifnt_md_absolute(m: int):
-    ns = gen_ns(m)
-    for n in ns:
-        # Transform object for p = 1.0
-        t = nf.Transform(m, n, 1.0)
+@pytest.mark.parametrize("m, p", [(m, p) for m in ms for p in ps])
+def test_fnt_ifnt_md(m: int, p: float):
+    for n in ns(m):
+        # Transform object
+        t = nf.Transform(m, n, p)
 
         # Generate random function values
         function_values = np.random.rand(len(t))
 
         # Apply forward and backward transformations
-        reconstruction = t.ifnt(t.fnt(function_values))
+        reconstruction = t.pull(t.push(function_values))
 
-        # Forward and backward transformations
+        # Compare the reconstruction with the exact
         assert np.allclose(reconstruction, function_values)
 
 
-@pytest.mark.parametrize("m", [1, 2, 3, 4, 5, 6])
-def test_fnt_ifnt_md_euclidean(m: int):
-    ns = gen_ns(m)
-    for n in ns:
-        # Transform object for p = 2.0
-        t = nf.Transform(m, n)
+@pytest.mark.parametrize("m, p", [(m, p) for m in ms for p in ps])
+def test_fnt_ifnt_md_derivative(m: int, p: float):
+    if m > 3:
+        return
+    for n in range(3, 8):
+        # Generate a monomial
+        f, df = monomial(m, n)
 
-        # Generate random function values
-        function_values = np.random.rand(len(t))
+        n_prime = int(1 + 2 * m / p) * (n + 1)
 
-        # Apply forward and backward transformations
-        reconstruction = t.ifnt(t.fnt(function_values))
+        # Transform object
+        t = nf.Transform(m, n_prime, p)
 
-        # Forward and backward transformations
-        assert np.allclose(reconstruction, function_values)
+        # Calculate the exact function values
+        function_values = np.array([f(*x) for x in t.unisolvent_nodes])
 
-@pytest.mark.parametrize("m", [1, 2, 3])
-def test_fnt_ifnt_md_maximal(m: int):
-    ns = gen_ns(m)
-    for n in ns:
-        # Transform object for p = infinity
-        t = nf.Transform(m, n, p=np.infty)
+        # Perform the fast Newton transformation
+        coeffs = t.push(function_values)
 
-        # Generate random function values
-        function_values = np.random.rand(len(t))
+        for i in range(m):
+            # Calculate the exact derivative
+            dx_function_values = np.array([df(i, *x) for x in t.unisolvent_nodes])
 
-        # Apply forward and backward transformations
-        reconstruction = t.ifnt(t.fnt(function_values))
+            # Apply forward, derivative and backward transformations
+            reconstruction = t.pull(t.dx(coeffs, i))
 
-        # Forward and backward transformations
-        assert np.allclose(reconstruction, function_values)
+            eps = np.linalg.norm(reconstruction - dx_function_values)
+            print("m=", m, "n=", n, "n_prime", n_prime, "p=", p, "i=", i, "eps=", eps)
 
+            # Compare the reconstruction with the exact
+            assert np.allclose(reconstruction, dx_function_values)

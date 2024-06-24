@@ -1,6 +1,6 @@
-# NewFun
+# lpFun
 
-A package which uses Newton polynomials for function approximation.
+A package which uses l^p degree polynomials for function approximation and differentiation.
 
 ## Authors
 
@@ -18,15 +18,15 @@ The project is licensed under the [MIT License](LICENSE.txt).
 
 ## 💻 Installation
 
-Please follow the steps below:
+Please follow the steps below
 
 1. Clone the project:
 
 ```bash
-git clone https://gitlab.com/philhofmann/newfun.git
+git clone https://github.com/philippocalippo/lpFun.git
 ```
 
-2. Create a virtual environment:
+2. Create a virtual environment
 
 ```bash
 conda env create -f environment.yml
@@ -35,22 +35,22 @@ conda env create -f environment.yml
 3. Activate environment:
 
 ```bash
-conda activate newfun
+conda activate lpfun
 ```
 
-4. Install using pip:
+4. Install using pip
 
 ```bash
 pip install -e .
 ```
 
-5. Run the tests to verify the installation:
+5. Run the tests to verify the installation
 
 ```bash
 pytest
 ```
 
-6. If you want to deactivate the environment:
+6. If you want to deactivate the environment
 
 ```bash
 conda deactivate
@@ -58,67 +58,88 @@ conda deactivate
 
 ## Usage
 
-The `Transform` class can be used to perform forward and backward Newton transformations. Here is a basic example:
+The `Transform` class can be used to perform forward and backward Newton transformations. Here is a basic example
 
 ```python
-from newfun import Transform
+import time
 import numpy as np
+from lpfun import Transform
 
 # Create a Transform object with dimension=3, degree=4
-t = Transform(3, 4)
+t = Transform(3, 20, 2)
+
+# Warmup the JIT compiler
+t.warmup()
 
 # Print the dim of the polynomial space
 print(f"N = {len(t)}")
 
 # Define a function
 def f(x, y, z):
-    return x**2 + 2*x**3 + y + y**2 + z + z**2 + 3*z**4
+    return np.sin(x) + np.cos(y) + np.exp(z)
 
-# Generate function values from the unisolvent nodes
-function_values = [f(*x) for x in t.unisolvent_nodes]
+# Calculate the exact function values
+function_values = np.array([f(*x) for x in t.unisolvent_nodes])
 
 # Perform the fast Newton transformation
-coeffs = t.fnt(function_values)
+start_time = time.time()
+coeffs = t.push(function_values)
+print(f"t.push: {int((time.time()-start_time)*1000)} ms")
 
 # Perform the inverse fast Newton transformation
-reconstruction = t.ifnt(coeffs)
+start_time = time.time()
+reconstruction = t.pull(coeffs)
+print(f"t.pull: {int((time.time()-start_time)*1000)} ms")
 
 # Print the L1 norm of the difference between the reconstruction and the original function values
-print(f"||reconstruction-function_values||_1: {np.linalg.norm(reconstruction-function_values)}")
+print(
+    "max |reconstruction-function_values| = ",
+    "{:.2e}".format(np.max(reconstruction - function_values)),
+)
 
 # Evaluate at single point
 x = np.array([0.1, 0.2, 0.3], dtype=np.float64)
 fx = f(*x)
+start_time = time.time()
 reconstruction_fx = t.eval(coeffs, x)
+print(f"t.eval: {int((time.time()-start_time)*1000)} ms")
 
 # Print the absolute error
-print(f"|reconstruction_fx-fx| = {np.abs(fx-reconstruction_fx)}")
+print("|reconstruction_fx-fx| = ", "{:.2e}".format(np.abs(fx - reconstruction_fx)))
 
 # Define the derivative
 def dx_f(x, y, z):
-    return 2 * x + 6 * x**2 + np.zeros_like(y) + np.zeros_like(z)
+    return np.zeros_like(x) + np.zeros_like(y) + np.exp(z)
 
-# Generate derivative function values from the unisolvent nodes
-dx_function_values = [dx_f(*x) for x in t.unisolvent_nodes]
+# Calculate the exact derivative
+dx_function_values = np.array([dx_f(*x) for x in t.unisolvent_nodes])
 
 # Perform the derivative fast Newton transformation
-dx_coeffs = t.dfnt(coeffs, 0)
+start_time = time.time()
+dx_coeffs = t.dx(coeffs, 2)
+print(f"t.dx: {int((time.time()-start_time)*1000)} ms")
 
 # Perform the inverse fast Newton transformation
-dx_reconstruction = t.ifnt(dx_coeffs)
+dx_reconstruction = t.pull(dx_coeffs)
 
 # Print the L1 norm of the difference between the reconstruction of the derivative and the original derivative function values
 print(
-    f"||dx_reconstruction-dx_function_values||_1: {np.linalg.norm(dx_reconstruction-dx_function_values)}"
+    "max |dx_reconstruction-dx_function_values| = ",
+    "{:.2e}".format(np.max(np.abs(dx_reconstruction - dx_function_values))),
 )
 ```
 
-When you run this code, you should see an output similar to the following:
+When you run this code, you should see an output similar to
 
 ```
-N = 54
-||reconstruction-function_values||_1: 7.685725819700564e-15
-|reconstruction_fx-fx| = 1.1102230246251565e-15
+N = 4662
+t.push: 11 ms
+t.pull: 10 ms
+max |reconstruction-function_values| =  2.53e-14
+t.eval: 0 ms
+|reconstruction_fx-fx| =  8.88e-15
+t.dx: 1 ms
+max |dx_reconstruction-dx_function_values| =  6.03e-12
 ```
 
 ## Acknowledgments

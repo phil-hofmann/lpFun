@@ -2,10 +2,10 @@ from setuptools import setup, find_packages
 
 if __name__ == "__main__":
     setup(
-        name='newfun',
+        name='lpfun',
         author='Phil-Alexander Hofmann',
         author_email='mail@philhofmann.de',
-        description="A package for fast Newton transformations.", 
+        description="A package for fast polynomial interpolation and differentiation.", 
         python_requires='>=3.8',
         version='0.0.1',
         packages=find_packages(where='src'),
