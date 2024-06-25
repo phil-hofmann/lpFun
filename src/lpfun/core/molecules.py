@@ -18,6 +18,8 @@ from lpfun.core.atoms import (
     lt_diag_transform_maximal,
     ut_diag_transform,
     lt_diag_transform,
+    diag_transform_maximal,
+    diag_transform,
 )
 
 
@@ -135,6 +137,82 @@ def n_dx_transform(
             x = lt_diag_transform(A, x, T)
         else:
             x = ut_diag_transform(A, x, T)
+        if not i == 0:
+            x = apply_permutation(P, x)
+        return x
+
+@njit(parallel=PARALLEL)
+def l_dx_transform(
+    A: NP_ARRAY,
+    x: NP_ARRAY,
+    T: NP_ARRAY,
+    m: int,
+    n: int,
+    p: float,
+    i: int,
+    transpose: bool,
+) -> NP_ARRAY:
+    """
+    Fast Spectral Differentiation
+    --------------------------------------------------
+    A: NP_ARRAY
+        Matrix
+    x: NP_ARRAY
+        Input vector
+    T: NP_ARRAY
+        Tiling of the transformation
+    m: int
+        Dimension of the transformation
+    p: float
+        Parameter of the lp space
+    i: int
+        Coordinate of differentiation
+    transpose: bool
+        Whether to transpose the matrix
+
+    Returns
+    -------
+    NP_ARRAY:
+        Transformed vector
+
+    Time Complexity
+    ---------------
+    O(sum(T^2))
+    """
+    A = np.asarray(A).astype(NP_FLOAT)
+    x = np.asarray(x).astype(NP_FLOAT)
+    T = np.asarray(T).astype(NP_INT)
+    m, n, p = int(m), int(n), float(p)
+    if (not p == np.infty) and (T is None) and (not m == 1):
+        raise ValueError("Tiling is required for p != np.infty.")
+    classify(m, 0, p, allow_infty=True)
+    if m == 1:
+        if transpose:
+            At = A.T
+            return At @ x
+        else:
+            return A @ x
+    elif p == np.infty:
+        P = permutation_maximal(m, n, i)
+        if not i == 0:
+            x = apply_permutation(P, x)
+        if transpose:
+            At = A.T
+            x = diag_transform_maximal(At, x)
+        else:
+            x = diag_transform_maximal(A, x)
+        if not i == 0:
+            x = apply_permutation(P, x, invert=True)
+        return x
+    else:
+        P = permutation(T, i)
+        if not i == 0:
+            x = apply_permutation(P, x, invert=True)
+        if transpose:
+            At = A.T
+            x = diag_transform(A, x, T)
+        else:
+            x = diag_transform(A, x, T)
         if not i == 0:
             x = apply_permutation(P, x)
         return x

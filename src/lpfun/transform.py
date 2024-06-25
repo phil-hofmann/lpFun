@@ -12,7 +12,7 @@ from lpfun.utils import (
     rmo,
     eval_at_point,
 )
-from lpfun.core.molecules import n_transform, n_dx_transform
+from lpfun.core.molecules import n_transform, n_dx_transform, l_dx_transform
 
 
 class Transform:
@@ -47,8 +47,14 @@ class Transform:
         self._mode = mode
 
         # TODO If the dimension is five or higher only p = 1.0 or p = infinity is supported
-        if self._m >= 5 and not (self._p == 1.0 or self._p == np.infty):
-            print("Only p = 1.0 or p = infinity is supported for m >= 5.")
+        if (
+            mode == "newton"
+            and self._m >= 5
+            and not (self._p == 1.0 or self._p == np.infty)
+        ):
+            print(
+                "For Newton mode, only p = 1.0 or p = infinity is supported for m >= 5."
+            )
             self._p = 1.0
 
         # Tiling of the Newton transformations only if p is not np.infty
@@ -119,13 +125,15 @@ class Transform:
         """Warmup the JIT compiler."""
         length = len(self._unisolvent_nodes)
         zeros = np.zeros(length, dtype=NP_FLOAT)
-        self.push(zeros)
-        self.pull(zeros)
         self.dx(zeros, 0)
         self.dx(zeros, 0, True)
         if self._m > 1:
             self.dx(zeros, 1)
         self.eval(zeros, np.zeros(self._m, dtype=NP_FLOAT))
+        if self._mode == "lagrange":
+            return
+        self.push(zeros)
+        self.pull(zeros)
 
     def push(self, function_values: NP_ARRAY) -> NP_ARRAY:
         """Fast l^p Transformation"""
@@ -150,9 +158,8 @@ class Transform:
                 self._dx, coefficients, self._T, self._m, self._n, self._p, i, transpose
             )
         elif self._mode == "lagrange":
-            # TODO
-            raise NotImplementedError(
-                "The dx method is not implemented for the Lagrange mode."
+            return l_dx_transform(
+                self._dx, coefficients, self._T, self._m, self._n, self._p, i, transpose
             )
 
     def eval(self, coefficients: NP_ARRAY, x: NP_ARRAY) -> NP_FLOAT:
@@ -172,3 +179,44 @@ class Transform:
             return False
         if not value.p == self.p:
             return False
+
+
+if __name__ == "__main__":
+
+    import time
+    import numpy as np
+    from lpfun import Transform
+
+    # Create a Transform object with dimension=3, degree=4, p=2 (default value)
+    t = Transform(3, 20, 2, mode="lagrange")
+
+    # Warmup the JIT compiler
+    t.warmup()
+
+    # Print the dimension of the polynomial space
+    print(f"N = {len(t)}")
+
+    # Define a function
+    def f(x, y, z):
+        return np.sin(x) + np.cos(y) + np.exp(z)
+
+    # Calculate the exact function values on the unisolvent nodes
+    function_values = np.array([f(*x) for x in t.unisolvent_nodes])
+
+    # Define the derivative
+    def dx_f(x, y, z):
+        return np.zeros_like(x) + np.zeros_like(y) + np.exp(z)
+
+    # Calculate the exact derivative dx_3 on the unisolvent nodes
+    dx_function_values = np.array([dx_f(*x) for x in t.unisolvent_nodes])
+
+    # Compute the derivative dx_3
+    start_time = time.time()
+    dx_reconstruction = t.dx(function_values, 2)
+    print(f"t.dx: {int((time.time()-start_time)*1000)} ms")
+
+    # Print the maximum norm error
+    print(
+        "max |dx_reconstruction-dx_function_values| = ",
+        "{:.2e}".format(np.max(np.abs(dx_reconstruction - dx_function_values))),
+    )

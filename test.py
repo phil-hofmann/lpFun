@@ -7,6 +7,8 @@ ms = [1, 2, 3, 4, 5]
 ps = [1.0, 2.0, np.infty]
 
 
+# Prerequisites
+
 def ns(m: int) -> nf.NP_ARRAY:
     # Generate random ns
     n_max_m = {1: 100, 2: 60, 3: 50, 4: 40, 5: 20, 6: 10}
@@ -42,8 +44,9 @@ def monomial(m=2, n=3):
 
     return f, df
 
+# Tests
 
-def test_n2l_l2n():
+def test_n2l_and_l2n():
     for n in ns(1):
         # Generate unisolvent nodes 1d
         nodes = nf.utils.unisolvent_nodes_1d(n, nf.utils.cheb)
@@ -58,7 +61,7 @@ def test_n2l_l2n():
 
 
 @pytest.mark.parametrize("m", [1, 2, 3, 4, 5, 6])
-def test_tiling_md_absolute(m: int):
+def test_tiling_absolute_degree(m: int):
     for n in ns(m):
         # Check if the tiling is valid for p = 1.0
         tiling = nf.utils.tiling(m, n, 1.0)
@@ -68,7 +71,7 @@ def test_tiling_md_absolute(m: int):
 
 
 @pytest.mark.parametrize("m, p", [(m, p) for m in ms for p in ps])
-def test_fnt_ifnt_md(m: int, p: float):
+def test_newton_push_and_pull(m: int, p: float):
     for n in ns(m):
         # Transform object
         t = nf.Transform(m, n, p)
@@ -84,7 +87,7 @@ def test_fnt_ifnt_md(m: int, p: float):
 
 
 @pytest.mark.parametrize("m, p", [(m, p) for m in ms for p in ps])
-def test_fnt_ifnt_md_derivative(m: int, p: float):
+def test_newton_dx(m: int, p: float):
     if m > 3:
         return
     for n in range(3, 8):

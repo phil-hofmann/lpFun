@@ -117,7 +117,10 @@ def l_dx(nodes: NP_ARRAY) -> NP_ARRAY:
         for j in range(n):
             if i == j:
                 dx[i][i] = np.sum(
-                    [1 / (nodes[i] - nodes[_]) for _ in range(n) if _ != i]
+                    np.array(
+                        [1 / (nodes[i] - nodes[_]) for _ in range(n) if _ != i],
+                        dtype=NP_FLOAT,
+                    )
                 )
             else:
                 dx[i][j] = (w[j] / w[i]) * 1 / (nodes[i] - nodes[j])
@@ -126,10 +129,19 @@ def l_dx(nodes: NP_ARRAY) -> NP_ARRAY:
 
 @njit
 def _baryentric(nodes: NP_ARRAY) -> NP_ARRAY:
-    return [
-        1 / np.prod([(nodes[__] - nodes[_]) for _ in range(len(nodes)) if _ != __])
-        for __ in range(len(nodes))
-    ]
+    return np.array(
+        [
+            1
+            / np.prod(
+                np.array(
+                    [(nodes[__] - nodes[_]) for _ in range(len(nodes)) if _ != __],
+                    dtype=NP_FLOAT,
+                )
+            )
+            for __ in range(len(nodes))
+        ],
+        dtype=NP_FLOAT,
+    )
 
 
 @njit
