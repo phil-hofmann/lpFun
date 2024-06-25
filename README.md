@@ -1,7 +1,9 @@
-# lpFun
-
-A package which uses l^p degree polynomials for function approximation and differentiation.
-
+<p align="center">
+  <img src="social-banner.png" height="128" width="384"/>
+</p>
+<p align="center">
+    A package which uses l^p degree polynomials for function approximation and differentiation.
+</p>
 ## Authors
 
 - [Phil-Alexander Hofmann](https://gitlab.com/philippo_calippo) - [CASUS](https://www.casus.science/) ([HZDR](https://www.hzdr.de/))
