@@ -58,7 +58,7 @@ pytest
 conda deactivate
 ```
 
-## Usage
+## 📖 Usage
 
 The `Transform` class can be used to perform forward and backward Newton transformations.
 
