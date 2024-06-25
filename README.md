@@ -60,7 +60,7 @@ conda deactivate
 
 ## Usage
 
-The `Transform` class can be used to perform forward and backward Newton transformations. Here is a basic example
+The `Transform` class can be used to perform forward and backward Newton transformations.
 
 ```python
 import time
@@ -80,7 +80,7 @@ print(f"N = {len(t)}")
 def f(x, y, z):
     return np.sin(x) + np.cos(y) + np.exp(z)
 
-# Calculate the exact function values
+# Calculate the exact function values on the unisolvent nodes
 function_values = np.array([f(*x) for x in t.unisolvent_nodes])
 
 # Perform the forward transformation
@@ -99,7 +99,7 @@ print(
     "{:.2e}".format(np.max(reconstruction - function_values)),
 )
 
-# Evaluate at single point
+# Evaluate at a single point
 x = np.array([0.1, 0.2, 0.3], dtype=np.float64)
 fx = f(*x)
 start_time = time.time()
@@ -113,7 +113,7 @@ print("|reconstruction_fx-fx| = ", "{:.2e}".format(np.abs(fx - reconstruction_fx
 def dx_f(x, y, z):
     return np.zeros_like(x) + np.zeros_like(y) + np.exp(z)
 
-# Calculate the exact derivative dx_3
+# Calculate the exact derivative dx_3 on the unisolvent nodes
 dx_function_values = np.array([dx_f(*x) for x in t.unisolvent_nodes])
 
 # Compute the derivative dx_3
