@@ -109,8 +109,5 @@ def test_fnt_ifnt_md_derivative(m: int, p: float):
             # Apply forward, derivative and backward transformations
             reconstruction = t.pull(t.dx(coeffs, i))
 
-            eps = np.linalg.norm(reconstruction - dx_function_values)
-            print("m=", m, "n=", n, "n_prime", n_prime, "p=", p, "i=", i, "eps=", eps)
-
             # Compare the reconstruction with the exact
             assert np.allclose(reconstruction, dx_function_values)
