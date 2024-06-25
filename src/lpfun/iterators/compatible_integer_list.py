@@ -1,7 +1,6 @@
 import numpy as np
-from numba import boolean
 from numba.experimental import jitclass
-from newfun import NP_INT, NP_ARRAY, NB_INT
+from lpfun import NP_INT, NP_ARRAY, NB_INT
 
 spec = [
     ("_cs", NB_INT[:]),
@@ -138,8 +137,3 @@ class CompatibleIntegerList(object):
                 self._element_history = np.copy(element_history)
                 self._index = index + 1
                 return True
-
-
-if __name__ == "__main__":
-    cil = CompatibleIntegerList()
-    cil.init(np.array([3, 2, 1, 2, 1, 1, 2, 1, 1, 1]), 3)

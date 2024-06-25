@@ -1,7 +1,7 @@
 import numpy as np
 from numba import boolean
 from numba.experimental import jitclass
-from newfun import NP_INT, NP_FLOAT, NP_ARRAY, NB_INT, NB_FLOAT
+from lpfun import NP_INT, NP_FLOAT, NP_ARRAY, NB_INT, NB_FLOAT
 
 @jitclass(
     [
