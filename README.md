@@ -4,6 +4,7 @@
 <p align="center">
     A package which uses l^p degree polynomials for function approximation and differentiation.
 </p>
+
 ## Authors
 
 - [Phil-Alexander Hofmann](https://gitlab.com/philippo_calippo) - [CASUS](https://www.casus.science/) ([HZDR](https://www.hzdr.de/))
@@ -16,7 +17,6 @@ The project is licensed under the [MIT License](LICENSE.txt).
 
 - CASUS. [Minterpy](https://github.com/casus/minterpy). 2024. Licensed under the [MIT](https://github.com/casus/minterpy/blob/main/LICENSE) License.
 - philhofmann. [Bachelor thesis](https://gitlab.com/philhofmann/implementation-and-complexity-analysis-of-algorithms-for-multivariate-newton-polynomials-of-p-degree). 2024. Licensed under the [MIT](https://gitlab.com/philhofmann/implementation-and-complexity-analysis-of-algorithms-for-multivariate-newton-polynomials-of-p-degree/-/blob/main/LICENSE.txt?ref_type=heads) License.
-- <a target="_blank" href="https://icons8.com/icon/WR2dlOv7LqTV/apple">Apple</a> Icon von <a target="_blank" href="https://icons8.com">Icons8</a>
 
 ## 💻 Installation
 
@@ -67,13 +67,13 @@ import time
 import numpy as np
 from lpfun import Transform
 
-# Create a Transform object with dimension=3, degree=4
+# Create a Transform object with dimension=3, degree=4, p=2 (default value)
 t = Transform(3, 20, 2)
 
 # Warmup the JIT compiler
 t.warmup()
 
-# Print the dim of the polynomial space
+# Print the dimension of the polynomial space
 print(f"N = {len(t)}")
 
 # Define a function
@@ -83,17 +83,17 @@ def f(x, y, z):
 # Calculate the exact function values
 function_values = np.array([f(*x) for x in t.unisolvent_nodes])
 
-# Perform the fast Newton transformation
+# Perform the forward transformation
 start_time = time.time()
 coeffs = t.push(function_values)
 print(f"t.push: {int((time.time()-start_time)*1000)} ms")
 
-# Perform the inverse fast Newton transformation
+# Perform the backward transformation
 start_time = time.time()
 reconstruction = t.pull(coeffs)
 print(f"t.pull: {int((time.time()-start_time)*1000)} ms")
 
-# Print the L1 norm of the difference between the reconstruction and the original function values
+# Print the maximum norm error
 print(
     "max |reconstruction-function_values| = ",
     "{:.2e}".format(np.max(reconstruction - function_values)),
@@ -113,18 +113,18 @@ print("|reconstruction_fx-fx| = ", "{:.2e}".format(np.abs(fx - reconstruction_fx
 def dx_f(x, y, z):
     return np.zeros_like(x) + np.zeros_like(y) + np.exp(z)
 
-# Calculate the exact derivative
+# Calculate the exact derivative dx_3
 dx_function_values = np.array([dx_f(*x) for x in t.unisolvent_nodes])
 
-# Perform the derivative fast Newton transformation
+# Compute the derivative dx_3
 start_time = time.time()
 dx_coeffs = t.dx(coeffs, 2)
 print(f"t.dx: {int((time.time()-start_time)*1000)} ms")
 
-# Perform the inverse fast Newton transformation
+# Perform the backward transformation
 dx_reconstruction = t.pull(dx_coeffs)
 
-# Print the L1 norm of the difference between the reconstruction of the derivative and the original derivative function values
+# Print the maximum norm error
 print(
     "max |dx_reconstruction-dx_function_values| = ",
     "{:.2e}".format(np.max(np.abs(dx_reconstruction - dx_function_values))),
