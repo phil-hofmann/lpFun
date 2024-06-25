@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="social-banner.png" height="128" width="384"/>
+  <img src="social-banner-bg-rounded.png" height="128" width="384"/>
 </p>
 <p align="center">
     A package which uses l^p degree polynomials for function approximation and differentiation.
