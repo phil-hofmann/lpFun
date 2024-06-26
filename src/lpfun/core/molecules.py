@@ -18,6 +18,7 @@ from lpfun.core.atoms import (
     lt_diag_transform_maximal,
     ut_diag_transform,
     lt_diag_transform,
+    diag_transform_maximal,
 )
 
 
@@ -138,3 +139,58 @@ def n_dx_transform(
         if not i == 0:
             x = apply_permutation(P, x)
         return x
+
+
+@njit(parallel=PARALLEL)
+def l_dx_transform(
+    A: NP_ARRAY,
+    x: NP_ARRAY,
+    m: int,
+    n: int,
+    i: int,
+    transpose: bool,
+) -> NP_ARRAY:
+    """
+    Fast Spectral Differentiation
+    --------------------------------------------------
+    A: NP_ARRAY
+        Matrix
+    x: NP_ARRAY
+        Input vector
+    m: int
+        Dimension of the transformation
+    i: int
+        Coordinate of differentiation
+    transpose: bool
+        Whether to transpose the matrix
+
+    Returns
+    -------
+    NP_ARRAY:
+        Transformed vector
+
+    Time Complexity
+    ---------------
+    O(N*n)
+    """
+    A = np.asarray(A).astype(NP_FLOAT)
+    x = np.asarray(x).astype(NP_FLOAT)
+    m, n = int(m), int(n)
+    classify(m, 0, np.infty, allow_infty=True)
+    if m == 1:
+        if transpose:
+            At = A.T
+            return At @ x
+        else:
+            return A @ x
+    P = permutation_maximal(m, n, i)
+    if not i == 0:
+        x = apply_permutation(P, x)
+    if transpose:
+        At = A.T
+        x = diag_transform_maximal(At, x)
+    else:
+        x = diag_transform_maximal(A, x)
+    if not i == 0:
+        x = apply_permutation(P, x, invert=True)
+    return x

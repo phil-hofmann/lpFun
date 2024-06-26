@@ -1,4 +1,5 @@
 import itertools
+from typing import Tuple
 import numpy as np
 from numba import njit
 from lpfun import NP_FLOAT, NP_ARRAY, NP_INT
@@ -28,13 +29,13 @@ def n2l(nodes: NP_ARRAY) -> NP_ARRAY:
     n = len(nodes)
     lag_coeffs = np.zeros((n, n))
     for i in range(n):
-        evals = _eval(x, x[i])
+        evals = _n_eval(x, x[i])
         lag_coeffs[i, :n] = evals
     return lag_coeffs
 
 
 @njit
-def _eval(nodes: NP_ARRAY, x: NP_FLOAT) -> NP_FLOAT:
+def _n_eval(nodes: NP_ARRAY, x: NP_FLOAT) -> NP_FLOAT:
     """O(n)"""
     nodes = np.asarray(nodes).astype(NP_FLOAT)
     n = len(nodes)
@@ -46,14 +47,14 @@ def _eval(nodes: NP_ARRAY, x: NP_FLOAT) -> NP_FLOAT:
 
 
 @njit
-def eval_at_point(
+def n_eval_at_point(
     coefficients: NP_ARRAY, nodes: NP_ARRAY, x: NP_ARRAY, m: int, p: float
 ) -> NP_FLOAT:
     """O(m*k_m,n,p)"""
     coefficients = np.asarray(coefficients).astype(NP_FLOAT)
     x = np.asarray(x).astype(NP_FLOAT)
     n = len(nodes) - 1
-    monomials = [_eval(nodes, x[i]) for i in range(m)]  # O(m*n)
+    monomials = [_n_eval(nodes, x[i]) for i in range(m)]  # O(m*n)
     result = 0.0
     mis = MultiIndexSet(m, n, p)
     while mis.next():  #  O(k_mnp)
@@ -117,7 +118,10 @@ def l_dx(nodes: NP_ARRAY) -> NP_ARRAY:
         for j in range(n):
             if i == j:
                 dx[i][i] = np.sum(
-                    [1 / (nodes[i] - nodes[_]) for _ in range(n) if _ != i]
+                    np.array(
+                        [1 / (nodes[i] - nodes[_]) for _ in range(n) if _ != i],
+                        dtype=NP_FLOAT,
+                    )
                 )
             else:
                 dx[i][j] = (w[j] / w[i]) * 1 / (nodes[i] - nodes[j])
@@ -125,11 +129,26 @@ def l_dx(nodes: NP_ARRAY) -> NP_ARRAY:
 
 
 @njit
+def l_dxs_unique(nodes: NP_ARRAY, T: NP_ARRAY) -> Tuple[list, NP_ARRAY]:
+    uniqueT = np.unique(T).astype(NP_INT)
+    return [l_dx(nodes[:k]) for k in uniqueT], uniqueT
+
+
+@njit
 def _baryentric(nodes: NP_ARRAY) -> NP_ARRAY:
-    return [
-        1 / np.prod([(nodes[__] - nodes[_]) for _ in range(len(nodes)) if _ != __])
-        for __ in range(len(nodes))
-    ]
+    return np.array(
+        [
+            1
+            / np.prod(
+                np.array(
+                    [(nodes[__] - nodes[_]) for _ in range(len(nodes)) if _ != __],
+                    dtype=NP_FLOAT,
+                )
+            )
+            for __ in range(len(nodes))
+        ],
+        dtype=NP_FLOAT,
+    )
 
 
 @njit
@@ -379,3 +398,11 @@ def reduceat(array, split_indices) -> NP_ARRAY:
         end = min(end, len(array))
         sums[i] = np.sum(array[start:end])
     return sums[:i]
+
+if __name__ == "__main__":
+    print(
+        l_dxs_unique(
+            np.array([0.0, 1.0, 2.0, 3.0, 4.0], dtype=NP_FLOAT),
+            np.array([2, 3, 4], dtype=NP_INT),
+        )
+    )
