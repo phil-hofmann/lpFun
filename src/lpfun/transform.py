@@ -10,9 +10,9 @@ from lpfun.utils import (
     n_dx,
     l_dx,
     rmo,
-    eval_at_point,
+    n_eval_at_point,
 )
-from lpfun.core.molecules import n_transform, n_dx_transform
+from lpfun.core.molecules import n_transform, n_dx_transform, l_dx_transform
 
 
 class Transform:
@@ -20,7 +20,7 @@ class Transform:
 
     def __init__(
         self,
-        dimension: int,
+        spatial_dimension: int,
         polynomial_degree: int,
         p: float = 2.0,
         nodes: callable = cheb,
@@ -31,25 +31,42 @@ class Transform:
         Initialize the Transform object.
 
         Args:
-            dimension (int): Dimension of the spatial domain.
+            spatial_dimension (int): Dimension of the spatial domain.
             polynomial_degree (int): Degree of the polynomial.
             p (float): p-norm of the polynomial space.
             nodes (callable): One dimensional nodes.
-            mode (str): Transformation mode. Default is 'newton'. The other option is 'lagrange'.
+            mode (str): Transformation mode. Default is 'newton'. The other option is 'lagrange' and is only available for m=1 or p=np.infty.
             expensive (int): Expensive operation threshold.
         """
 
-        self._m = dimension
+        self._m = spatial_dimension
         self._n = polynomial_degree
         self._p = p
-        if mode not in ["newton", "lagrange"]:
-            raise ValueError("Invalid mode. Choose 'newton' or 'lagrange'.")
         self._mode = mode
 
-        # TODO If the dimension is five or higher only p = 1.0 or p = infinity is supported
-        if self._m >= 5 and not (self._p == 1.0 or self._p == np.infty):
-            print("Only p = 1.0 or p = infinity is supported for m >= 5.")
+        # Check supported modes
+        if mode not in ["newton", "lagrange"]:
+            raise ValueError("Invalid mode. Choose 'newton' or 'lagrange'.")
+        if (
+            mode == "newton"
+            and self._m >= 5
+            and self._p != 1.0
+            and self._p != np.infty
+        ):
+            # TODO: Add support for p != 1.0 and p != np.infty
+            print(
+                "For Newton mode, only p = 1.0 or p = infinity is supported for spatial dimension >= 5."
+            )
             self._p = 1.0
+
+        if mode == "lagrange" and self._m > 1 and self._p != np.infty:
+            # Problem: Lagrange differentiation matrices
+            # One would need to compute the differentiation matrices with respect to every occuring number in self._T.
+            # Then, one would have in some areas differentiation matrices with shape (1, 1).
+            # Hence, in this mode it is impossible to approximate the derivative of a function.
+            raise ValueError(
+                "The Lagrange mode is not supported for spatial dimension > 1 and p != infinity."
+            )
 
         # Tiling of the Newton transformations only if p is not np.infty
         self._T = (
@@ -119,16 +136,19 @@ class Transform:
         """Warmup the JIT compiler."""
         length = len(self._unisolvent_nodes)
         zeros = np.zeros(length, dtype=NP_FLOAT)
-        self.push(zeros)
-        self.pull(zeros)
         self.dx(zeros, 0)
         self.dx(zeros, 0, True)
         if self._m > 1:
             self.dx(zeros, 1)
+        if self._mode == "lagrange":
+            return
         self.eval(zeros, np.zeros(self._m, dtype=NP_FLOAT))
+        self.push(zeros)
+        self.pull(zeros)
 
     def push(self, function_values: NP_ARRAY) -> NP_ARRAY:
         """Fast l^p Transformation"""
+        print(f"push is called")
         function_values = np.asarray(function_values).astype(np.float64)
         if self._mode == "newton":
             return n_transform(self._l2n, function_values, self._T, self._m, self._p)
@@ -137,6 +157,7 @@ class Transform:
 
     def pull(self, coefficients: NP_ARRAY) -> NP_ARRAY:
         """Inverse Fast l^p Transformation"""
+        print(f"pull is called")
         if self._mode == "lagrange":
             raise ValueError("The pull method is not needed for the Lagrange mode.")
         coefficients = np.asarray(coefficients).astype(np.float64)
@@ -150,15 +171,24 @@ class Transform:
                 self._dx, coefficients, self._T, self._m, self._n, self._p, i, transpose
             )
         elif self._mode == "lagrange":
-            # TODO
-            raise NotImplementedError(
-                "The dx method is not implemented for the Lagrange mode."
+            return l_dx_transform(
+                self._dx,
+                coefficients,
+                self._m,
+                self._n,
+                i,
+                transpose,
             )
 
     def eval(self, coefficients: NP_ARRAY, x: NP_ARRAY) -> NP_FLOAT:
         """Point Evaluation"""
         # TODO Add tests for this method
-        return eval_at_point(coefficients, self._nodes, x, self._m, self._p)
+        if self._mode == "newton":
+            return n_eval_at_point(coefficients, self._nodes, x, self._m, self._p)
+        elif self._mode == "lagrange":
+            raise NotImplementedError(
+                "The eval method is not implemented for the Lagrange mode yet."
+            )
 
     def __len__(self) -> int:
         return len(self._unisolvent_nodes)
@@ -172,3 +202,44 @@ class Transform:
             return False
         if not value.p == self.p:
             return False
+
+
+if __name__ == "__main__":
+
+    import time
+    import numpy as np
+    from lpfun import Transform
+
+    # Create a Transform object with dimension=3, polynomial_degree=4, p=np.infty, mode="lagrange"
+    t = Transform(spatial_dimension=3, polynomial_degree=20, p=np.infty, mode="lagrange")
+
+    # Warmup the JIT compiler
+    t.warmup()
+
+    # Print the dimension of the polynomial space
+    print(f"N = {len(t)}")
+
+    # Define a function
+    def f(x, y, z):
+        return np.sin(x) + np.cos(y) + np.exp(z)
+
+    # Calculate the exact function values on the unisolvent nodes
+    function_values = np.array([f(*x) for x in t.unisolvent_nodes])
+
+    # Define the derivative
+    def dx_f(x, y, z):
+        return np.zeros_like(x) + np.zeros_like(y) + np.exp(z)
+
+    # Calculate the exact derivative dx_3 on the unisolvent nodes
+    dx_function_values = np.array([dx_f(*x) for x in t.unisolvent_nodes])
+
+    # Compute the derivative dx_3
+    start_time = time.time()
+    dx_reconstruction = t.dx(function_values, 2)
+    print(f"t.dx:", "{:.2f}".format((time.time() - start_time) * 1000), "ms")
+
+    # Print the maximum norm error
+    print(
+        "max |dx_reconstruction-dx_function_values| =",
+        "{:.2e}".format(np.max(np.abs(dx_reconstruction - dx_function_values))),
+    )

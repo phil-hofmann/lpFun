@@ -16,7 +16,7 @@ The functions are divided into the following categories:
 The functions are used in the Transform methods in the molecules.py module.
 """
 
-# 1D transformations
+# 1D Transformations
 
 
 @njit(parallel=PARALLEL)
@@ -80,7 +80,7 @@ def _ut_transform_parallel(A: NP_ARRAY, x: NP_ARRAY):
     return dot
 
 
-# Maximal transformations
+# Maximal Transformations
 
 
 @njit(parallel=PARALLEL)
@@ -219,7 +219,38 @@ def _lt_diag_transform_maximal_parallel(A: NP_ARRAY, x: NP_ARRAY):
     raise NotImplementedError("Not implemented yet.")
 
 
-# 2D transformations
+@njit(parallel=PARALLEL)
+def diag_transform_maximal(A: NP_ARRAY, x: NP_ARRAY) -> NP_ARRAY:
+    """O(N*n)"""
+    return (
+        _diag_transform_maximal_parallel(A, x)
+        if PARALLEL
+        else _diag_transform_maximal_sequential(A, x)
+    )
+
+
+@njit
+def _diag_transform_maximal_sequential(A: NP_ARRAY, x: NP_ARRAY) -> NP_ARRAY:
+    """O(N*n)"""
+    N, n = x.shape[0], A.shape[0]
+    pos, splits, result = 0, N // n, np.copy(x)
+    for _ in range(splits):  # O((n+1)^m)
+        next_pos = pos + n
+        chunk = result[pos:next_pos]
+        chunk_dot = A @ chunk  # O(2*n^2)
+        result[pos:next_pos] = chunk_dot
+        pos = next_pos
+    return result
+
+
+@njit
+def _diag_transform_maximal_parallel(A: NP_ARRAY, x: NP_ARRAY) -> NP_ARRAY:
+    """O(N*n)"""
+    # TODO
+    raise NotImplementedError("Not implemented yet.")
+
+
+# 2D Transformations
 
 
 @njit(parallel=PARALLEL)
@@ -234,7 +265,7 @@ def n_transform_2d(A: NP_ARRAY, x: NP_ARRAY, T: NP_ARRAY) -> NP_ARRAY:
 
 @njit
 def _n_transform_2d_sequential(A: NP_ARRAY, x: NP_ARRAY, T: NP_ARRAY):
-    """O(2*sum(T^2))"""
+    """O(sum(T^2))"""
     dot_1d = np.zeros_like(x)
     dot_2d = np.zeros_like(x)
     l, pos = 0, 0
@@ -260,7 +291,7 @@ def _n_transform_2d_sequential(A: NP_ARRAY, x: NP_ARRAY, T: NP_ARRAY):
 
 @njit(parallel=True)
 def _n_transform_2d_parallel(A: NP_ARRAY, x: NP_ARRAY, T: NP_ARRAY):
-    """O(2*sum(T^2))"""
+    """O(sum(T^2))"""
     length = T.shape[0]
     dot_1d = np.zeros_like(x)
     for i in prange(length):  # O(T)
@@ -271,7 +302,7 @@ def _n_transform_2d_parallel(A: NP_ARRAY, x: NP_ARRAY, T: NP_ARRAY):
         # caution -- possible overhead
         for j in range(slot):  # O(T_i)
             k = (j * (j + 1)) // 2
-            chunk_dot[j] = np.sum(A[k : k + j + 1] * chunk[0 : j + 1])  # O(2j)
+            chunk_dot[j] = np.sum(A[k : k + j + 1] * chunk[0 : j + 1])  # O(2*j)
         dot_1d[pos:next_pos] = chunk_dot
     dot_2d = np.zeros_like(x)
     for i in prange(length):  # O(T)
@@ -287,14 +318,16 @@ def _n_transform_2d_parallel(A: NP_ARRAY, x: NP_ARRAY, T: NP_ARRAY):
     return dot_2d
 
 
-# transformations
+# Transformations
 
 
 @njit(parallel=PARALLEL)
 def n_transform_md(A: NP_ARRAY, x: NP_ARRAY, T: NP_ARRAY) -> NP_ARRAY:
     """O(sum(T^2)*m)"""
     return (
-        _n_transform_md_parallel(A, x, T) if PARALLEL else _n_transform_md_sequential(A, x, T)
+        _n_transform_md_parallel(A, x, T)
+        if PARALLEL
+        else _n_transform_md_sequential(A, x, T)
     )
 
 
@@ -363,7 +396,7 @@ def _n_transform_md_sequential(A: NP_ARRAY, x: NP_ARRAY, T: NP_ARRAY):
                 chunk_dot_1D, k = np.zeros(slot, dtype=NP_FLOAT), 0
                 for j in range(slot):  # O(T_i)
                     k_next = k + j + 1
-                    chunk_dot_1D[j] = np.sum(A[k:k_next] * chunk[: j + 1])  # O(2j)
+                    chunk_dot_1D[j] = np.sum(A[k:k_next] * chunk[: j + 1])  # O(2*j)
                     k = k_next
                 dot[pos:next_pos] = chunk_dot_1D
             pos = next_pos
