@@ -1,4 +1,4 @@
-# Revolutionizing Interpolation and Spectral Methods in Arbitrary Dimensions!
+# Revolutionizing Function Approximation and Spectral Methods in Arbitrary Dimensions!
 <p align="center">
   <img src="social-banner-bg-rounded.png" height="128" width="384"/>
 </p>
