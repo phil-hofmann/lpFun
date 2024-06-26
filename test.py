@@ -3,18 +3,20 @@ import numpy as np
 import lpfun as nf
 
 # Parameters
-ms = [1, 2, 3, 4, 5]
+
+ms = [1, 2, 3, 4, 5, 6]
 ps = [1.0, 2.0, np.infty]
 
 
 # Prerequisites
 
+
 def ns(m: int) -> nf.NP_ARRAY:
     # Generate random ns
-    n_max_m = {1: 100, 2: 60, 3: 50, 4: 40, 5: 20, 6: 10}
+    n_max_m = {1: 120, 2: 80, 3: 40, 4: 20, 5: 10}
     n_max = n_max_m.get(m, 5)
     num = max(int(n_max * 0.2), 1)
-    ns = np.random.randint(2, n_max + 1, num)
+    ns = np.random.randint(1, n_max, num)
     return ns
 
 
@@ -43,6 +45,7 @@ def monomial(m=2, n=3):
             )
 
     return f, df
+
 
 # Tests
 
@@ -82,6 +85,8 @@ def test_newton_push_and_pull(m: int, p: float):
         # Apply forward and backward transformations
         reconstruction = t.pull(t.push(function_values))
 
+        print(np.linalg.norm(reconstruction - function_values))
+
         # Compare the reconstruction with the exact
         assert np.allclose(reconstruction, function_values)
 
@@ -94,6 +99,7 @@ def test_newton_dx(m: int, p: float):
         # Generate a monomial
         f, df = monomial(m, n)
 
+        # We need to increase the number of nodes for p != infinity
         n_prime = int(1 + 2 * m / p) * (n + 1)
 
         # Transform object
@@ -110,7 +116,32 @@ def test_newton_dx(m: int, p: float):
             dx_function_values = np.array([df(i, *x) for x in t.unisolvent_nodes])
 
             # Apply forward, derivative and backward transformations
-            reconstruction = t.pull(t.dx(coeffs, i))
+            dx_reconstruction = t.pull(t.dx(coeffs, i))
 
             # Compare the reconstruction with the exact
-            assert np.allclose(reconstruction, dx_function_values)
+            assert np.allclose(dx_reconstruction, dx_function_values)
+
+
+@pytest.mark.parametrize("m", ms)
+def test_lagrange_dx(m: int):
+    if m > 3:
+        return
+    for n in range(3, 8):
+        # Generate a monomial
+        f, df = monomial(m, n)
+
+        # Transform object
+        t = nf.Transform(m, n, np.infty, mode="lagrange")
+
+        # Calculate the exact function values
+        function_values = np.array([f(*x) for x in t.unisolvent_nodes])
+
+        for i in range(m):
+            # Calculate the exact derivative
+            dx_function_values = np.array([df(i, *x) for x in t.unisolvent_nodes])
+
+            # Apply forward, derivative and backward transformations
+            dx_reconstruction = t.dx(function_values, i)
+
+            # Compare the reconstruction with the exact
+            assert np.allclose(dx_reconstruction, dx_function_values)

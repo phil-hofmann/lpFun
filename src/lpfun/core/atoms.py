@@ -504,33 +504,3 @@ def _lt_diag_transform_parallel(A: NP_ARRAY, x: NP_ARRAY, T: NP_ARRAY):
     """O(sum(T^2))"""
     # TODO
     raise NotImplementedError("Not implemented yet.")
-
-
-@njit
-def diag_transform(A: NP_ARRAY, x: NP_ARRAY, T: NP_ARRAY):
-    """O(sum(T^2))"""
-    return (
-        _diag_transform_parallel(A, x, T)
-        if PARALLEL
-        else _diag_transform_sequential(A, x, T)
-    )
-
-
-@njit
-def _diag_transform_sequential(A: NP_ARRAY, x: NP_ARRAY, T: NP_ARRAY):
-    """O(sum(T^2))"""
-    pos, result = 0, np.zeros_like(x)
-    for slot in T:  # O(len(T))
-        next_pos = pos + slot
-        chunk = x[pos:next_pos]
-        chunk_dot = A[:slot, :slot] @ chunk  # O(2*slot^2)
-        result[pos:next_pos] = chunk_dot
-        pos = next_pos
-    return result
-
-
-@njit
-def _diag_transform_parallel(A: NP_ARRAY, x: NP_ARRAY, T: NP_ARRAY):
-    """O(sum(T^2))"""
-    # TODO
-    raise NotImplementedError("Not implemented yet.")
