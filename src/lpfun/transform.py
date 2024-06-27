@@ -148,7 +148,6 @@ class Transform:
 
     def push(self, function_values: NP_ARRAY) -> NP_ARRAY:
         """Fast l^p Transformation"""
-        print(f"push is called")
         function_values = np.asarray(function_values).astype(np.float64)
         if self._mode == "newton":
             return n_transform(self._l2n, function_values, self._T, self._m, self._p)
@@ -157,7 +156,6 @@ class Transform:
 
     def pull(self, coefficients: NP_ARRAY) -> NP_ARRAY:
         """Inverse Fast l^p Transformation"""
-        print(f"pull is called")
         if self._mode == "lagrange":
             raise ValueError("The pull method is not needed for the Lagrange mode.")
         coefficients = np.asarray(coefficients).astype(np.float64)
@@ -202,44 +200,3 @@ class Transform:
             return False
         if not value.p == self.p:
             return False
-
-
-if __name__ == "__main__":
-
-    import time
-    import numpy as np
-    from lpfun import Transform
-
-    # Create a Transform object with dimension=3, polynomial_degree=4, p=np.infty, mode="lagrange"
-    t = Transform(spatial_dimension=3, polynomial_degree=20, p=np.infty, mode="lagrange")
-
-    # Warmup the JIT compiler
-    t.warmup()
-
-    # Print the dimension of the polynomial space
-    print(f"N = {len(t)}")
-
-    # Define a function
-    def f(x, y, z):
-        return np.sin(x) + np.cos(y) + np.exp(z)
-
-    # Calculate the exact function values on the unisolvent nodes
-    function_values = np.array([f(*x) for x in t.unisolvent_nodes])
-
-    # Define the derivative
-    def dx_f(x, y, z):
-        return np.zeros_like(x) + np.zeros_like(y) + np.exp(z)
-
-    # Calculate the exact derivative dx_3 on the unisolvent nodes
-    dx_function_values = np.array([dx_f(*x) for x in t.unisolvent_nodes])
-
-    # Compute the derivative dx_3
-    start_time = time.time()
-    dx_reconstruction = t.dx(function_values, 2)
-    print(f"t.dx:", "{:.2f}".format((time.time() - start_time) * 1000), "ms")
-
-    # Print the maximum norm error
-    print(
-        "max |dx_reconstruction-dx_function_values| =",
-        "{:.2e}".format(np.max(np.abs(dx_reconstruction - dx_function_values))),
-    )
