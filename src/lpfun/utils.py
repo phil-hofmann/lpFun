@@ -129,12 +129,6 @@ def l_dx(nodes: NP_ARRAY) -> NP_ARRAY:
 
 
 @njit
-def l_dxs_unique(nodes: NP_ARRAY, T: NP_ARRAY) -> Tuple[list, NP_ARRAY]:
-    uniqueT = np.unique(T).astype(NP_INT)
-    return [l_dx(nodes[:k]) for k in uniqueT], uniqueT
-
-
-@njit
 def _baryentric(nodes: NP_ARRAY) -> NP_ARRAY:
     return np.array(
         [
@@ -398,11 +392,3 @@ def reduceat(array, split_indices) -> NP_ARRAY:
         end = min(end, len(array))
         sums[i] = np.sum(array[start:end])
     return sums[:i]
-
-if __name__ == "__main__":
-    print(
-        l_dxs_unique(
-            np.array([0.0, 1.0, 2.0, 3.0, 4.0], dtype=NP_FLOAT),
-            np.array([2, 3, 4], dtype=NP_INT),
-        )
-    )
