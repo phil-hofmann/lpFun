@@ -1,6 +1,7 @@
 name: lpfun 
 
 channels:
+  - conda-forge
   - defaults
 
 dependencies:

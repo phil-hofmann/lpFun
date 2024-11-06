@@ -21,6 +21,14 @@ The project is licensed under the [MIT License](LICENSE.txt).
 
 ## 💻 Installation
 
+### Including in Your Project
+If you want to include this package in your project, you can install it directly from the GitHub repository:
+
+```bash
+pip install git+https://github.com/philippocalippo/lpfun.git
+```
+
+### Setting Up the Repository on Your Local Machine
 Please follow the steps below
 
 1. Clone the project:
