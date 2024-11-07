@@ -13,7 +13,6 @@ if __name__ == "__main__":
         install_requires=[
             'numpy==1.22.4',
             'numba==0.58.1',
-            'scipy==1.7.1',
             'pytest==8.2.2',
             'setuptools==70.1.1'
         ],
