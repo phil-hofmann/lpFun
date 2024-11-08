@@ -1,9 +1,9 @@
-# Function Approximation and Spectral Methods in Lower Spaces!
+# lpFun
 <p align="center">
   <img src="social-banner-bg-rounded.png" height="128" width="384"/>
 </p>
 <p align="center">
-    A package which uses lp degree polynomials for function approximation and differentiation.
+    A package for fast multivariate interpolation and spectral methods in lower spaces.
 </p>
 
 ## Authors
@@ -27,7 +27,7 @@ If you want to include this package in your project, you can install it directly
 1. Create a conda environment with Python 3.9
 
 ```bash
-conda create --name myenv python=3.9
+conda create --name myenv python=3.9.20
 ```
 
 2. Activate environment
@@ -69,13 +69,19 @@ conda env create -f environment.yml
 conda activate lpfun
 ```
 
-4. Run the tests to verify the installation
+4. Install lpfun package using pip 
+
+```bash
+pip install -e .
+```
+
+5. Run the tests to verify the installation
 
 ```bash
 pytest
 ```
 
-5. If you want to deactivate the environment
+6. If you want to deactivate the environment
 
 ```bash
 conda deactivate
@@ -174,8 +180,8 @@ import time
 import numpy as np
 from lpfun import Transform
 
-# Create a Transform object with dimension=3, polynomial_degree=4, p=np.infty, mode="lagrange"
-t = Transform(spatial_dimension=3, polynomial_degree=20, p=np.infty, mode="lagrange")
+# Create a Transform object with dimension=3, polynomial_degree=4, p=np.inf, mode="lagrange"
+t = Transform(spatial_dimension=3, polynomial_degree=20, p=np.inf, mode="lagrange")
 
 # Warmup the JIT compiler
 t.warmup()

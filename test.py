@@ -1,17 +1,17 @@
 import pytest
 import numpy as np
-import lpfun as nf
+import lpfun as lf
 
 # Parameters
 
 ms = [1, 2, 3, 4, 5, 6]
-ps = [1.0, 2.0, np.infty]
+ps = [1.0, 2.0, np.inf]
 
 
 # Prerequisites
 
 
-def ns(m: int) -> nf.NP_ARRAY:
+def ns(m: int) -> np.ndarray:
     # Generate random ns
     n_max_m = {1: 120, 2: 80, 3: 40, 4: 20, 5: 10}
     n_max = n_max_m.get(m, 5)
@@ -49,27 +49,28 @@ def monomial(m=2, n=3):
 
 # Tests
 
+
 def test_n2l_and_l2n():
     for n in ns(1):
         # Generate unisolvent nodes 1d
-        nodes = nf.utils.unisolvent_nodes_1d(n, nf.utils.cheb)
+        nodes = lf.utils.unisolvent_nodes_1d(n, lf.utils.cheb)
 
         # Forward and backward transformations
-        l2n = nf.utils.l2n(nodes)
-        n2l = nf.utils.n2l(nodes)
+        l2n = lf.utils.l2n(nodes)
+        n2l = lf.utils.n2l(nodes)
 
         # Check if the transformations are inverse to each other
         identity = n2l @ l2n
-        assert np.allclose(identity, np.eye(n))  # , rtol=1e-4, atol=1e-6)
+        assert np.allclose(identity, np.eye(n), rtol=1e-4, atol=1e-6)
 
 
 @pytest.mark.parametrize("m", [1, 2, 3, 4, 5, 6])
 def test_tiling_absolute_degree(m: int):
     for n in ns(m):
         # Check if the tiling is valid for p = 1.0
-        tiling = nf.utils.tiling(m, n, 1.0)
+        tiling = lf.utils.tiling(m, n, 1.0)
         tiling_sum = np.sum(tiling)
-        binom = nf.utils._binomial(n + m, m)
+        binom = lf.utils._binomial(n + m, m)
         assert tiling_sum == binom
 
 
@@ -77,7 +78,7 @@ def test_tiling_absolute_degree(m: int):
 def test_newton_push_and_pull(m: int, p: float):
     for n in ns(m):
         # Transform object
-        t = nf.Transform(m, n, p)
+        t = lf.Transform(m, n, p)
 
         # Generate random function values
         function_values = np.random.rand(len(t))
@@ -103,7 +104,7 @@ def test_newton_dx(m: int, p: float):
         n_prime = int(1 + 2 * m / p) * (n + 1)
 
         # Transform object
-        t = nf.Transform(m, n_prime, p)
+        t = lf.Transform(m, n_prime, p)
 
         # Calculate the exact function values
         function_values = np.array([f(*x) for x in t.unisolvent_nodes])
@@ -131,7 +132,7 @@ def test_lagrange_dx(m: int):
         f, df = monomial(m, n)
 
         # Transform object
-        t = nf.Transform(m, n, np.infty, mode="lagrange")
+        t = lf.Transform(m, n, np.inf, mode="lagrange")
 
         # Calculate the exact function values
         function_values = np.array([f(*x) for x in t.unisolvent_nodes])

@@ -1,0 +1,19 @@
+[tool.poetry]
+name = "lpfun"
+version = "0.0.1"
+description = "A package for fast multivariate interpolation and spectral methods in lower spaces."
+authors = ["Phil-Alexander Hofmann"]
+license = "MIT"
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "3.9.20"
+numba = "0.60.0"
+numpy = "2.0.2"
+pytest = "8.3.3"
+scipy = "1.13.1"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

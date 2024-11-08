@@ -1,7 +1,7 @@
 import itertools
-from typing import Tuple
 import numpy as np
 from numba import njit
+from math import gamma
 from lpfun import NP_FLOAT, NP_ARRAY, NP_INT
 from lpfun.iterators import MultiIndexSet
 
@@ -14,9 +14,9 @@ def classify(m: int, n: int, p: float, allow_infty=False) -> NP_ARRAY:
         raise ValueError("The parameter dim should be at least 1.")
     if (not allow_infty) and (p <= 0.0 or p > 2.0):
         raise ValueError(" The parameter p should be in the range (0, 2].")
-    if allow_infty and (p <= 0.0 or p > 2.0) and (not p == np.infty):
+    if allow_infty and (p <= 0.0 or p > 2.0) and (not p == np.inf):
         raise ValueError(
-            " The parameter p should be in the range (0, 2] or p = np.infty."
+            " The parameter p should be in the range (0, 2] or p = np.inf."
         )
     if n < 0:
         raise ValueError("The parameter degree should be non-negative.")
@@ -187,7 +187,7 @@ def _rmo_lower(A: NP_ARRAY) -> NP_ARRAY:
 
 def unisolvent_nodes(nodes: NP_ARRAY, m: int, n: int, p: float) -> NP_ARRAY:
     classify(m, n, p, allow_infty=True)
-    if p == np.infty:
+    if p == np.inf:
         return np.flip(list(itertools.product(nodes, repeat=m)), axis=1)
     else:
         return _unisolvent_nodes(nodes, m, n, p)
@@ -217,7 +217,7 @@ def _memory_allocation(m: int, n: int, p: float) -> int:
     elif p <= 2.0:
         fac1 = (p * np.e / m) ** (1 / p)
         fac2 = np.sqrt(p / (2 * np.pi * m))
-        return int(np.ceil((fac1 * (n + 2) * np.math.gamma(1 + 1 / p)) ** m * fac2))
+        return int(np.ceil((fac1 * (n + 2) * gamma(1 + 1 / p)) ** m * fac2))
     else:
         return int((n + 1) ** m)
 

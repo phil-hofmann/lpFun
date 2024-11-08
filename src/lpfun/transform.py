@@ -35,7 +35,7 @@ class Transform:
             polynomial_degree (int): Degree of the polynomial.
             p (float): p-norm of the polynomial space.
             nodes (callable): One dimensional nodes.
-            mode (str): Transformation mode. Default is 'newton'. The other option is 'lagrange' and is only available for m=1 or p=np.infty.
+            mode (str): Transformation mode. Default is 'newton'. The other option is 'lagrange' and is only available for m=1 or p=np.inf.
             expensive (int): Expensive operation threshold.
         """
 
@@ -51,15 +51,15 @@ class Transform:
             mode == "newton"
             and self._m >= 5
             and self._p != 1.0
-            and self._p != np.infty
+            and self._p != np.inf
         ):
-            # TODO: Add support for p != 1.0 and p != np.infty
+            # TODO: Add support for p != 1.0 and p != np.inf
             print(
                 "For Newton mode, only p = 1.0 or p = infinity is supported for spatial dimension >= 5."
             )
             self._p = 1.0
 
-        if mode == "lagrange" and self._m > 1 and self._p != np.infty:
+        if mode == "lagrange" and self._m > 1 and self._p != np.inf:
             # Problem: Lagrange differentiation matrices
             # One would need to compute the differentiation matrices with respect to every occuring number in self._T.
             # Then, one would have in some areas differentiation matrices with shape (1, 1).
@@ -68,10 +68,10 @@ class Transform:
                 "The Lagrange mode is not supported for spatial dimension > 1 and p != infinity."
             )
 
-        # Tiling of the Newton transformations only if p is not np.infty
+        # Tiling of the Newton transformations only if p is not np.inf
         self._T = (
             np.array([])
-            if p == np.infty or self._m == 1
+            if p == np.inf or self._m == 1
             else tiling(self._m, self._n, self._p)
         )
 

@@ -51,12 +51,12 @@ def n_transform(A: NP_ARRAY, x: NP_ARRAY, T: NP_ARRAY, m: int, p: float) -> NP_A
     x = np.asarray(x).astype(NP_FLOAT)
     T = np.asarray(T).astype(NP_INT)
     m, p = int(m), float(p)
-    if (not p == np.infty) and (T is None) and (not m == 1):
-        raise ValueError("Tiling is required for p != np.infty.")
+    if (not p == np.inf) and (T is None) and (not m == 1):
+        raise ValueError("Tiling is required for p != np.inf.")
     classify(m, 0, p, allow_infty=True)
     if m == 1:
         return lt_transform(A, x)
-    elif p == np.infty:
+    elif p == np.inf:
         return n_transform_maximal(A, x)
     elif m == 2:
         return n_transform_2d(A, x, T)
@@ -106,8 +106,8 @@ def n_dx_transform(
     x = np.asarray(x).astype(NP_FLOAT)
     T = np.asarray(T).astype(NP_INT)
     m, n, p = int(m), int(n), float(p)
-    if (not p == np.infty) and (T is None) and (not m == 1):
-        raise ValueError("Tiling is required for p != np.infty.")
+    if (not p == np.inf) and (T is None) and (not m == 1):
+        raise ValueError("Tiling is required for p != np.inf.")
     classify(m, 0, p, allow_infty=True)
     if m == 1:
         if transpose:
@@ -115,7 +115,7 @@ def n_dx_transform(
             return lt_transform(At, x)
         else:
             return ut_transform(A, x)
-    elif p == np.infty:
+    elif p == np.inf:
         P = permutation_maximal(m, n, i)
         if not i == 0:
             x = apply_permutation(P, x)
@@ -176,7 +176,7 @@ def l_dx_transform(
     A = np.asarray(A).astype(NP_FLOAT)
     x = np.asarray(x).astype(NP_FLOAT)
     m, n = int(m), int(n)
-    classify(m, 0, np.infty, allow_infty=True)
+    classify(m, 0, np.inf, allow_infty=True)
     if m == 1:
         if transpose:
             At = A.T
