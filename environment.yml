@@ -1,12 +1,7 @@
 name: lpfun 
 
-channels:
-  - conda-forge
-  - defaults
-
 dependencies:
   - python=3.9
-  - numpy=1.22.4
-  - numba=0.58.1
-  - pytest=8.2.2
-  - setuptools=70.1.1
+  - pip
+  - pip:
+    - -r requirements.txt 
