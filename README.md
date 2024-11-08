@@ -1,9 +1,9 @@
-# Revolutionizing Function Approximation and Spectral Methods in Arbitrary Dimensions!
+# Function Approximation and Spectral Methods in Lower Spaces!
 <p align="center">
   <img src="social-banner-bg-rounded.png" height="128" width="384"/>
 </p>
 <p align="center">
-    A package which uses l^p degree polynomials for function approximation and differentiation.
+    A package which uses lp degree polynomials for function approximation and differentiation.
 </p>
 
 ## Authors
@@ -24,44 +24,58 @@ The project is licensed under the [MIT License](LICENSE.txt).
 ### Including in Your Project
 If you want to include this package in your project, you can install it directly from the GitHub repository:
 
+1. Create a conda environment with Python 3.9
+
+```bash
+conda create --name myenv python=3.9
+```
+
+2. Activate environment
+
+```bash
+conda activate myenv
+```
+
+3. Install the package from the GitHub repository
+
 ```bash
 pip install git+https://github.com/philippocalippo/lpfun.git
+```
+
+4. If you want to deactivate the environment
+
+```bash
+conda deactivate
 ```
 
 ### Setting Up the Repository on Your Local Machine
 Please follow the steps below
 
-1. Clone the project:
+1. Clone the project
 
 ```bash
 git clone https://github.com/philippocalippo/lpfun.git
 ```
 
-2. Create a virtual environment
+2. Create a conda environment
 
 ```bash
 conda env create -f environment.yml
 ```
  
-3. Activate environment:
+3. Activate environment
 
 ```bash
 conda activate lpfun
 ```
 
-4. Install using pip
-
-```bash
-pip install -e .
-```
-
-5. Run the tests to verify the installation
+4. Run the tests to verify the installation
 
 ```bash
 pytest
 ```
 
-6. If you want to deactivate the environment
+5. If you want to deactivate the environment
 
 ```bash
 conda deactivate
