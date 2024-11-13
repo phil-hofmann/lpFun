@@ -1,6 +1,6 @@
 import numpy as np
 from numba import njit, prange
-from lpfun import NP_FLOAT, NP_INT, NP_ARRAY, PARALLEL
+from lpfun import NP_FLOAT, NP_INT, PARALLEL
 from lpfun.utils import concatenate_arrays, reduceat
 from lpfun.iterators import CompatibleIntegerList as CIL
 
@@ -20,13 +20,13 @@ The functions are used in the Transform methods in the molecules.py module.
 
 
 @njit(parallel=PARALLEL)
-def lt_transform(A: NP_ARRAY, x: NP_ARRAY) -> NP_ARRAY:
+def lt_transform(A: np.ndarray, x: np.ndarray) -> np.ndarray:
     """O(n^2)"""
     return _lt_transform_parallel(A, x) if PARALLEL else _lt_transform_sequential(A, x)
 
 
 @njit
-def _lt_transform_sequential(A: NP_ARRAY, x: NP_ARRAY):
+def _lt_transform_sequential(A: np.ndarray, x: np.ndarray):
     """O(n^2)"""
     x = np.asarray(x).astype(NP_FLOAT)
     dot, j, n = np.zeros_like(x), 0, x.shape[0]
@@ -38,7 +38,7 @@ def _lt_transform_sequential(A: NP_ARRAY, x: NP_ARRAY):
 
 
 @njit(parallel=True)
-def _lt_transform_parallel(A: NP_ARRAY, x: NP_ARRAY):
+def _lt_transform_parallel(A: np.ndarray, x: np.ndarray):
     """O(n^2)"""
     x = np.asarray(x).astype(NP_FLOAT)
     dot, n = np.zeros_like(x), x.shape[0]
@@ -49,13 +49,13 @@ def _lt_transform_parallel(A: NP_ARRAY, x: NP_ARRAY):
 
 
 @njit(parallel=PARALLEL)
-def ut_transform(A: NP_ARRAY, x: NP_ARRAY) -> NP_ARRAY:
+def ut_transform(A: np.ndarray, x: np.ndarray) -> np.ndarray:
     """O(n^2)"""
     return _ut_transform_parallel(A, x) if PARALLEL else _ut_transform_sequential(A, x)
 
 
 @njit
-def _ut_transform_sequential(A: NP_ARRAY, x: NP_ARRAY):
+def _ut_transform_sequential(A: np.ndarray, x: np.ndarray):
     """O(n^2)"""
     x = np.asarray(x).astype(NP_FLOAT)
     dot, j, n = np.zeros_like(x), 0, x.shape[0]
@@ -68,7 +68,7 @@ def _ut_transform_sequential(A: NP_ARRAY, x: NP_ARRAY):
 
 
 @njit(parallel=True)
-def _ut_transform_parallel(A: NP_ARRAY, x: NP_ARRAY):
+def _ut_transform_parallel(A: np.ndarray, x: np.ndarray):
     """O(n^2)"""
     x = np.asarray(x).astype(NP_FLOAT)
     dot, n = np.zeros_like(x), x.shape[0]
@@ -84,17 +84,17 @@ def _ut_transform_parallel(A: NP_ARRAY, x: NP_ARRAY):
 
 
 @njit(parallel=PARALLEL)
-def n_transform_maximal(A: NP_ARRAY, x: NP_ARRAY) -> NP_ARRAY:
+def transform_maximal(A: np.ndarray, x: np.ndarray) -> np.ndarray:
     """O(N*n*m)"""
     return (
-        _n_transform_maximal_parallel(A, x)
+        _transform_maximal_parallel(A, x)
         if PARALLEL
-        else _n_transform_maximal_sequential(A, x)
+        else _transform_maximal_sequential(A, x)
     )
 
 
 @njit
-def _n_transform_maximal_sequential(A: NP_ARRAY, x: NP_ARRAY):
+def _transform_maximal_sequential(A: np.ndarray, x: np.ndarray):
     """O(N*n*m)"""
     N, n = x.shape[0], int((np.sqrt(1 + 8 * A.shape[0]) - 1) / 2)
     m = int(np.log(N) / np.log(n))
@@ -121,7 +121,7 @@ def _n_transform_maximal_sequential(A: NP_ARRAY, x: NP_ARRAY):
 
 
 @njit(parallel=True)
-def _n_transform_maximal_parallel(A: NP_ARRAY, x: NP_ARRAY):
+def _transform_maximal_parallel(A: np.ndarray, x: np.ndarray):
     """O(N*n*m)"""
     N, n = x.shape[0], int((np.sqrt(1 + 8 * A.shape[0]) - 1) / 2)
     m = int(np.log(N) / np.log(n))
@@ -150,7 +150,7 @@ def _n_transform_maximal_parallel(A: NP_ARRAY, x: NP_ARRAY):
 
 
 @njit(parallel=PARALLEL)
-def ut_diag_transform_maximal(A: NP_ARRAY, x: NP_ARRAY):
+def ut_diag_transform_maximal(A: np.ndarray, x: np.ndarray):
     """O(N*n)"""
     return (
         _ut_diag_transform_maximal_parallel(A, x)
@@ -160,7 +160,7 @@ def ut_diag_transform_maximal(A: NP_ARRAY, x: NP_ARRAY):
 
 
 @njit
-def _ut_diag_transform_maximal_sequential(A: NP_ARRAY, x: NP_ARRAY):
+def _ut_diag_transform_maximal_sequential(A: np.ndarray, x: np.ndarray):
     """O(N*n)"""
     N, n = x.shape[0], int((np.sqrt(1 + 8 * A.shape[0]) - 1) / 2)
     pos, splits, result = 0, N // n, np.copy(x)
@@ -178,14 +178,14 @@ def _ut_diag_transform_maximal_sequential(A: NP_ARRAY, x: NP_ARRAY):
 
 
 @njit(parallel=True)
-def _ut_diag_transform_maximal_parallel(A: NP_ARRAY, x: NP_ARRAY):
+def _ut_diag_transform_maximal_parallel(A: np.ndarray, x: np.ndarray):
     """O(N*n)"""
     # TODO
     raise NotImplementedError("Not implemented yet.")
 
 
 @njit(parallel=PARALLEL)
-def lt_diag_transform_maximal(A: NP_ARRAY, x: NP_ARRAY):
+def lt_diag_transform_maximal(A: np.ndarray, x: np.ndarray):
     """O(N*n)"""
     return (
         _lt_diag_transform_maximal_parallel(A, x)
@@ -195,7 +195,7 @@ def lt_diag_transform_maximal(A: NP_ARRAY, x: NP_ARRAY):
 
 
 @njit
-def _lt_diag_transform_maximal_sequential(A: NP_ARRAY, x: NP_ARRAY):
+def _lt_diag_transform_maximal_sequential(A: np.ndarray, x: np.ndarray):
     """O(N*n)"""
     N, n = x.shape[0], int((np.sqrt(1 + 8 * A.shape[0]) - 1) / 2)
     pos, splits, result = 0, N // n, np.copy(x)
@@ -213,38 +213,7 @@ def _lt_diag_transform_maximal_sequential(A: NP_ARRAY, x: NP_ARRAY):
 
 
 @njit(parallel=True)
-def _lt_diag_transform_maximal_parallel(A: NP_ARRAY, x: NP_ARRAY):
-    """O(N*n)"""
-    # TODO
-    raise NotImplementedError("Not implemented yet.")
-
-
-@njit(parallel=PARALLEL)
-def diag_transform_maximal(A: NP_ARRAY, x: NP_ARRAY) -> NP_ARRAY:
-    """O(N*n)"""
-    return (
-        _diag_transform_maximal_parallel(A, x)
-        if PARALLEL
-        else _diag_transform_maximal_sequential(A, x)
-    )
-
-
-@njit
-def _diag_transform_maximal_sequential(A: NP_ARRAY, x: NP_ARRAY) -> NP_ARRAY:
-    """O(N*n)"""
-    N, n = x.shape[0], A.shape[0]
-    pos, splits, result = 0, N // n, np.copy(x)
-    for _ in range(splits):  # O((n+1)^m)
-        next_pos = pos + n
-        chunk = result[pos:next_pos]
-        chunk_dot = A @ chunk  # O(2*n^2)
-        result[pos:next_pos] = chunk_dot
-        pos = next_pos
-    return result
-
-
-@njit
-def _diag_transform_maximal_parallel(A: NP_ARRAY, x: NP_ARRAY) -> NP_ARRAY:
+def _lt_diag_transform_maximal_parallel(A: np.ndarray, x: np.ndarray):
     """O(N*n)"""
     # TODO
     raise NotImplementedError("Not implemented yet.")
@@ -254,17 +223,17 @@ def _diag_transform_maximal_parallel(A: NP_ARRAY, x: NP_ARRAY) -> NP_ARRAY:
 
 
 @njit(parallel=PARALLEL)
-def n_transform_2d(A: NP_ARRAY, x: NP_ARRAY, T: NP_ARRAY) -> NP_ARRAY:
+def transform_2d(A: np.ndarray, x: np.ndarray, T: np.ndarray) -> np.ndarray:
     """O(sum(T^2)*2)"""
     return (
-        _n_transform_2d_parallel(A, x, T)
+        _transform_2d_parallel(A, x, T)
         if PARALLEL
-        else _n_transform_2d_sequential(A, x, T)
+        else _transform_2d_sequential(A, x, T)
     )
 
 
 @njit
-def _n_transform_2d_sequential(A: NP_ARRAY, x: NP_ARRAY, T: NP_ARRAY):
+def _transform_2d_sequential(A: np.ndarray, x: np.ndarray, T: np.ndarray):
     """O(sum(T^2))"""
     dot_1d = np.zeros_like(x)
     dot_2d = np.zeros_like(x)
@@ -290,7 +259,7 @@ def _n_transform_2d_sequential(A: NP_ARRAY, x: NP_ARRAY, T: NP_ARRAY):
 
 
 @njit(parallel=True)
-def _n_transform_2d_parallel(A: NP_ARRAY, x: NP_ARRAY, T: NP_ARRAY):
+def _transform_2d_parallel(A: np.ndarray, x: np.ndarray, T: np.ndarray):
     """O(sum(T^2))"""
     length = T.shape[0]
     dot_1d = np.zeros_like(x)
@@ -322,17 +291,17 @@ def _n_transform_2d_parallel(A: NP_ARRAY, x: NP_ARRAY, T: NP_ARRAY):
 
 
 @njit(parallel=PARALLEL)
-def n_transform_md(A: NP_ARRAY, x: NP_ARRAY, T: NP_ARRAY) -> NP_ARRAY:
+def transform_md(A: np.ndarray, x: np.ndarray, T: np.ndarray) -> np.ndarray:
     """O(sum(T^2)*m)"""
     return (
-        _n_transform_md_parallel(A, x, T)
+        _transform_md_parallel(A, x, T)
         if PARALLEL
-        else _n_transform_md_sequential(A, x, T)
+        else _transform_md_sequential(A, x, T)
     )
 
 
 @njit
-def _n_transform_md_sequential(A: NP_ARRAY, x: NP_ARRAY, T: NP_ARRAY):
+def _transform_md_sequential(A: np.ndarray, x: np.ndarray, T: np.ndarray):
     """O(sum(T^2)*m)"""
     N = x.shape[0]
     (
@@ -407,7 +376,7 @@ def _n_transform_md_sequential(A: NP_ARRAY, x: NP_ARRAY, T: NP_ARRAY):
 
 
 @njit
-def _rightchoices(x: NP_ARRAY, leader: NP_ARRAY, follower: NP_ARRAY, depth: int):
+def _rightchoices(x: np.ndarray, leader: np.ndarray, follower: np.ndarray, depth: int):
     """O(???)"""
     cil_l = CIL()
     cil_l.init(leader, depth)
@@ -432,14 +401,14 @@ def _rightchoices(x: NP_ARRAY, leader: NP_ARRAY, follower: NP_ARRAY, depth: int)
 
 
 @njit(parallel=True)
-def _n_transform_md_parallel(A: NP_ARRAY, x: NP_ARRAY, T: NP_ARRAY):
+def _transform_md_parallel(A: np.ndarray, x: np.ndarray, T: np.ndarray):
     """O(sum(T^2)*m)"""
     # TODO
     raise NotImplementedError("Not implemented yet.")
 
 
 @njit(parallel=PARALLEL)
-def ut_diag_transform(A: NP_ARRAY, x: NP_ARRAY, T: NP_ARRAY):
+def ut_diag_transform(A: np.ndarray, x: np.ndarray, T: np.ndarray):
     """O(sum(T^2))"""
     return (
         _ut_diag_transform_parallel(A, x, T)
@@ -449,7 +418,7 @@ def ut_diag_transform(A: NP_ARRAY, x: NP_ARRAY, T: NP_ARRAY):
 
 
 @njit
-def _ut_diag_transform_sequential(A: NP_ARRAY, x: NP_ARRAY, T: NP_ARRAY):
+def _ut_diag_transform_sequential(A: np.ndarray, x: np.ndarray, T: np.ndarray):
     """O(sum(T^2))"""
     n, pos, result = np.max(T), 0, np.zeros_like(x)
     for slot in T:  # O(len(T))
@@ -466,14 +435,14 @@ def _ut_diag_transform_sequential(A: NP_ARRAY, x: NP_ARRAY, T: NP_ARRAY):
 
 
 @njit
-def _ut_diag_transform_parallel(A: NP_ARRAY, x: NP_ARRAY, T: NP_ARRAY):
+def _ut_diag_transform_parallel(A: np.ndarray, x: np.ndarray, T: np.ndarray):
     """O(sum(T^2))"""
     # TODO
     raise NotImplementedError("Not implemented yet.")
 
 
 @njit(parallel=PARALLEL)
-def lt_diag_transform(A: NP_ARRAY, x: NP_ARRAY, T: NP_ARRAY):
+def lt_diag_transform(A: np.ndarray, x: np.ndarray, T: np.ndarray):
     """O(sum(T^2))"""
     return (
         _lt_diag_transform_parallel(A, x, T)
@@ -483,7 +452,7 @@ def lt_diag_transform(A: NP_ARRAY, x: NP_ARRAY, T: NP_ARRAY):
 
 
 @njit
-def _lt_diag_transform_sequential(A: NP_ARRAY, x: NP_ARRAY, T: NP_ARRAY):
+def _lt_diag_transform_sequential(A: np.ndarray, x: np.ndarray, T: np.ndarray):
     """O(sum(T^2))"""
     pos, result = 0, np.zeros_like(x)
     for slot in T:  # O(len(T))
@@ -500,7 +469,7 @@ def _lt_diag_transform_sequential(A: NP_ARRAY, x: NP_ARRAY, T: NP_ARRAY):
 
 
 @njit
-def _lt_diag_transform_parallel(A: NP_ARRAY, x: NP_ARRAY, T: NP_ARRAY):
+def _lt_diag_transform_parallel(A: np.ndarray, x: np.ndarray, T: np.ndarray):
     """O(sum(T^2))"""
     # TODO
     raise NotImplementedError("Not implemented yet.")

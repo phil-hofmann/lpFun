@@ -1,7 +1,7 @@
 import numpy as np
 from numba import boolean
 from numba.experimental import jitclass
-from lpfun import NP_INT, NP_FLOAT, NP_ARRAY, NB_INT, NB_FLOAT
+from lpfun import NP_INT, NP_FLOAT, NB_INT, NB_FLOAT
 
 @jitclass(
     [
@@ -31,7 +31,7 @@ class MultiIndexSet(object):
         self.clear()
 
     @property
-    def multi_index(self) -> NP_ARRAY:
+    def multi_index(self) -> np.ndarray:
         return self._multi_index
 
     @property
@@ -52,8 +52,8 @@ class MultiIndexSet(object):
         self._multi_index_p = np.zeros(self._m, dtype=NP_FLOAT)
         self._sum_multi_index_p = 0.0
         self._i = 0  # absolute count
-        self._k = 1  # inner tiling count
-        self._l = 0  # outer tiling count
+        self._k = 1  # inner tube count
+        self._l = 0  # outer tube count
         self._j = 0
 
     def next(self):

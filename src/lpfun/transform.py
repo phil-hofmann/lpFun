@@ -1,18 +1,19 @@
 import numpy as np
-from lpfun import NP_ARRAY, NP_FLOAT, EXPENSIVE
+from typing import Literal
+from lpfun import NP_FLOAT, EXPENSIVE
 from lpfun.utils import (
-    unisolvent_nodes_1d,
-    unisolvent_nodes,
+    leja_nodes,
+    lower_grid,
+    apply_permutation,
     cheb,
-    tiling,
+    tube,
     l2n,
     n2l,
     n_dx,
-    l_dx,
     rmo,
     n_eval_at_point,
 )
-from lpfun.core.molecules import n_transform, n_dx_transform, l_dx_transform
+from lpfun.core.molecules import transform, dx_transform
 
 
 class Transform:
@@ -24,9 +25,9 @@ class Transform:
         polynomial_degree: int,
         p: float = 2.0,
         nodes: callable = cheb,
-        mode: str = "newton",
+        mode: Literal["chebyshev", "newton"] = "newton",
         expensive=EXPENSIVE,
-    ) -> None:
+    ):
         """
         Initialize the Transform object.
 
@@ -35,7 +36,7 @@ class Transform:
             polynomial_degree (int): Degree of the polynomial.
             p (float): p-norm of the polynomial space.
             nodes (callable): One dimensional nodes.
-            mode (str): Transformation mode. Default is 'newton'. The other option is 'lagrange' and is only available for m=1 or p=np.inf.
+            mode (str): Transformation mode. Default is 'newton'. The other option is 'chebyshev'.
             expensive (int): Expensive operation threshold.
         """
 
@@ -47,32 +48,18 @@ class Transform:
         # Check supported modes
         if mode not in ["newton", "lagrange"]:
             raise ValueError("Invalid mode. Choose 'newton' or 'lagrange'.")
-        if (
-            mode == "newton"
-            and self._m >= 5
-            and self._p != 1.0
-            and self._p != np.inf
-        ):
+        if mode == "newton" and self._m >= 5 and self._p != 1.0 and self._p != np.inf:
             # TODO: Add support for p != 1.0 and p != np.inf
             print(
                 "For Newton mode, only p = 1.0 or p = infinity is supported for spatial dimension >= 5."
             )
             self._p = 1.0
 
-        if mode == "lagrange" and self._m > 1 and self._p != np.inf:
-            # Problem: Lagrange differentiation matrices
-            # One would need to compute the differentiation matrices with respect to every occuring number in self._T.
-            # Then, one would have in some areas differentiation matrices with shape (1, 1).
-            # Hence, in this mode it is impossible to approximate the derivative of a function.
-            raise ValueError(
-                "The Lagrange mode is not supported for spatial dimension > 1 and p != infinity."
-            )
-
-        # Tiling of the Newton transformations only if p is not np.inf
+        # Tube of the Newton transformations only if p is not np.inf
         self._T = (
             np.array([])
             if p == np.inf or self._m == 1
-            else tiling(self._m, self._n, self._p)
+            else tube(self._m, self._n, self._p)
         )
 
         # Check if the operation is too expensive
@@ -81,22 +68,30 @@ class Transform:
                 length = (self._n + 1) ** self._m
                 if length > expensive:
                     raise ValueError(
-                        f"Operation too expensive: {length} > {expensive}. If this operation should be executed anyways, please set expensive to None."
+                        f"""
+                            Operation too expensive: {length} > {expensive}.
+                            If this operation should be executed anyways, please set expensive to None.
+                        """
                     )
             else:
                 length = np.sum(self._T)
                 if length > expensive:
                     raise ValueError(
-                        f"Operation too expensive: {length} > {expensive}. If this operation should be executed anyways, please set expensive to None."
+                        f"""
+                            Operation too expensive: {length} > {expensive}.
+                            If this operation should be executed anyways, please set expensive to None.
+                        """
                     )
 
-        # One dimensional unisolvent nodes
-        self._nodes = unisolvent_nodes_1d(self._n + 1, nodes)
+        # One dimensional (unisolvent, leja-ordered) nodes
+        self._nodes = leja_nodes(self._n + 1, nodes)
 
-        # Multi-dimensional unisolvent nodes
-        self._unisolvent_nodes = unisolvent_nodes(
-            self._nodes, self._m, self._n, self._p
-        )
+        # Lower grid
+        grid = lower_grid(self._nodes, self._m, self._n, self._p)
+
+        # Lex order: User experience
+        self._lex_order = np.lexsort(grid.T)
+        self._grid = apply_permutation(self._lex_order, grid, invert=False)
 
         if mode == "newton":
             # Lagrange to Newton transformation 1D
@@ -108,12 +103,18 @@ class Transform:
             # Newton differentiation matrix 1D
             self._dx = rmo(n_dx(self._nodes), mode="upper")
 
-        elif mode == "lagrange":
-            # Lagrange differentiation matrix 1D
-            self._dx = l_dx(self._nodes)
+        # elif mode == "chebyshev":
+        #     # Lagrange to Chebyshev transformation 1D
+        #     self._l2n = rmo(l2c(self._leja_nodes))
+
+        #     # Newton to Lagrange transformation 1D
+        #     self._n2l = rmo(c2l(self._leja_nodes))
+
+        #     # Newton differentiation matrix 1D
+        #     self._dx = rmo(c_dx(self._leja_nodes), mode="upper")
 
     @property
-    def dimension(self) -> int:
+    def spatial_dimension(self) -> int:
         return self._m
 
     @property
@@ -125,71 +126,79 @@ class Transform:
         return self._p
 
     @property
-    def nodes(self) -> NP_ARRAY:
+    def nodes(self) -> np.ndarray:
         return self._nodes
 
     @property
-    def unisolvent_nodes(self) -> NP_ARRAY:
-        return self._unisolvent_nodes
+    def grid(self) -> np.ndarray:
+        return self._grid
 
     def warmup(self) -> None:
         """Warmup the JIT compiler."""
-        length = len(self._unisolvent_nodes)
+        length = len(self._grid)
         zeros = np.zeros(length, dtype=NP_FLOAT)
         self.dx(zeros, 0)
         self.dx(zeros, 0, True)
         if self._m > 1:
             self.dx(zeros, 1)
-        if self._mode == "lagrange":
-            return
         self.eval(zeros, np.zeros(self._m, dtype=NP_FLOAT))
-        self.push(zeros)
-        self.pull(zeros)
+        self.fnt(zeros)
+        self.ifnt(zeros)
 
-    def push(self, function_values: NP_ARRAY) -> NP_ARRAY:
-        """Fast l^p Transformation"""
-        function_values = np.asarray(function_values).astype(np.float64)
+    def fnt(self, function_values: np.ndarray) -> np.ndarray:
+        """Fast Newton Transform"""
+        function_values = np.asarray(function_values).astype(NP_FLOAT)
+        function_values = apply_permutation(
+            self._lex_order, function_values, invert=True
+        )
         if self._mode == "newton":
-            return n_transform(self._l2n, function_values, self._T, self._m, self._p)
-        elif self._mode == "lagrange":
-            raise ValueError("The push method is not needed for the Lagrange mode.")
+            coefficients = transform(
+                self._l2n, function_values, self._T, self._m, self._p
+            )
+        elif self._mode == "chebyshev":
+            raise NotImplementedError(
+                "The fast Newton transform is not implemented for the Chebyshev mode yet."
+            )
+        return coefficients
 
-    def pull(self, coefficients: NP_ARRAY) -> NP_ARRAY:
-        """Inverse Fast l^p Transformation"""
-        if self._mode == "lagrange":
-            raise ValueError("The pull method is not needed for the Lagrange mode.")
-        coefficients = np.asarray(coefficients).astype(np.float64)
-        return n_transform(self._n2l, coefficients, self._T, self._m, self._p)
-
-    def dx(self, coefficients: NP_ARRAY, i: int, transpose: bool = False) -> NP_ARRAY:
-        """Spectral l^p Differentiation"""
-        coefficients = np.asarray(coefficients).astype(np.float64)
+    def ifnt(self, coefficients: np.ndarray) -> np.ndarray:
+        """Inverse Fast Newton Transform"""
+        coefficients = np.asarray(coefficients).astype(NP_FLOAT)
         if self._mode == "newton":
-            return n_dx_transform(
-                self._dx, coefficients, self._T, self._m, self._n, self._p, i, transpose
+            function_values = transform(
+                self._n2l, coefficients, self._T, self._m, self._p
             )
-        elif self._mode == "lagrange":
-            return l_dx_transform(
-                self._dx,
-                coefficients,
-                self._m,
-                self._n,
-                i,
-                transpose,
+        elif self._mode == "chebyshev":
+            raise NotImplementedError(
+                "The inverse fast Newton transform is not implemented for the Chebyshev mode yet."
             )
+        function_values = apply_permutation(
+            self._lex_order, function_values, invert=False
+        )
+        return function_values
 
-    def eval(self, coefficients: NP_ARRAY, x: NP_ARRAY) -> NP_FLOAT:
+    def dx(
+        self, coefficients: np.ndarray, i: int, transpose: bool = False
+    ) -> np.ndarray:
+        """Fast Spectral Differentiation"""
+        coefficients = np.asarray(coefficients).astype(NP_FLOAT)
+        coefficients = dx_transform(
+            self._dx, coefficients, self._T, self._m, self._n, self._p, i, transpose
+        )
+        return coefficients
+
+    def eval(self, coefficients: np.ndarray, x: np.ndarray) -> NP_FLOAT:
         """Point Evaluation"""
         # TODO Add tests for this method
         if self._mode == "newton":
             return n_eval_at_point(coefficients, self._nodes, x, self._m, self._p)
-        elif self._mode == "lagrange":
+        elif self._mode == "chebyshev":
             raise NotImplementedError(
-                "The eval method is not implemented for the Lagrange mode yet."
+                "The eval method is not implemented for the Chebyshev mode yet."
             )
 
     def __len__(self) -> int:
-        return len(self._unisolvent_nodes)
+        return len(self._grid)
 
     def __eq__(self, value: object) -> bool:
         if not isinstance(value, Transform):
@@ -200,3 +209,4 @@ class Transform:
             return False
         if not value.p == self.p:
             return False
+        return True

@@ -1,6 +1,6 @@
 import numpy as np
 from numba import njit
-from lpfun import NP_INT, NP_FLOAT, NP_ARRAY, PARALLEL
+from lpfun import NP_INT, NP_FLOAT, PARALLEL
 from lpfun.utils import (
     classify,
     permutation_maximal,
@@ -11,28 +11,27 @@ from lpfun.utils import (
 from lpfun.core.atoms import (
     lt_transform,
     ut_transform,
-    n_transform_maximal,
-    n_transform_2d,
-    n_transform_md,
+    transform_maximal,
+    transform_2d,
+    transform_md,
     ut_diag_transform_maximal,
     lt_diag_transform_maximal,
     ut_diag_transform,
     lt_diag_transform,
-    diag_transform_maximal,
 )
 
 
 @njit(parallel=PARALLEL)
-def n_transform(A: NP_ARRAY, x: NP_ARRAY, T: NP_ARRAY, m: int, p: float) -> NP_ARRAY:
+def transform(A: np.ndarray, x: np.ndarray, T: np.ndarray, m: int, p: float) -> np.ndarray:
     """
-    Fast Newton Transformation
-    -----------------------------------------------------
-    A: NP_ARRAY
+    Fast Newton Transform
+    ---------------------
+    A: np.ndarray
         Row major ordering matrix
-    x: NP_ARRAY
+    x: np.ndarray
         Input vector
-    T: NP_ARRAY
-        Tiling of the transformation
+    T: np.ndarray
+        Tube of the transformation
     m: int
         Dimension of the transformation
     p: float
@@ -40,7 +39,7 @@ def n_transform(A: NP_ARRAY, x: NP_ARRAY, T: NP_ARRAY, m: int, p: float) -> NP_A
 
     Returns
     -------
-    NP_ARRAY:
+    np.ndarray:
         Transformed vector
 
     Time Complexity
@@ -52,38 +51,38 @@ def n_transform(A: NP_ARRAY, x: NP_ARRAY, T: NP_ARRAY, m: int, p: float) -> NP_A
     T = np.asarray(T).astype(NP_INT)
     m, p = int(m), float(p)
     if (not p == np.inf) and (T is None) and (not m == 1):
-        raise ValueError("Tiling is required for p != np.inf.")
+        raise ValueError("Tube is required for p != np.inf.")
     classify(m, 0, p, allow_infty=True)
     if m == 1:
         return lt_transform(A, x)
     elif p == np.inf:
-        return n_transform_maximal(A, x)
+        return transform_maximal(A, x)
     elif m == 2:
-        return n_transform_2d(A, x, T)
+        return transform_2d(A, x, T)
     else:
-        return n_transform_md(A, x, T)
+        return transform_md(A, x, T)
 
 
 @njit(parallel=PARALLEL)
-def n_dx_transform(
-    A: NP_ARRAY,
-    x: NP_ARRAY,
-    T: NP_ARRAY,
+def dx_transform(
+    A: np.ndarray,
+    x: np.ndarray,
+    T: np.ndarray,
     m: int,
     n: int,
     p: float,
     i: int,
     transpose: bool,
-) -> NP_ARRAY:
+) -> np.ndarray:
     """
     Fast Spectral Differentiation
-    --------------------------------------------------
-    A: NP_ARRAY
+    -----------------------------
+    A: np.ndarray
         Row major ordering matrix
-    x: NP_ARRAY
+    x: np.ndarray
         Input vector
-    T: NP_ARRAY
-        Tiling of the transformation
+    T: np.ndarray
+        Tube of the transformation
     m: int
         Dimension of the transformation
     p: float
@@ -95,7 +94,7 @@ def n_dx_transform(
 
     Returns
     -------
-    NP_ARRAY:
+    np.ndarray:
         Transformed vector
 
     Time Complexity
@@ -107,7 +106,7 @@ def n_dx_transform(
     T = np.asarray(T).astype(NP_INT)
     m, n, p = int(m), int(n), float(p)
     if (not p == np.inf) and (T is None) and (not m == 1):
-        raise ValueError("Tiling is required for p != np.inf.")
+        raise ValueError("Tube is required for p != np.inf.")
     classify(m, 0, p, allow_infty=True)
     if m == 1:
         if transpose:
@@ -139,58 +138,3 @@ def n_dx_transform(
         if not i == 0:
             x = apply_permutation(P, x)
         return x
-
-
-@njit(parallel=PARALLEL)
-def l_dx_transform(
-    A: NP_ARRAY,
-    x: NP_ARRAY,
-    m: int,
-    n: int,
-    i: int,
-    transpose: bool,
-) -> NP_ARRAY:
-    """
-    Fast Spectral Differentiation
-    --------------------------------------------------
-    A: NP_ARRAY
-        Matrix
-    x: NP_ARRAY
-        Input vector
-    m: int
-        Dimension of the transformation
-    i: int
-        Coordinate of differentiation
-    transpose: bool
-        Whether to transpose the matrix
-
-    Returns
-    -------
-    NP_ARRAY:
-        Transformed vector
-
-    Time Complexity
-    ---------------
-    O(N*n)
-    """
-    A = np.asarray(A).astype(NP_FLOAT)
-    x = np.asarray(x).astype(NP_FLOAT)
-    m, n = int(m), int(n)
-    classify(m, 0, np.inf, allow_infty=True)
-    if m == 1:
-        if transpose:
-            At = A.T
-            return At @ x
-        else:
-            return A @ x
-    P = permutation_maximal(m, n, i)
-    if not i == 0:
-        x = apply_permutation(P, x)
-    if transpose:
-        At = A.T
-        x = diag_transform_maximal(At, x)
-    else:
-        x = diag_transform_maximal(A, x)
-    if not i == 0:
-        x = apply_permutation(P, x, invert=True)
-    return x

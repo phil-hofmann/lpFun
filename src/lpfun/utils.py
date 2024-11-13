@@ -2,14 +2,15 @@ import itertools
 import numpy as np
 from numba import njit
 from math import gamma
-from lpfun import NP_FLOAT, NP_ARRAY, NP_INT
+from typing import Tuple
+from lpfun import NP_FLOAT, NP_INT
 from lpfun.iterators import MultiIndexSet
 
 """Utility functions"""
 
 
 @njit
-def classify(m: int, n: int, p: float, allow_infty=False) -> NP_ARRAY:
+def classify(m: int, n: int, p: float, allow_infty=False) -> np.ndarray:
     if m < 1:
         raise ValueError("The parameter dim should be at least 1.")
     if (not allow_infty) and (p <= 0.0 or p > 2.0):
@@ -23,7 +24,7 @@ def classify(m: int, n: int, p: float, allow_infty=False) -> NP_ARRAY:
 
 
 @njit
-def n2l(nodes: NP_ARRAY) -> NP_ARRAY:
+def n2l(nodes: np.ndarray) -> np.ndarray:
     """O(n^2)"""
     x = np.asarray(nodes).astype(NP_FLOAT)
     n = len(nodes)
@@ -35,7 +36,7 @@ def n2l(nodes: NP_ARRAY) -> NP_ARRAY:
 
 
 @njit
-def _n_eval(nodes: NP_ARRAY, x: NP_FLOAT) -> NP_FLOAT:
+def _n_eval(nodes: np.ndarray, x: NP_FLOAT) -> NP_FLOAT:
     """O(n)"""
     nodes = np.asarray(nodes).astype(NP_FLOAT)
     n = len(nodes)
@@ -48,7 +49,7 @@ def _n_eval(nodes: NP_ARRAY, x: NP_FLOAT) -> NP_FLOAT:
 
 @njit
 def n_eval_at_point(
-    coefficients: NP_ARRAY, nodes: NP_ARRAY, x: NP_ARRAY, m: int, p: float
+    coefficients: np.ndarray, nodes: np.ndarray, x: np.ndarray, m: int, p: float
 ) -> NP_FLOAT:
     """O(m*k_m,n,p)"""
     coefficients = np.asarray(coefficients).astype(NP_FLOAT)
@@ -66,7 +67,7 @@ def n_eval_at_point(
 
 
 @njit
-def l2n(nodes: NP_ARRAY) -> NP_ARRAY:
+def l2n(nodes: np.ndarray) -> np.ndarray:
     """O(n^3)"""
     n = len(nodes)
     x = np.asarray(nodes)
@@ -80,7 +81,7 @@ def l2n(nodes: NP_ARRAY) -> NP_ARRAY:
 
 
 @njit
-def _dds(x, y) -> NP_ARRAY:
+def _dds(x, y) -> np.ndarray:
     """O(n^2)"""
     x = np.asarray(x).astype(NP_FLOAT)
     y = np.asarray(y).astype(NP_FLOAT)
@@ -95,7 +96,7 @@ def _dds(x, y) -> NP_ARRAY:
 
 
 @njit
-def n_dx(nodes: NP_ARRAY) -> NP_ARRAY:
+def n_dx(nodes: np.ndarray) -> np.ndarray:
     """O(n^2)"""
     n = nodes.shape[0]
     dx = np.zeros((n, n), dtype=NP_FLOAT)
@@ -109,44 +110,7 @@ def n_dx(nodes: NP_ARRAY) -> NP_ARRAY:
 
 
 @njit
-def l_dx(nodes: NP_ARRAY) -> NP_ARRAY:
-    """O(n^2)"""
-    n = len(nodes)
-    w = _baryentric(nodes)
-    dx = np.zeros((n, n))
-    for i in range(n):
-        for j in range(n):
-            if i == j:
-                dx[i][i] = np.sum(
-                    np.array(
-                        [1 / (nodes[i] - nodes[_]) for _ in range(n) if _ != i],
-                        dtype=NP_FLOAT,
-                    )
-                )
-            else:
-                dx[i][j] = (w[j] / w[i]) * 1 / (nodes[i] - nodes[j])
-    return dx
-
-
-@njit
-def _baryentric(nodes: NP_ARRAY) -> NP_ARRAY:
-    return np.array(
-        [
-            1
-            / np.prod(
-                np.array(
-                    [(nodes[__] - nodes[_]) for _ in range(len(nodes)) if _ != __],
-                    dtype=NP_FLOAT,
-                )
-            )
-            for __ in range(len(nodes))
-        ],
-        dtype=NP_FLOAT,
-    )
-
-
-@njit
-def rmo(A: NP_ARRAY, mode: str = "lower") -> NP_ARRAY:
+def rmo(A: np.ndarray, mode: str = "lower") -> np.ndarray:
     if mode == "upper":
         return _rmo_upper(A)
     elif mode == "lower":
@@ -156,7 +120,7 @@ def rmo(A: NP_ARRAY, mode: str = "lower") -> NP_ARRAY:
 
 
 @njit
-def _rmo_upper(A: NP_ARRAY) -> NP_ARRAY:
+def _rmo_upper(A: np.ndarray) -> np.ndarray:
     """O(n^2)"""
     A = np.asarray(A).astype(NP_FLOAT)
     n = A.shape[0]
@@ -171,7 +135,7 @@ def _rmo_upper(A: NP_ARRAY) -> NP_ARRAY:
 
 
 @njit
-def _rmo_lower(A: NP_ARRAY) -> NP_ARRAY:
+def _rmo_lower(A: np.ndarray) -> np.ndarray:
     """O(n^2)"""
     A = np.asarray(A).astype(NP_FLOAT)
     n = A.shape[0]
@@ -185,25 +149,25 @@ def _rmo_lower(A: NP_ARRAY) -> NP_ARRAY:
     return result
 
 
-def unisolvent_nodes(nodes: NP_ARRAY, m: int, n: int, p: float) -> NP_ARRAY:
+def lower_grid(nodes: np.ndarray, m: int, n: int, p: float) -> np.ndarray:
     classify(m, n, p, allow_infty=True)
     if p == np.inf:
         return np.flip(list(itertools.product(nodes, repeat=m)), axis=1)
     else:
-        return _unisolvent_nodes(nodes, m, n, p)
+        return _lower_grid(nodes, m, n, p)
 
 
 @njit
-def _unisolvent_nodes(nodes: NP_ARRAY, m: int, n: int, p: float) -> NP_ARRAY:
+def _lower_grid(nodes: np.ndarray, m: int, n: int, p: float) -> np.ndarray:
     """O(|A_{m, n, p}| + ... + |A_{1, n, p}|)"""
     nodes = np.asarray(nodes).astype(NP_FLOAT)
     memory_allocation = _memory_allocation(m, n, p)
-    unisolvent_nodes = np.zeros((memory_allocation, m))
+    lower_grid = np.zeros((memory_allocation, m))
     mis = MultiIndexSet(m, n, p)
     while mis.next():
         mi = mis.multi_index
-        unisolvent_nodes[mis.i] = [nodes[mi[_]] for _ in range(m)]
-    return unisolvent_nodes[: mis.i + 1]
+        lower_grid[mis.i] = [nodes[mi[_]] for _ in range(m)]
+    return lower_grid[: mis.i + 1]
 
 
 @njit
@@ -234,13 +198,19 @@ def _binomial(n: int, m: int) -> int:
 
 
 @njit
-def unisolvent_nodes_1d(n: int, nodes: callable) -> NP_ARRAY:
-    nodes_n = nodes(n)
-    return nodes_n[leja_order(nodes_n)]
+def leja_nodes(
+    n: int, nodes: callable
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    _nodes = nodes(n)
+    if len(np.unique(_nodes)) != len(_nodes):
+        raise ValueError("The nodes are not distinct.")
+    _leja_order = leja_order(_nodes)
+    _leja_nodes = apply_permutation(_leja_order, _nodes)
+    return _leja_nodes
 
 
 @njit
-def cheb(n: int) -> NP_ARRAY:
+def cheb(n: int) -> np.ndarray:
     """O(n)"""
     if n < 0:
         raise ValueError("The parameter ``n`` should be non-negative.")
@@ -252,26 +222,26 @@ def cheb(n: int) -> NP_ARRAY:
 
 
 @njit
-def tiling(m: int, n: int, p: NP_FLOAT) -> NP_ARRAY:
+def tube(m: int, n: int, p: NP_FLOAT) -> np.ndarray:
     classify(m, n, p)
-    return _tiling(m, n, p)
+    return _tube(m, n, p)
 
 
 @njit
-def _tiling(m: int, n: int, p: float) -> NP_ARRAY:
+def _tube(m: int, n: int, p: float) -> np.ndarray:
     """O(k_m,n,p)"""
     mis = MultiIndexSet(m, n, p)
     memory_allocation = _memory_allocation(m - 1, n, p)
-    tiling = np.zeros(memory_allocation, dtype=NP_INT)
+    tube = np.zeros(memory_allocation, dtype=NP_INT)
 
     while mis.next():
         if mis.k > 0:
-            tiling[mis.l] = mis.k
-    return tiling[: mis.l]
+            tube[mis.l] = mis.k
+    return tube[: mis.l]
 
 
 @njit
-def leja_order(nodes: NP_ARRAY) -> NP_ARRAY:
+def leja_order(nodes: np.ndarray) -> np.ndarray:
     """This function originates from minterpy."""
     """O(n^2)"""
     nodes = np.asarray(nodes).astype(NP_FLOAT)
@@ -297,7 +267,7 @@ def leja_order(nodes: NP_ARRAY) -> NP_ARRAY:
 
 
 @njit
-def permutation_maximal(m: int, n: int, i: int) -> NP_ARRAY:
+def permutation_maximal(m: int, n: int, i: int) -> np.ndarray:
     """O(N)"""
     N = (n + 1) ** m
     mat = np.zeros(N, dtype=NP_INT)
@@ -313,7 +283,7 @@ def permutation_maximal(m: int, n: int, i: int) -> NP_ARRAY:
 
 
 @njit
-def permutation(T: NP_ARRAY, i: int) -> NP_ARRAY:
+def permutation(T: np.ndarray, i: int) -> np.ndarray:
     """O(???)"""
     n = np.max(T)
     if i == 0:
@@ -329,7 +299,7 @@ def permutation(T: NP_ARRAY, i: int) -> NP_ARRAY:
 
 
 @njit
-def transposition(T) -> NP_ARRAY:
+def transposition(T) -> np.ndarray:
     """O(???)"""
     N, n = np.sum(T), np.max(T)
     permutation_vector = np.zeros(N, dtype=NP_INT)
@@ -343,7 +313,7 @@ def transposition(T) -> NP_ARRAY:
 
 
 @njit
-def apply_permutation(P: NP_ARRAY, x: NP_ARRAY, invert: bool = False) -> NP_ARRAY:
+def apply_permutation(P: np.ndarray, x: np.ndarray, invert: bool = False) -> np.ndarray:
     """O(n)"""
     x_p = np.zeros_like(x)
     if invert:
@@ -356,7 +326,7 @@ def apply_permutation(P: NP_ARRAY, x: NP_ARRAY, invert: bool = False) -> NP_ARRA
 
 
 @njit
-def rmo_transpose(rmo: NP_ARRAY) -> NP_ARRAY:
+def rmo_transpose(rmo: np.ndarray) -> np.ndarray:
     N = rmo.size
     n = int((np.sqrt(1 + 8 * N) - 1) / 2)
     transposed_rmo = np.zeros(N, dtype=NP_FLOAT)
@@ -369,7 +339,7 @@ def rmo_transpose(rmo: NP_ARRAY) -> NP_ARRAY:
 
 
 @njit
-def concatenate_arrays(chunk_dot) -> NP_ARRAY:
+def concatenate_arrays(chunk_dot) -> np.ndarray:
     total_length = sum([len(arr) for arr in chunk_dot])
     result = np.empty(total_length, dtype=chunk_dot[0].dtype)
     start = 0
@@ -381,7 +351,7 @@ def concatenate_arrays(chunk_dot) -> NP_ARRAY:
 
 
 @njit
-def reduceat(array, split_indices) -> NP_ARRAY:
+def reduceat(array, split_indices) -> np.ndarray:
     """O(???)"""
     sums = np.zeros(len(split_indices) - 1, dtype=array.dtype)
     for i in range(len(split_indices) - 1):

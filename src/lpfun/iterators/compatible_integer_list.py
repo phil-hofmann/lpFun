@@ -1,6 +1,6 @@
 import numpy as np
 from numba.experimental import jitclass
-from lpfun import NP_INT, NP_ARRAY, NB_INT
+from lpfun import NP_INT, NB_INT
 
 spec = [
     ("_cs", NB_INT[:]),
@@ -20,10 +20,10 @@ class CompatibleIntegerList(object):
     def __init__(self):
         pass
 
-    def init(self, tiling: NP_ARRAY, depth: int):
-        tiling = np.asarray(tiling, dtype=NP_INT)
-        self._len = len(tiling)
-        self._cs = np.cumsum(tiling)
+    def init(self, tube: np.ndarray, depth: int):
+        tube = np.asarray(tube, dtype=NP_INT)
+        self._len = len(tube)
+        self._cs = np.cumsum(tube)
         cs_enum = np.append(np.array([0], dtype=NP_INT), self._cs[:-1])
         self._cs_2d_mask = np.array(
             [[itr_p, self._cs[idx_p]] for idx_p, itr_p in enumerate(cs_enum)],
@@ -52,14 +52,14 @@ class CompatibleIntegerList(object):
         )
 
     @property
-    def indices(self) -> NP_ARRAY:
+    def indices(self) -> np.ndarray:
         return self._indices
 
     @property
     def element(self) -> int:
         return self._element
 
-    def eval(self, indices: NP_ARRAY) -> bool:
+    def eval(self, indices: np.ndarray) -> bool:
         depth = self._depth
         cs_2d_mask = self._cs_2d_mask
         length = self._len
