@@ -58,7 +58,7 @@ class Transform:
         # Tube of the Newton transformations only if p is not np.inf
         self._T = (
             np.array([])
-            if p == np.inf or self._m == 1
+            if self._p == np.inf or self._m == 1
             else tube(self._m, self._n, self._p)
         )
 
