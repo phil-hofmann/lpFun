@@ -23,7 +23,7 @@ class Transform:
         self,
         spatial_dimension: int,
         polynomial_degree: int,
-        p: float = 2.0,
+        lp_degree: float = 2.0,
         nodes: callable = cheb,
         mode: Literal["chebyshev", "newton"] = "newton",
         expensive=EXPENSIVE,
@@ -42,7 +42,7 @@ class Transform:
 
         self._m = spatial_dimension
         self._n = polynomial_degree
-        self._p = p
+        self._p = lp_degree
         self._mode = mode
 
         # Check supported modes
@@ -122,7 +122,7 @@ class Transform:
         return self._n
 
     @property
-    def p(self) -> int:
+    def lp_degree(self) -> int:
         return self._p
 
     @property
