@@ -90,7 +90,7 @@ pytest
 conda deactivate
 ```
 
-## 📖 Tutorial :: Short Version
+## 📖 Tutorial : Short Version
 
 ```python
 import numpy as np
