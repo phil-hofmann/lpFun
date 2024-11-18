@@ -1,4 +1,5 @@
 # lpFun
+
 <p align="center">
   <img src="social-banner-bg-rounded.png" height="128" width="384"/>
 </p>
@@ -22,6 +23,7 @@ The project is licensed under the [MIT License](LICENSE.txt).
 ## 💻 Installation
 
 ### Including in Your Project
+
 If you want to include this package in your project, you can install it directly from the GitHub repository:
 
 1. Create a conda environment with Python 3.9
@@ -49,6 +51,7 @@ conda deactivate
 ```
 
 ### Setting Up the Repository on Your Local Machine
+
 Please follow the steps below
 
 1. Clone the project
@@ -62,14 +65,14 @@ git clone https://github.com/philippocalippo/lpfun.git
 ```bash
 conda env create -f environment.yml
 ```
- 
+
 3. Activate environment
 
 ```bash
 conda activate lpfun
 ```
 
-4. Install lpfun package using pip 
+4. Install lpfun package using pip
 
 ```bash
 pip install -e .
@@ -87,76 +90,104 @@ pytest
 conda deactivate
 ```
 
-## 📖 Usage
+## 📖 Tutorial :: Short Version
 
-The `Transform` class can be used to perform forward and backward l^p transformations and derivatives.
+```python
+import numpy as np
+from lpfun import Transform
+
+# Initialise Transform object
+t = Transform(spatial_dimension=3, polynomial_degree=20)
+
+
+# Function values
+def f(x, y, z):
+    return np.sin(x) + np.cos(y) + np.exp(z)
+
+
+fx = np.array([f(*x) for x in t.grid])
+
+# Perform the fast Newton transform (FNT)
+coeffs = t.fnt(fx)
+
+# Compute the approximate derivative
+coeffs = t.dx(coeffs, 2)
+
+# Perform the inverse Newton transform (IFNT)
+rec = t.ifnt(coeffs)
+
+# Evaluate at a single point
+x = np.array([0.1, 0.2, 0.3], dtype=np.float64)
+rec = t.eval(coeffs, x)
+```
+
+## 📖 Tutorial
+
+The `Transform` class enables forward and backward transform, as well as the computation of derivatives and their adjoints.
 
 ```python
 import time
 import numpy as np
 from lpfun import Transform
 
-# Create a Transform object with spatial_dimension=3, polynomial_degree=4, p=2 (default value), mode="newton" (default value)
+# Initialise Transform object
 t = Transform(spatial_dimension=3, polynomial_degree=20)
 
-# Warmup the JIT compiler
-t.warmup()
-
-# Print the dimension of the polynomial space
+# Dimension of the polynomial space
 print(f"N = {len(t)}")
 
-# Define a function
+
+# Function values
 def f(x, y, z):
     return np.sin(x) + np.cos(y) + np.exp(z)
 
-# Calculate the exact function values on the unisolvent nodes
-function_values = np.array([f(*x) for x in t.unisolvent_nodes])
 
-# Perform the forward transformation
-start_time = time.time()
-coeffs = t.push(function_values)
-print("t.push:", "{:.2f}".format((time.time() - start_time) * 1000), "ms")
+fx = np.array([f(*x) for x in t.grid])
 
-# Perform the backward transformation
-start_time = time.time()
-reconstruction = t.pull(coeffs)
-print("t.pull:", "{:.2f}".format((time.time() - start_time) * 1000), "ms")
+# Perform the fast Newton transform (FNT)
+start = time.time()
+coeffs = t.fnt(fx)
+print("t.fnt:", "{:.2f}".format((time.time() - start) * 1000), "ms")
 
-# Print the maximum norm error
+# Perform the inverse fast Newton transform (IFNT)
+start = time.time()
+rec = t.ifnt(coeffs)
+print("t.ifnt:", "{:.2f}".format((time.time() - start) * 1000), "ms")
+
+# Measure the maximum norm error
 print(
-    "max |reconstruction-function_values| =",
-    "{:.2e}".format(np.max(reconstruction - function_values)),
+    "max |rec-fx| =",
+    "{:.2e}".format(np.max(rec - fx)),
 )
 
 # Evaluate at a single point
 x = np.array([0.1, 0.2, 0.3], dtype=np.float64)
 fx = f(*x)
-start_time = time.time()
-reconstruction_fx = t.eval(coeffs, x)
-print("t.eval:", "{:.2f}".format((time.time() - start_time) * 1000), "ms")
+start = time.time()
+rec = t.eval(coeffs, x)
+print("t.eval:", "{:.2f}".format((time.time() - start) * 1000), "ms")
+print("|rec-fx| =", "{:.2e}".format(np.abs(fx - rec)))
 
-# Print the absolute error
-print("|reconstruction_fx-fx| =", "{:.2e}".format(np.abs(fx - reconstruction_fx)))
 
-# Define the derivative
-def dx_f(x, y, z):
+# Compute the exact derivative
+def df_dz(x, y, z):
     return np.zeros_like(x) + np.zeros_like(y) + np.exp(z)
 
-# Calculate the exact derivative dx_3 on the unisolvent nodes
-dx_function_values = np.array([dx_f(*x) for x in t.unisolvent_nodes])
 
-# Compute the derivative dx_3
+dfx = np.array([df_dz(*x) for x in t.grid])
+
+# Compute the approximate derivative
 start_time = time.time()
-dx_coeffs = t.dx(coeffs, 2)
+coeffs = t.dx(coeffs, 2)
 print(f"t.dx:", "{:.2f}".format((time.time() - start_time) * 1000), "ms")
 
-# Perform the backward transformation
-dx_reconstruction = t.pull(dx_coeffs)
+# Perform the inverse Newton transform (IFNT)
+rec = t.ifnt(coeffs)
 
 # Print the maximum norm error
 print(
     "max |dx_reconstruction-dx_function_values| =",
-    "{:.2e}".format(np.max(np.abs(dx_reconstruction - dx_function_values))),
+    "{:.2e}".format(np.max(np.abs(rec - dfx))),
 )
 ```
 
@@ -164,67 +195,14 @@ When you run this code, you should see an output similar to
 
 ```
 N = 4662
-t.push: 9.09 ms
-t.pull: 8.67 ms
-max |reconstruction-function_values| = 2.53e-14
-t.eval: 0.62 ms
-|reconstruction_fx-fx| = 9.33e-15
-t.dx: 1.58 ms
-max |dx_reconstruction-dx_function_values| = 5.54e-12
+t.fnt: 12.38 ms
+t.ifnt: 13.05 ms
+max |rec-fx| = 1.73e-14
+t.eval: 1.17 ms
+|rec-fx| = 1.51e-14
+t.dx: 0.48 ms
+max |dx_reconstruction-dx_function_values| = 2.20e-11
 ```
-
-In Lagrangian basis it is no possible to perform such l^p differentiation directly for the non-tensorial case as demonstrated above. Nevertheless, this feature is implemented for the special case where p = infinity (or spatial_dimension = 1).
-
-```python
-import time
-import numpy as np
-from lpfun import Transform
-
-# Create a Transform object with dimension=3, polynomial_degree=4, p=np.inf, mode="lagrange"
-t = Transform(spatial_dimension=3, polynomial_degree=20, p=np.inf, mode="lagrange")
-
-# Warmup the JIT compiler
-t.warmup()
-
-# Print the dimension of the polynomial space
-print(f"N = {len(t)}")
-
-# Define a function
-def f(x, y, z):
-    return np.sin(x) + np.cos(y) + np.exp(z)
-
-# Calculate the exact function values on the unisolvent nodes
-function_values = np.array([f(*x) for x in t.unisolvent_nodes])
-
-# Define the derivative
-def dx_f(x, y, z):
-    return np.zeros_like(x) + np.zeros_like(y) + np.exp(z)
-
-# Calculate the exact derivative dx_3 on the unisolvent nodes
-dx_function_values = np.array([dx_f(*x) for x in t.unisolvent_nodes])
-
-# Compute the derivative dx_3
-start_time = time.time()
-dx_reconstruction = t.dx(function_values, 2)
-print(f"t.dx:", "{:.2f}".format((time.time() - start_time) * 1000), "ms")
-
-# Print the maximum norm error
-print(
-    "max |dx_reconstruction-dx_function_values| =",
-    "{:.2e}".format(np.max(np.abs(dx_reconstruction - dx_function_values))),
-)
-```
-
-When you run this code, you should see an output similar to
-
-```
-N = 9261
-t.dx: 0.17 ms
-max |dx_reconstruction-dx_function_values| = 3.65e-13
-```
-
-The little Lagrangian example from above is also showcasing that N is much bigger for p being infinity instead of two!
-Obviously 0.17ms is still much less than the Newton mode offers. This is an artifact of NumPys BLAS Library which is highly optimized and wont appear for higher dimensional or polynomial degree applications.
 
 ## Acknowledgments
 

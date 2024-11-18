@@ -86,8 +86,6 @@ def test_newton_fnt_and_ifnt(m: int, p: float):
         # Apply forward and backward transformations
         reconstruction = t.ifnt(t.fnt(function_values))
 
-        print(np.linalg.norm(reconstruction - function_values))
-
         # Compare the reconstruction with the exact
         assert np.allclose(reconstruction, function_values)
 

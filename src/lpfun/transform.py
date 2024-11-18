@@ -25,8 +25,8 @@ class Transform:
         polynomial_degree: int,
         lp_degree: float = 2.0,
         nodes: callable = cheb,
-        mode: Literal["chebyshev", "newton"] = "newton",
         expensive=EXPENSIVE,
+        warmup: bool = True,
     ):
         """
         Initialize the Transform object.
@@ -34,28 +34,25 @@ class Transform:
         Args:
             spatial_dimension (int): Dimension of the spatial domain.
             polynomial_degree (int): Degree of the polynomial.
-            p (float): p-norm of the polynomial space.
+            lp_degree (float): p-norm of the polynomial space.
             nodes (callable): One dimensional nodes.
-            mode (str): Transformation mode. Default is 'newton'. The other option is 'chebyshev'.
             expensive (int): Expensive operation threshold.
+            warmup (bool): Warmup the JIT compiler.
         """
 
         self._m = spatial_dimension
         self._n = polynomial_degree
         self._p = lp_degree
-        self._mode = mode
 
         # Check supported modes
-        if mode not in ["newton", "lagrange"]:
-            raise ValueError("Invalid mode. Choose 'newton' or 'lagrange'.")
-        if mode == "newton" and self._m >= 5 and self._p != 1.0 and self._p != np.inf:
+        if self._m >= 5 and self._p != 1.0 and self._p != np.inf:
             # TODO: Add support for p != 1.0 and p != np.inf
             print(
-                "For Newton mode, only p = 1.0 or p = infinity is supported for spatial dimension >= 5."
+                "Currently, only p = 1.0 or p = infinity is supported for spatial dimension >= 5."
             )
             self._p = 1.0
 
-        # Tube of the Newton transformations only if p is not np.inf
+        # Compute tube only if p is not np.inf
         self._T = (
             np.array([])
             if self._p == np.inf or self._m == 1
@@ -93,25 +90,18 @@ class Transform:
         self._lex_order = np.lexsort(grid.T)
         self._grid = apply_permutation(self._lex_order, grid, invert=False)
 
-        if mode == "newton":
-            # Lagrange to Newton transformation 1D
-            self._l2n = rmo(l2n(self._nodes))
+        # Lagrange to Newton transformation 1D
+        self._l2n = rmo(l2n(self._nodes))
 
-            # Newton to Lagrange transformation 1D
-            self._n2l = rmo(n2l(self._nodes))
+        # Newton to Lagrange transformation 1D
+        self._n2l = rmo(n2l(self._nodes))
 
-            # Newton differentiation matrix 1D
-            self._dx = rmo(n_dx(self._nodes), mode="upper")
+        # Newton differentiation matrix 1D
+        self._dx = rmo(n_dx(self._nodes), mode="upper")
 
-        # elif mode == "chebyshev":
-        #     # Lagrange to Chebyshev transformation 1D
-        #     self._l2n = rmo(l2c(self._leja_nodes))
-
-        #     # Newton to Lagrange transformation 1D
-        #     self._n2l = rmo(c2l(self._leja_nodes))
-
-        #     # Newton differentiation matrix 1D
-        #     self._dx = rmo(c_dx(self._leja_nodes), mode="upper")
+        # Warmup the JIT compiler
+        if warmup:
+            self.warmup()
 
     @property
     def spatial_dimension(self) -> int:
@@ -151,27 +141,17 @@ class Transform:
         function_values = apply_permutation(
             self._lex_order, function_values, invert=True
         )
-        if self._mode == "newton":
-            coefficients = transform(
-                self._l2n, function_values, self._T, self._m, self._p
-            )
-        elif self._mode == "chebyshev":
-            raise NotImplementedError(
-                "The fast Newton transform is not implemented for the Chebyshev mode yet."
-            )
+        coefficients = transform(
+            self._l2n, function_values, self._T, self._m, self._p
+        )
         return coefficients
 
     def ifnt(self, coefficients: np.ndarray) -> np.ndarray:
         """Inverse Fast Newton Transform"""
         coefficients = np.asarray(coefficients).astype(NP_FLOAT)
-        if self._mode == "newton":
-            function_values = transform(
-                self._n2l, coefficients, self._T, self._m, self._p
-            )
-        elif self._mode == "chebyshev":
-            raise NotImplementedError(
-                "The inverse fast Newton transform is not implemented for the Chebyshev mode yet."
-            )
+        function_values = transform(
+            self._n2l, coefficients, self._T, self._m, self._p
+        )
         function_values = apply_permutation(
             self._lex_order, function_values, invert=False
         )
@@ -190,12 +170,7 @@ class Transform:
     def eval(self, coefficients: np.ndarray, x: np.ndarray) -> NP_FLOAT:
         """Point Evaluation"""
         # TODO Add tests for this method
-        if self._mode == "newton":
-            return n_eval_at_point(coefficients, self._nodes, x, self._m, self._p)
-        elif self._mode == "chebyshev":
-            raise NotImplementedError(
-                "The eval method is not implemented for the Chebyshev mode yet."
-            )
+        return n_eval_at_point(coefficients, self._nodes, x, self._m, self._p)
 
     def __len__(self) -> int:
         return len(self._grid)
