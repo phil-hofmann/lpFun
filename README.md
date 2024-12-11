@@ -157,7 +157,7 @@ print("t.ifnt:", "{:.2f}".format((time.time() - start) * 1000), "ms")
 # Measure the maximum norm error
 print(
     "max |rec-fx| =",
-    "{:.2e}".format(np.max(rec - fx)),
+    "{:.2e}".format(np.max(np.abs(rec - fx))),
 )
 
 # Evaluate at a single point

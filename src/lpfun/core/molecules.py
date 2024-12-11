@@ -1,39 +1,43 @@
 import numpy as np
 from numba import njit
-from lpfun import NP_INT, NP_FLOAT, PARALLEL
+from lpfun import NP_INT, NP_FLOAT
 from lpfun.utils import (
     classify,
     permutation_maximal,
     permutation,
     apply_permutation,
-    rmo_transpose,
 )
 from lpfun.core.atoms import (
-    lt_transform,
-    ut_transform,
+    itransform_maximal,
+    itransform_1d,
+    itransform_2d,
+    itransform_3d,
     transform_maximal,
+    transform_1d,
     transform_2d,
+    # transform_3d,
     transform_md,
-    ut_diag_transform_maximal,
-    lt_diag_transform_maximal,
-    ut_diag_transform,
-    lt_diag_transform,
+    ###
+    dtransform_maximal,
+    dtransform_md,
 )
 
 
-@njit(parallel=PARALLEL)
-def transform(A: np.ndarray, x: np.ndarray, T: np.ndarray, m: int, p: float) -> np.ndarray:
+# @njit # NOTE optional
+def transform(
+    L: np.ndarray, x: np.ndarray, T: np.ndarray, m: int, p: float
+) -> np.ndarray:
     """
     Fast Newton Transform
     ---------------------
-    A: np.ndarray
-        Row major ordering matrix
+    L: np.ndarray
+        Matrix (lower triangular)
     x: np.ndarray
         Input vector
     T: np.ndarray
-        Tube of the transformation
+        Tube projection
     m: int
-        Dimension of the transformation
+        Spatial dimension
     p: float
         Parameter of the lp space
 
@@ -44,53 +48,96 @@ def transform(A: np.ndarray, x: np.ndarray, T: np.ndarray, m: int, p: float) -> 
 
     Time Complexity
     ---------------
-    O(sum(T^2)*m)
+    O(N*m*n)
     """
-    A = np.asarray(A).astype(NP_FLOAT)
+    L = np.asarray(L).astype(NP_FLOAT)
     x = np.asarray(x).astype(NP_FLOAT)
     T = np.asarray(T).astype(NP_INT)
     m, p = int(m), float(p)
-    if (not p == np.inf) and (T is None) and (not m == 1):
-        raise ValueError("Tube is required for p != np.inf.")
-    classify(m, 0, p, allow_infty=True)
+    if (T is None) and p != np.inf and m != 1:
+        raise ValueError("Tube projection is required for p != np.inf and m != 1.")
+    classify(m, 0, p)
     if m == 1:
-        return lt_transform(A, x)
+        return transform_1d(L, x)
     elif p == np.inf:
-        return transform_maximal(A, x)
+        return transform_maximal(L, x)
     elif m == 2:
-        return transform_2d(A, x, T)
-    else:
-        return transform_md(A, x, T)
+        return transform_2d(L, x, T)
+    # elif m == 3:
+    #     return transform_3d(L, x, T)
+    return transform_md(L, x, T)
 
 
-@njit(parallel=PARALLEL)
-def dx_transform(
-    A: np.ndarray,
+# @njit # NOTE optional
+def itransform(
+    L: np.ndarray, x: np.ndarray, T: np.ndarray, m: int, p: float
+) -> np.ndarray:
+    """
+    Inverse Fast Newton Transform
+    ---------------------
+    L: np.ndarray
+        Row major ordering (lower triangular)
+    x: np.ndarray
+        Input vector
+    T: np.ndarray
+        Tube projection
+    m: int
+        Spatial dimension
+    p: float
+        Parameter of the lp space
+
+    Returns
+    -------
+    np.ndarray:
+        Inverse transformed vector
+
+    Time Complexity
+    ---------------
+    O(N*m*n)
+    """
+    L = np.asarray(L).astype(NP_FLOAT)
+    x = np.asarray(x).astype(NP_FLOAT)
+    T = np.asarray(T).astype(NP_INT)
+    m, p = int(m), float(p)
+    if (T is None) and p != np.inf and m != 1:
+        raise ValueError("Tube projection is required for p != np.inf and m != 1.")
+    classify(m, 0, p)
+    if m == 1:
+        return itransform_1d(L, x)
+    elif p == np.inf:
+        return itransform_maximal(L, x)
+    elif m == 2:
+        return itransform_2d(L, x, T)
+    elif m == 3:
+        return itransform_3d(L, x, T)
+    return transform_md(L, x, T)  # TODO: return itransform_md(L, x, T)
+
+
+# @njit # NOTE optional
+def dtransform(
+    L: np.ndarray,
     x: np.ndarray,
     T: np.ndarray,
     m: int,
     n: int,
     p: float,
     i: int,
-    transpose: bool,
 ) -> np.ndarray:
     """
-    Fast Spectral Differentiation
+    Fast Diagonal Newton Transformation
     -----------------------------
-    A: np.ndarray
-        Row major ordering matrix
+    L: np.ndarray
+       Matrix (lower triangular)
     x: np.ndarray
         Input vector
     T: np.ndarray
-        Tube of the transformation
+        Tube projection
     m: int
-        Dimension of the transformation
+        Spatial dimension
     p: float
         Parameter of the lp space
     i: int
-        Coordinate of differentiation
-    transpose: bool
-        Whether to transpose the matrix
+        Coordinate permutation
 
     Returns
     -------
@@ -99,42 +146,25 @@ def dx_transform(
 
     Time Complexity
     ---------------
-    O(sum(T^2))
+    O(N*n)
     """
-    A = np.asarray(A).astype(NP_FLOAT)
+    L = np.asarray(L).astype(NP_FLOAT)
     x = np.asarray(x).astype(NP_FLOAT)
     T = np.asarray(T).astype(NP_INT)
     m, n, p = int(m), int(n), float(p)
-    if (not p == np.inf) and (T is None) and (not m == 1):
-        raise ValueError("Tube is required for p != np.inf.")
-    classify(m, 0, p, allow_infty=True)
+    if (T is None) and p != np.inf and m != 1:
+        raise ValueError("Tube projection is required for p != np.inf and m != 1.")
+    classify(m, 0, p)
     if m == 1:
-        if transpose:
-            At = rmo_transpose(A)
-            return lt_transform(At, x)
-        else:
-            return ut_transform(A, x)
+        return itransform_1d(L, x)
     elif p == np.inf:
         P = permutation_maximal(m, n, i)
-        if not i == 0:
-            x = apply_permutation(P, x)
-        if transpose:
-            At = rmo_transpose(A)
-            x = lt_diag_transform_maximal(At, x)
-        else:
-            x = ut_diag_transform_maximal(A, x)
-        if not i == 0:
-            x = apply_permutation(P, x, invert=True)
+        x = x if i == 0 else apply_permutation(P, x)
+        x = dtransform_maximal(L, x)
+        x = x if i == 0 else apply_permutation(P, x, invert=True)
         return x
-    else:
-        P = permutation(T, i)
-        if not i == 0:
-            x = apply_permutation(P, x, invert=True)
-        if transpose:
-            At = rmo_transpose(A)
-            x = lt_diag_transform(A, x, T)
-        else:
-            x = ut_diag_transform(A, x, T)
-        if not i == 0:
-            x = apply_permutation(P, x)
-        return x
+    P = permutation(T, i)
+    x = x if i == 0 else apply_permutation(P, x, invert=True)
+    x = dtransform_md(L, x, T)
+    x = x if i == 0 else apply_permutation(P, x)
+    return x
