@@ -2,6 +2,7 @@ import numpy as np
 from numba.experimental import jitclass
 from lpfun import NP_INT, NB_INT
 
+# NOTE Class is deprecated
 spec = [
     ("_cs", NB_INT[:]),
     ("_cs_2d_mask", NB_INT[:, :]),

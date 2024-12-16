@@ -9,12 +9,6 @@ NB_INT = nb.int64
 NP_FLOAT = np.float64
 NB_FLOAT = nb.float64
 
-PARALLEL = True
-WARMUP = True
-MESSAGES = True
-
-THRESHOLD = 20_000_000
-
 ###
 
 from .transform import Transform

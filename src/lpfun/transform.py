@@ -1,22 +1,31 @@
+import sys
+import time
+import threading
 import numpy as np
-from lpfun import NP_FLOAT, WARMUP, MESSAGES, PARALLEL
+from typing import Literal
+from lpfun import NP_FLOAT
+from lpfun.core.molecules import (
+    transform,
+    itransform,
+    dtransform,
+)
 from lpfun.utils import (
     cheb2nd,
     newton2lagrange,
     newton2derivative,
     newton2point,
-    ###
-    tube,
-    test_threshold,
+    chebyshev2lagrange,
+    chebyshev2derivative,
+    # chebyshev2point, # TODO
+    apply_permutation,
+    inv,
+    is_lower_triangular,
     leja_nodes,
     lower_grid,
-    apply_permutation,
-    is_lower_triangular,
     lu,
     rmo,
-    inv,
+    tube,
 )
-from lpfun.core.molecules import transform, itransform, dtransform
 
 
 class Transform:
@@ -26,13 +35,14 @@ class Transform:
         self,
         spatial_dimension: int,  # ... m
         polynomial_degree: int,  # ... n
-        # Optional parameters for customisation
         lp_degree: float = 2.0,  # ... p
         nodes: callable = cheb2nd,  # ... x
-        interpolation_matrix: callable = newton2lagrange,  # ... Q
-        differentiation_matrix: callable = newton2derivative,  # ... D
-        eval_at_point: callable = newton2point,
-        precomp: bool = PARALLEL,
+        basis: Literal["newton", "chebyshev"] = "newton",
+        parallel: Literal["seq", "cpu"] = "cpu",
+        precomputation: bool = True,
+        threshold: int = 20_000_000,
+        precompilation: bool = True,
+        report: bool = True,
     ):
         """
         Initialize the Transform object.
@@ -42,74 +52,163 @@ class Transform:
             polynomial_degree (int): The degree of the polynomial.
             lp_degree (float): The p-norm of the polynomial space.
             nodes (callable): A callable function that takes an integer and returns a one dimensional numpy array of nodes.
-            interpolation_matrix (callable): A callable function that takes a one dimensional numpy array of nodes and returns the interpolation matrix.
-            differentiation_matrix (bool): A callable function that takes a one dimensional numpy array of nodes and returns the differentiation matrix.
-            eval_at_point (callable): TODO
-            precomp (bool): Do you want to precompute the inverse of the interpolation matrix? This enables faster parallel execution. Default is set to PARALLEL.
+            basis (str): The basis to use for the interpolation and differentiation matrices. Either "newton" or "chebyshev".
+            parallel (bool): Decide whether to use parallel execution on the CPU. If "seq", no parallel execution is used.
+            precomputation (bool): Precompute the inverse of the interpolation matrix. This enables fast parallel executions. Mode must be activated when the spatial dimension is greater than three.
+            threshold (int): The threshold for the dimension of the lower space. If the dimension is greater than the threshold, an error is raised.
+            precompilation (bool): Precompile all the JIT functions with dummy inputs.
+            report (bool): Print a report after initialization.
         """
 
+        self._start_spinner() if report else None
+        construction_start = time.time()
         self._m = spatial_dimension
         self._n = polynomial_degree
         self._p = lp_degree
-        self._eval_at_point = eval_at_point
+        self._parallel = parallel
+        m, n, p = self._m, self._n, self._p
+
+        ### NOTE Excluding currently unsupported cases
+        if not precomputation:
+            self._stop_spinner() if report else None
+            raise ValueError(
+                "These cases are not implemented fully yet. Please set precomputation to True."
+            )
+        ###
+
+        if basis == "newton":
+            interpolation_matrix = newton2lagrange
+            differentiation_matrix = newton2derivative
+            self._eval_at_point = newton2point
+        elif basis == "chebyshev":
+            interpolation_matrix = chebyshev2lagrange
+            differentiation_matrix = chebyshev2derivative
+            self._eval_at_point = None
+        else:
+            self._stop_spinner() if report else None
+            raise ValueError("Invalid choice for basis.")
 
         # Compute tube only if p is not np.inf
-        self._T = tube(self._m, self._n, self._p)
+        self._spinner_label = "Compute Tubes"
+        self._T = tube(m, n, p)
+        T = self._T
 
         # Check the threshold
-        test_threshold(self._T)
+        if threshold is None:
+            warnings.warn("Threshold is set to None. This may lead to memory issues.")
+
+        length = np.sum(T)
+        if length > threshold:
+            self._stop_spinner() if report else None
+            raise ValueError(
+                f"""
+                    Dimension exceeds threshold: {format(length, "_")} > {format(threshold, "_")}.
+                    If this operation should be executed anyways, please set threshold to None.
+                """
+            )
+        self._length = length
+
+        if not precomputation and m > 3:
+            self._stop_spinner()
+            raise ValueError(
+                "Precomputation must be enabled when the spatial dimension is greater than three."
+            )
 
         # One dimensional (unisolvent, leja-ordered) nodes
-        x = nodes(self._n + 1)
-        if len(np.unique(x)) != len(x):
+        self._spinner_label = "Compute Nodes"
+        x = nodes(n + 1)
+        if len(np.unique(x)) != n + 1:
+            self._stop_spinner() if report else None
             raise ValueError("The provided nodes are not pairwise distinct.")
-        self._x = leja_nodes(x)
+        x = leja_nodes(x)
+        self._x = x
 
         # Lower grid
-        G = lower_grid(self._x, self._m, self._n, self._p)
+        G = lower_grid(x, m, n, p)
 
         # Lex order: User experience
         self._lex_order = np.lexsort(G.T)
         self._G = apply_permutation(self._lex_order, G, invert=False)
 
         # Compute matrices
-        Q = interpolation_matrix(self._x)
-        D = differentiation_matrix(self._x)
+        self._spinner_label = "Compute Matrices"
+        Qx = interpolation_matrix(x)
+        Dx = differentiation_matrix(x)
 
         # Compute condition number
-        self._cond_Q = np.linalg.cond(Q)
+        self._cond_Qx = np.linalg.cond(Qx)
 
-        # Row major ordering Q
-        if not is_lower_triangular(Q):
-            # TODO
-            print(f"{'-'*12}Perform LU for (Q)-{'-'*12}\n") if MESSAGES else None
-            QL, QU = lu(Q)
-            QU = QU[::-1, ::-1]
-            self._QL, self._QU = (rmo(QL), rmo(QU))
-            self._invQL, self._invQU = (
-                (rmo(inv(QL)), rmo(inv(QU))) if precomp else (None, None)
+        # Row major ordering Qx
+        self._spinner_label = "Row Major Ordering Qx"
+        if not is_lower_triangular(Qx):
+            self._Qx, self._invQx = (None, None)
+            Qx_L, Qx_U = lu(Qx)
+            self._Qx_L, self._Qx_U = rmo(Qx_L), rmo(Qx_U[::-1, ::-1])[::-1]
+            invQx_L, invQx_U = inv(Qx_L), inv(Qx_U[::-1, ::-1])[::-1, ::-1]
+            self._invQx_L, self._invQx_U = (
+                (rmo(invQx_L), rmo(invQx_U[::-1, ::-1])[::-1])
+                if precomputation
+                else (None, None)
             )
-            self._Q, self._invQ = (None, None)
         else:
-            self._QL, self._QU, self._invQL, self._invQU = (None, None, None, None)
-            self._Q, self._invQ = rmo(Q), rmo(inv(Q)) if precomp else None
+            self._Qx, self._invQx = rmo(Qx), rmo(inv(Qx)) if precomputation else None
+            self._Qx_L, self._Qx_U, self._invQx_L, self._invQx_U = (
+                None,
+                None,
+                None,
+                None,
+            )
 
-        # Row major ordering D
-        if not is_lower_triangular(D.T):
-            print(f"{'-'*12}Perform LU for (D)-{'-'*12}\n") if MESSAGES else None
-            DL, DU = lu(D)
-            self._DL, self._DU = (rmo(DL), rmo(DU[::-1, ::-1]))
-            self._DTL, self._DTU = (rmo(DU.T), rmo(DL.T[::-1, ::-1]))
+        # Row major ordering Dx
+        self._spinner_label = "Row Major Ordering Dx"
+        if not is_lower_triangular(Dx.T):
+            self._Dx, self._DxT = (None, None)
+            Dx_L, Dx_U = lu(Dx)
+            self._Dx_L, self._Dx_U = (rmo(Dx_L), rmo(Dx_U[::-1, ::-1])[::-1])
+            self._DxT_L, self._DxT_U = (rmo(Dx_U.T), rmo(Dx_L.T[::-1, ::-1])[::-1])
         else:
-            self._D, self._DL, self._DU = (rmo(D[::-1, ::-1]), None, None)
-            self._DT, self._DTL, self._DTU = (rmo(D.T), None, None)
+            self._Dx, self._DxT = rmo(Dx[::-1, ::-1])[::-1], rmo(Dx.T)
+            self._Dx_L, self._Dx_U, self._DxT_L, self._DxT_U = (None, None, None, None)
+
+        construction_end = time.time()
+        self._construction_ms = (construction_end - construction_start) * 1000
 
         # Warmup the JIT compiler
-        if WARMUP:
-            print(f"{'-'*12}Warmup JIT compiler{'-'*12}\n") if MESSAGES else None
+        self._spinner_label = "Precompilation"
+        precompilation_start = time.time()
+        if precompilation:
             self.warmup()
+        precompilation_end = time.time()
+        self._precompilation_ms = (precompilation_end - precompilation_start) * 1000
 
-        print(self) if MESSAGES else None
+        self._stop_spinner() if report else None
+
+        # Print report
+        print()
+        print(self) if report else None
+
+    def _start_spinner(self):
+        self._loading = True
+        self._spinner_label = "Intializations"
+        self._spinner_thread = threading.Thread(target=self._show_spinner)
+        self._spinner_thread.start()
+
+    def _show_spinner(self):
+        symbols = ["|", "/", "-", "\\"]
+        idx = 0
+        while self._loading:
+            sys.stdout.write(
+                f"\r>>>{' '*10}{self._spinner_label} ({symbols[idx]}){' '*10}<<<{' '*20}"
+            )
+            sys.stdout.flush()
+            idx = (idx + 1) % len(symbols)
+            time.sleep(0.1)
+
+    def _stop_spinner(self):
+        self._loading = False
+        self._spinner_thread.join()
+        sys.stdout.write("\r" + " " * 50 + "\r")
+        sys.stdout.flush()
 
     @property
     def spatial_dimension(self) -> int:
@@ -153,25 +252,64 @@ class Transform:
         )
         ###
         coefficients = np.zeros(len(self), dtype=NP_FLOAT)
-        if self._invQ is not None:
+        if self._invQx is not None:
             coefficients = itransform(
-                self._invQ, function_values, self._T, self._m, self._p
+                self._invQx,
+                function_values,
+                self._T,
+                self._m,
+                self._p,
+                mode="lower",
+                parallel=self._parallel,
             )
-        elif self._Q is not None:
+        elif self._Qx is not None:
             coefficients = transform(
-                self._Q, function_values, self._T, self._m, self._p
+                self._Qx,
+                function_values,
+                self._T,
+                self._m,
+                self._p,
+                mode="lower",
+                parallel=self._parallel,
             )
-        elif self._invQL is not None and self._invQU is not None:
-            # TODO
-            pass
-        elif self._QL is not None and self._QU is not None:
-            # TODO
+        elif self._invQx_L is not None and self._invQx_U is not None:
+            coefficients = itransform(
+                self._invQx_L,
+                function_values,
+                self._T,
+                self._m,
+                self._p,
+                mode="lower",
+                parallel=self._parallel,
+            )
+            coefficients = itransform(
+                self._invQx_U,
+                coefficients,
+                self._T,
+                self._m,
+                self._p,
+                mode="upper",
+                parallel=self._parallel,
+            )
+        elif self._Qx_L is not None and self._Qx_U is not None:
             coefficients = transform(
-                self._QL, function_values, self._T, self._m, self._p
+                self._Qx_L,
+                function_values,
+                self._T,
+                self._m,
+                self._p,
+                mode="lower",
+                parallel=self._parallel,
             )
             coefficients = transform(
-                self._QU, coefficients[::-1], self._T[::-1], self._m, self._p
-            )[::-1]
+                self._Qx_U,
+                coefficients,
+                self._T,
+                self._m,
+                self._p,
+                mode="upper",
+                parallel=self._parallel,
+            )
         else:
             raise ValueError("Unexpected error.")
         ###
@@ -182,17 +320,34 @@ class Transform:
         coefficients = np.asarray(coefficients).astype(NP_FLOAT)
         ###
         function_values = np.zeros(len(self), dtype=NP_FLOAT)
-        if self._Q is not None:
+        if self._Qx is not None:
             function_values = itransform(
-                self._Q, coefficients, self._T, self._m, self._p
+                self._Qx,
+                coefficients,
+                self._T,
+                self._m,
+                self._p,
+                mode="lower",
+                parallel=self._parallel,
             )
-        elif self._QL is not None and self._QU is not None:
-            # TODO
+        elif self._Qx_L is not None and self._Qx_U is not None:
             function_values = itransform(
-                self._QU, coefficients[::-1], self._T[::-1], self._m, self._p
-            )[::-1]
+                self._Qx_U,
+                coefficients,
+                self._T,
+                self._m,
+                self._p,
+                mode="upper",
+                parallel=self._parallel,
+            )
             function_values = itransform(
-                self._QL, function_values, self._T, self._m, self._p
+                self._Qx_L,
+                function_values,
+                self._T,
+                self._m,
+                self._p,
+                mode="lower",
+                parallel=self._parallel,
             )
         else:
             raise ValueError("Unexpected error.")
@@ -206,24 +361,38 @@ class Transform:
         """Fast Differentiation"""
         coefficients = np.asarray(coefficients).astype(NP_FLOAT)
         ###
-        if self._D is not None:
+        if self._Dx is not None:
             coefficients = dtransform(
-                self._D, coefficients[::-1], self._T[::-1], self._m, self._n, self._p, i
-            )[::-1]
-        elif self._DL is not None and self._DU is not None:
-            # TODO test
-            coefficients = dtransform(
-                self._DL, coefficients, self._T, self._m, self._n, self._p, i
-            )
-            coefficients = dtransform(
-                self._DU,
-                coefficients[::-1],
-                self._T[::-1],
+                self._Dx,
+                coefficients,
+                self._T,
                 self._m,
-                self._n,
                 self._p,
                 i,
-            )[::-1]
+                mode="upper",
+                parallel=self._parallel,
+            )
+        elif self._Dx_L is not None and self._Dx_U is not None:
+            coefficients = dtransform(
+                self._Dx_U,
+                coefficients,
+                self._T,
+                self._m,
+                self._p,
+                i,
+                mode="upper",
+                parallel=self._parallel,
+            )
+            coefficients = dtransform(
+                self._Dx_L,
+                coefficients,
+                self._T,
+                self._m,
+                self._p,
+                i,
+                mode="lower",
+                parallel=self._parallel,
+            )
         else:
             raise ValueError("Unexpected error.")
         ###
@@ -233,24 +402,38 @@ class Transform:
         """Fast Differentiation (Transpose)"""
         coefficients = np.asarray(coefficients).astype(NP_FLOAT)
         ###
-        if self._DT is not None:
+        if self._DxT is not None:
             coefficients = dtransform(
-                self._DT, coefficients, self._T, self._m, self._n, self._p, i
-            )
-        elif self._DTL is not None and self._DU is not None:
-            # TODO test
-            coefficients = dtransform(
-                self._DTL, coefficients, self._T, self._m, self._n, self._p, i
-            )
-            coefficients = dtransform(
-                self._DTU,
-                coefficients[::-1],
-                self._T[::-1],
+                self._DxT,
+                coefficients,
+                self._T,
                 self._m,
-                self._n,
                 self._p,
                 i,
-            )[::-1]
+                mode="lower",
+                parallel=self._parallel,
+            )
+        elif self._DxT_L is not None and self._DxT_U is not None:
+            coefficients = dtransform(
+                self._DxT_U,
+                coefficients,
+                self._T,
+                self._m,
+                self._p,
+                i,
+                mode="upper",
+                parallel=self._parallel,
+            )
+            coefficients = dtransform(
+                self._DxT_L,
+                coefficients,
+                self._T,
+                self._m,
+                self._p,
+                i,
+                mode="lower",
+                parallel=self._parallel,
+            )
         else:
             raise ValueError("Unexpected error.")
         ###
@@ -258,10 +441,12 @@ class Transform:
 
     def eval(self, coefficients: np.ndarray, x: np.ndarray) -> NP_FLOAT:
         """Point Evaluation"""
+        if self._eval_at_point is None:  # TODO Remove this
+            return 0.0
         return self._eval_at_point(coefficients, self._x, x, self._m, self._p)
 
     def __len__(self) -> int:
-        return len(self._G)
+        return self._length
 
     def __eq__(self, value: object) -> bool:
         if not isinstance(value, Transform):
@@ -279,10 +464,12 @@ class Transform:
             f"{'-'*20}-+-{'-'*20}\n"
             f"{' '*19}Report{' '*18}\n"
             f"{'-'*20}-+-{'-'*20}\n"
-            f"{'Spatial Dimension':<20} | {self._m:<20}\n"
-            f"{'Polynomial Degree':<20} | {self._n:<20}\n"
-            f"{'lp Degree':<20} | {self._p:<20}\n"
-            f"{'Condition Q':<20} | {self._cond_Q:<20.2e}\n"
-            f"{'Length':<20} | {len(self):<20}\n"
+            f"{'Spatial Dimension':<20} | {self._m}\n"
+            f"{'Polynomial Degree':<20} | {self._n:_}\n"
+            f"{'lp Degree':<20} | {self._p}\n"
+            f"{'Condition Qx':<20} | {self._cond_Qx:.2e}\n"
+            f"{'Amount of Coeffs':<20} | {len(self):_}\n"
+            f"{'Construction':<20} | {self._construction_ms:_.2f} ms\n"
+            f"{'Precompilation':<20} | {self._precompilation_ms:_.2f} ms\n"
             f"{'-'*20}-+-{'-'*20}\n"
         )

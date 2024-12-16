@@ -4,7 +4,7 @@ import numpy as np
 from numba import njit
 from math import gamma
 from typing import Tuple
-from lpfun import NP_FLOAT, NP_INT, THRESHOLD
+from lpfun import NP_FLOAT, NP_INT
 from lpfun.iterators import MultiIndexSet
 
 """Utility functions"""
@@ -32,34 +32,34 @@ def cheb2nd(n: int) -> np.ndarray:
 def newton2lagrange(nodes: np.ndarray) -> np.ndarray:
     """O(n^2)"""
     nodes = np.asarray(nodes).astype(np.float64)
-    ###
-    n = len(nodes)
     x = nodes[:]
-    lag_coeffs = np.zeros((n, n))
+    n = len(x)
+    ###
+    Qx = np.zeros((n, n))
     for i in range(n):
         monomials = np.ones(n, dtype=np.float64)
         for j in range(1, n):
             monomials[j] *= monomials[j - 1] * (x[i] - x[j - 1])
-        lag_coeffs[i, :n] = monomials
+        Qx[i, :n] = monomials
     ###
-    return lag_coeffs
+    return Qx
 
 
 @njit
 def chebyshev2lagrange(nodes: np.ndarray) -> np.ndarray:
     """O(n^2)"""
     nodes = np.asarray(nodes).astype(np.float64)
-    ###
-    n = len(nodes)
     x = nodes[:]
-    lag_coeffs = np.zeros((n, n), dtype=np.float64)
+    n = len(x)
+    ###
+    Qx = np.zeros((n, n), dtype=np.float64)
     for i in range(n):
-        lag_coeffs[i, 0] = 1.0
+        Qx[i, 0] = 1.0
         if n > 0:
-            lag_coeffs[i, 1] = x[i]
+            Qx[i, 1] = x[i]
         for j in range(2, n + 1):
-            lag_coeffs[i, j] = 2 * x[i] * lag_coeffs[i, j - 1] - lag_coeffs[i, j - 2]
-    return lag_coeffs
+            Qx[i, j] = 2 * x[i] * Qx[i, j - 1] - Qx[i, j - 2]
+    return Qx
 
 
 # Differentiation Matrix Callables
@@ -69,18 +69,34 @@ def chebyshev2lagrange(nodes: np.ndarray) -> np.ndarray:
 def newton2derivative(nodes: np.ndarray) -> np.ndarray:
     """O(n^2)"""
     nodes = np.asarray(nodes).astype(NP_FLOAT)
-    ###
-    n = len(nodes)
     x = nodes[:]
-    dx = np.zeros((n, n), dtype=NP_FLOAT)
+    n = len(x)
+    ###
+    Dx = np.zeros((n, n), dtype=NP_FLOAT)
     for i in range(1, n):
         for j in range(i):
             if i == j + 1:
-                dx[i, j] = i
+                Dx[i, j] = i
             else:
-                dx[i, j] = (x[j] - x[i - 1]) * dx[i - 1, j] + dx[i - 1, j - 1]
+                Dx[i, j] = (x[j] - x[i - 1]) * Dx[i - 1, j] + Dx[i - 1, j - 1]
     ###
-    return dx.T
+    return Dx.T
+
+
+@njit
+def chebyshev2derivative(nodes: np.ndarray) -> np.ndarray:
+    """O(n^2)"""
+    ### NOTE -- Matrix is independent of the nodes
+    nodes = np.asarray(nodes).astype(NP_FLOAT)
+    n = len(nodes) - 1
+    ###
+    Dx = np.zeros((n + 1, n + 1))
+    for k in range(1, n + 1):
+        for j in range(k - 1, -1, -2):
+            Dx[j, k] = 2 * k
+        Dx[0, k] *= 0.5
+    ###
+    return Dx
 
 
 # Newton Point Evaluation
@@ -115,6 +131,7 @@ def newton2point(
 
 # Classifications
 
+
 @njit
 def classify(m: int, n: int, p: float) -> bool:
     m, n, p = int(m), int(n), float(p)
@@ -127,24 +144,6 @@ def classify(m: int, n: int, p: float) -> bool:
         )
     if n < 0:
         raise ValueError("The parameter degree should be non-negative.")
-    ###
-    return True
-
-
-def test_threshold(T: np.ndarray) -> bool:
-    T = np.asarray(T).astype(NP_INT)
-    ###
-    if THRESHOLD is None:
-        warnings.warn("Threshold is set to None. This may lead to memory issues.")
-        return True
-    length = np.sum(T)
-    if length > THRESHOLD:
-        raise ValueError(
-            f"""
-                Dimension exceeds threshold: {length} > {THRESHOLD}.
-                If this operation should be executed anyways, please set threshold to None.
-            """
-        )
     ###
     return True
 
@@ -286,7 +285,7 @@ def leja_nodes(nodes: np.ndarray) -> np.ndarray:
 @njit
 def _leja_order(nodes: np.ndarray) -> np.ndarray:
     """This function originates from minterpy."""
-    """O(n^2)"""
+    """O(n*n*n)"""
     nodes = np.asarray(nodes).astype(NP_FLOAT)
     n = len(nodes) - 1
     ord = np.arange(1, n + 1, dtype=NP_INT)
@@ -310,7 +309,7 @@ def _leja_order(nodes: np.ndarray) -> np.ndarray:
 
 
 @njit
-def permutation_maximal(m: int, n: int, i: int) -> np.ndarray:
+def permutation_max(m: int, n: int, i: int) -> np.ndarray:
     """O(N)"""
     N = (n + 1) ** m
     mat = np.zeros(N, dtype=NP_INT)
@@ -343,7 +342,7 @@ def permutation(T: np.ndarray, i: int) -> np.ndarray:
 
 @njit
 def apply_permutation(P: np.ndarray, x: np.ndarray, invert: bool = False) -> np.ndarray:
-    """O(n)"""
+    """O(P)"""
     x_p = np.zeros_like(x)
     if invert:
         for i, j in enumerate(P):
