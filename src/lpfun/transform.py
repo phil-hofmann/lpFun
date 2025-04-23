@@ -21,7 +21,7 @@ from lpfun.utils import (
     inv,
     is_lower_triangular,
     leja_nodes,
-    lower_grid,
+    grid,
     lu,
     rmo,
     tube,
@@ -38,10 +38,9 @@ class Transform:
         lp_degree: float = 2.0,  # ... p
         nodes: callable = cheb2nd,  # ... x
         basis: Literal["newton", "chebyshev"] = "newton",
-        parallel: Literal["seq", "cpu"] = "cpu",
-        precomputation: bool = True,
-        threshold: int = 20_000_000,
+        parallel=True,
         precompilation: bool = True,
+        threshold: int = 20_000_000,
         report: bool = True,
     ):
         """
@@ -52,36 +51,26 @@ class Transform:
             polynomial_degree (int): The degree of the polynomial.
             lp_degree (float): The p-norm of the polynomial space.
             nodes (callable): A callable function that takes an integer and returns a one dimensional numpy array of nodes.
-            basis (str): The basis to use for the interpolation and differentiation matrices. Either "newton" or "chebyshev".
-            parallel (bool): Decide whether to use parallel execution on the CPU. If "seq", no parallel execution is used.
-            precomputation (bool): Precompute the inverse of the interpolation matrix. This enables fast parallel executions. Mode must be activated when the spatial dimension is greater than three.
-            threshold (int): The threshold for the dimension of the lower space. If the dimension is greater than the threshold, an error is raised.
+            basis (str): The basis to use for the Vandermonde and differentiation matrices. Either "newton" or "chebyshev".
+            parallel (bool): Decide whether to use parallel execution on the CPU. Utilizes precomputations for the inverse of the Vandermonde matrix if activated.
             precompilation (bool): Precompile all the JIT functions with dummy inputs.
+            threshold (int): The threshold for the dimension of the lower space. If the dimension is greater than the threshold, an error is raised.
             report (bool): Print a report after initialization.
         """
 
         self._start_spinner() if report else None
         construction_start = time.time()
-        self._m = spatial_dimension
-        self._n = polynomial_degree
-        self._p = lp_degree
-        self._parallel = parallel
-        m, n, p = self._m, self._n, self._p
-
-        ### NOTE Excluding currently unsupported cases
-        if not precomputation:
-            self._stop_spinner() if report else None
-            raise ValueError(
-                "These cases are not implemented fully yet. Please set precomputation to True."
-            )
-        ###
+        self._m = int(spatial_dimension)
+        self._n = int(polynomial_degree)
+        self._p = float(lp_degree)
+        self._parallel = bool(parallel)
 
         if basis == "newton":
-            interpolation_matrix = newton2lagrange
+            vandermonde_matrix = newton2lagrange
             differentiation_matrix = newton2derivative
             self._eval_at_point = newton2point
         elif basis == "chebyshev":
-            interpolation_matrix = chebyshev2lagrange
+            vandermonde_matrix = chebyshev2lagrange
             differentiation_matrix = chebyshev2derivative
             self._eval_at_point = None
         else:
@@ -90,41 +79,39 @@ class Transform:
 
         # Compute tube only if p is not np.inf
         self._spinner_label = "Compute Tubes"
-        self._T = tube(m, n, p)
-        T = self._T
+        self._T = tube(self._m, self._n, self._p)
+        self._length = np.sum(self._T)
 
         # Check the threshold
         if threshold is None:
             warnings.warn("Threshold is set to None. This may lead to memory issues.")
-
-        length = np.sum(T)
-        if length > threshold:
+        elif self._length > threshold:
             self._stop_spinner() if report else None
             raise ValueError(
                 f"""
-                    Dimension exceeds threshold: {format(length, "_")} > {format(threshold, "_")}.
+                    Dimension exceeds threshold: {format(self._length, "_")} > {format(threshold, "_")}.
                     If this operation should be executed anyways, please set threshold to None.
                 """
             )
-        self._length = length
 
-        if not precomputation and m > 3:
-            self._stop_spinner()
-            raise ValueError(
-                "Precomputation must be enabled when the spatial dimension is greater than three."
-            )
+        # TODO REMOVE...
+        # if not parallel and self._m > 3:
+        #     self._stop_spinner() if report else None
+        #     raise ValueError(
+        #         "Precomputation must be enabled when the spatial dimension is greater than three."
+        #     )
 
         # One dimensional (unisolvent, leja-ordered) nodes
         self._spinner_label = "Compute Nodes"
-        x = nodes(n + 1)
-        if len(np.unique(x)) != n + 1:
+        x = nodes(self._n + 1)
+        if len(np.unique(x)) != self._n + 1:
             self._stop_spinner() if report else None
             raise ValueError("The provided nodes are not pairwise distinct.")
         x = leja_nodes(x)
         self._x = x
 
-        # Lower grid
-        G = lower_grid(x, m, n, p)
+        # Grid
+        G = grid(x, self._m, self._n, self._p)
 
         # Lex order: User experience
         self._lex_order = np.lexsort(G.T)
@@ -132,43 +119,43 @@ class Transform:
 
         # Compute matrices
         self._spinner_label = "Compute Matrices"
-        Qx = interpolation_matrix(x)
-        Dx = differentiation_matrix(x)
+        V = vandermonde_matrix(x)
+        D = differentiation_matrix(x)
 
         # Compute condition number
-        self._cond_Qx = np.linalg.cond(Qx)
+        self._cond_V = np.linalg.cond(V)
 
-        # Row major ordering Qx
-        self._spinner_label = "Row Major Ordering Qx"
-        if not is_lower_triangular(Qx):
-            self._Qx, self._invQx = (None, None)
-            Qx_L, Qx_U = lu(Qx)
-            self._Qx_L, self._Qx_U = rmo(Qx_L), rmo(Qx_U[::-1, ::-1])[::-1]
-            invQx_L, invQx_U = inv(Qx_L), inv(Qx_U[::-1, ::-1])[::-1, ::-1]
-            self._invQx_L, self._invQx_U = (
-                (rmo(invQx_L), rmo(invQx_U[::-1, ::-1])[::-1])
-                if precomputation
+        # Row major ordering V
+        self._spinner_label = "Row Major Ordering V"
+        if not is_lower_triangular(V):
+            self._V, self._invV = (None, None)
+            V_L, V_U = lu(V)
+            self._V_L, self._V_U = rmo(V_L), rmo(V_U[::-1, ::-1])[::-1]
+            invV_L, invV_U = inv(V_L), inv(V_U[::-1, ::-1])[::-1, ::-1]
+            self._invV_L, self._invV_U = (
+                (rmo(invV_L), rmo(invV_U[::-1, ::-1])[::-1])
+                if self._parallel
                 else (None, None)
             )
         else:
-            self._Qx, self._invQx = rmo(Qx), rmo(inv(Qx)) if precomputation else None
-            self._Qx_L, self._Qx_U, self._invQx_L, self._invQx_U = (
+            self._V, self._invV = rmo(V), rmo(inv(V)) if self._parallel else None
+            self._V_L, self._V_U, self._invV_L, self._invV_U = (
                 None,
                 None,
                 None,
                 None,
             )
 
-        # Row major ordering Dx
-        self._spinner_label = "Row Major Ordering Dx"
-        if not is_lower_triangular(Dx.T):
-            self._Dx, self._DxT = (None, None)
-            Dx_L, Dx_U = lu(Dx)
-            self._Dx_L, self._Dx_U = (rmo(Dx_L), rmo(Dx_U[::-1, ::-1])[::-1])
-            self._DxT_L, self._DxT_U = (rmo(Dx_U.T), rmo(Dx_L.T[::-1, ::-1])[::-1])
+        # Row major ordering D
+        self._spinner_label = "Row Major Ordering D"
+        if not is_lower_triangular(D.T):
+            self._D, self._DT = (None, None)
+            D_L, D_U = lu(D)
+            self._D_L, self._D_U = (rmo(D_L), rmo(D_U[::-1, ::-1])[::-1])
+            self._DT_L, self._DT_U = (rmo(D_U.T), rmo(D_L.T[::-1, ::-1])[::-1])
         else:
-            self._Dx, self._DxT = rmo(Dx[::-1, ::-1])[::-1], rmo(Dx.T)
-            self._Dx_L, self._Dx_U, self._DxT_L, self._DxT_U = (None, None, None, None)
+            self._D, self._DT = rmo(D[::-1, ::-1])[::-1], rmo(D.T)
+            self._D_L, self._D_U, self._DT_L, self._DT_U = (None, None, None, None)
 
         construction_end = time.time()
         self._construction_ms = (construction_end - construction_start) * 1000
@@ -252,9 +239,9 @@ class Transform:
         )
         ###
         coefficients = np.zeros(len(self), dtype=NP_FLOAT)
-        if self._invQx is not None:
+        if self._invV is not None:
             coefficients = itransform(
-                self._invQx,
+                self._invV,
                 function_values,
                 self._T,
                 self._m,
@@ -262,9 +249,18 @@ class Transform:
                 mode="lower",
                 parallel=self._parallel,
             )
-        elif self._Qx is not None:
+        elif self._V is not None:
             coefficients = transform(
-                self._Qx,
+                self._V,
+                function_values,
+                self._T,
+                self._m,
+                self._p,
+                mode="lower",
+            )
+        elif self._invV_L is not None and self._invV_U is not None:
+            coefficients = itransform(
+                self._invV_L,
                 function_values,
                 self._T,
                 self._m,
@@ -272,18 +268,8 @@ class Transform:
                 mode="lower",
                 parallel=self._parallel,
             )
-        elif self._invQx_L is not None and self._invQx_U is not None:
             coefficients = itransform(
-                self._invQx_L,
-                function_values,
-                self._T,
-                self._m,
-                self._p,
-                mode="lower",
-                parallel=self._parallel,
-            )
-            coefficients = itransform(
-                self._invQx_U,
+                self._invV_U,
                 coefficients,
                 self._T,
                 self._m,
@@ -291,24 +277,22 @@ class Transform:
                 mode="upper",
                 parallel=self._parallel,
             )
-        elif self._Qx_L is not None and self._Qx_U is not None:
+        elif self._V_L is not None and self._V_U is not None:
             coefficients = transform(
-                self._Qx_L,
+                self._V_L,
                 function_values,
                 self._T,
                 self._m,
                 self._p,
                 mode="lower",
-                parallel=self._parallel,
             )
             coefficients = transform(
-                self._Qx_U,
+                self._V_U,
                 coefficients,
                 self._T,
                 self._m,
                 self._p,
                 mode="upper",
-                parallel=self._parallel,
             )
         else:
             raise ValueError("Unexpected error.")
@@ -320,9 +304,9 @@ class Transform:
         coefficients = np.asarray(coefficients).astype(NP_FLOAT)
         ###
         function_values = np.zeros(len(self), dtype=NP_FLOAT)
-        if self._Qx is not None:
+        if self._V is not None:
             function_values = itransform(
-                self._Qx,
+                self._V,
                 coefficients,
                 self._T,
                 self._m,
@@ -330,9 +314,9 @@ class Transform:
                 mode="lower",
                 parallel=self._parallel,
             )
-        elif self._Qx_L is not None and self._Qx_U is not None:
+        elif self._V_L is not None and self._V_U is not None:
             function_values = itransform(
-                self._Qx_U,
+                self._V_U,
                 coefficients,
                 self._T,
                 self._m,
@@ -341,7 +325,7 @@ class Transform:
                 parallel=self._parallel,
             )
             function_values = itransform(
-                self._Qx_L,
+                self._V_L,
                 function_values,
                 self._T,
                 self._m,
@@ -361,9 +345,9 @@ class Transform:
         """Fast Differentiation"""
         coefficients = np.asarray(coefficients).astype(NP_FLOAT)
         ###
-        if self._Dx is not None:
+        if self._D is not None:
             coefficients = dtransform(
-                self._Dx,
+                self._D,
                 coefficients,
                 self._T,
                 self._m,
@@ -372,9 +356,9 @@ class Transform:
                 mode="upper",
                 parallel=self._parallel,
             )
-        elif self._Dx_L is not None and self._Dx_U is not None:
+        elif self._D_L is not None and self._D_U is not None:
             coefficients = dtransform(
-                self._Dx_U,
+                self._D_U,
                 coefficients,
                 self._T,
                 self._m,
@@ -384,7 +368,7 @@ class Transform:
                 parallel=self._parallel,
             )
             coefficients = dtransform(
-                self._Dx_L,
+                self._D_L,
                 coefficients,
                 self._T,
                 self._m,
@@ -402,9 +386,9 @@ class Transform:
         """Fast Differentiation (Transpose)"""
         coefficients = np.asarray(coefficients).astype(NP_FLOAT)
         ###
-        if self._DxT is not None:
+        if self._DT is not None:
             coefficients = dtransform(
-                self._DxT,
+                self._DT,
                 coefficients,
                 self._T,
                 self._m,
@@ -413,9 +397,9 @@ class Transform:
                 mode="lower",
                 parallel=self._parallel,
             )
-        elif self._DxT_L is not None and self._DxT_U is not None:
+        elif self._DT_L is not None and self._DT_U is not None:
             coefficients = dtransform(
-                self._DxT_U,
+                self._DT_U,
                 coefficients,
                 self._T,
                 self._m,
@@ -425,7 +409,7 @@ class Transform:
                 parallel=self._parallel,
             )
             coefficients = dtransform(
-                self._DxT_L,
+                self._DT_L,
                 coefficients,
                 self._T,
                 self._m,
@@ -467,7 +451,7 @@ class Transform:
             f"{'Spatial Dimension':<20} | {self._m}\n"
             f"{'Polynomial Degree':<20} | {self._n:_}\n"
             f"{'lp Degree':<20} | {self._p}\n"
-            f"{'Condition Qx':<20} | {self._cond_Qx:.2e}\n"
+            f"{'Condition V':<20} | {self._cond_V:.2e}\n"
             f"{'Amount of Coeffs':<20} | {len(self):_}\n"
             f"{'Construction':<20} | {self._construction_ms:_.2f} ms\n"
             f"{'Precompilation':<20} | {self._precompilation_ms:_.2f} ms\n"

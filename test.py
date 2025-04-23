@@ -6,12 +6,11 @@ from lpfun import NP_FLOAT, NP_INT
 
 # Parameters
 
-ms = [1, 2, 3]  # 4, 5, 6 -- TODO
-ps = [1.0, 2.0, np.inf]
-bases = ["newton", "chebyshev"]
-parallel = ["seq", "cpu"]
-precomputation = [True]  # False -- TODO
-mpbapapr = list(product(ms, ps, bases, parallel, precomputation))
+ms = [1, 2, 3, 4, 5, 6] # [2]  # 
+ps = [1.0 , 2.0, np.inf] # [2.0]  # 
+bases = ["newton", "chebyshev"] # ["newton"] # 
+parallel = [True, False] # [False] # 
+mpbapa = list(product(ms, ps, bases, parallel))
 
 
 # Prerequisites
@@ -19,8 +18,8 @@ mpbapapr = list(product(ms, ps, bases, parallel, precomputation))
 
 def ns(m: int) -> np.ndarray:
     # Generate random ns
-    n_max_m = {1: 120, 2: 80, 3: 40, 4: 20, 5: 10}
-    n_max = n_max_m.get(m, 5)
+    n_max_m, default = {1: 60, 2: 50, 3: 40, 4: 30, 5: 20}, 10
+    n_max = n_max_m.get(m, default)
     num = max(int(n_max * 0.2), 1)
     ns = np.random.randint(1, n_max, num)
     return ns
@@ -97,8 +96,8 @@ def test_tube_euclidean_degree(m: int):
         assert tube_sum == cardinality
 
 
-@pytest.mark.parametrize("m, p, ba, pa, pr", mpbapapr)
-def test_fnt_ifnt(m: int, p: float, ba: str, pa: str, pr: bool):
+@pytest.mark.parametrize("m, p, ba, pa", mpbapa)
+def test_fnt_ifnt(m: int, p: float, ba: str, pa: bool):
     for n in ns(m):
         t = lp.Transform(
             m,
@@ -106,19 +105,18 @@ def test_fnt_ifnt(m: int, p: float, ba: str, pa: str, pr: bool):
             p,
             basis=ba,
             parallel=pa,
-            precomputation=pr,
             report=False,
+            precompilation=True,
         )
         function_values = np.random.rand(len(t))
         reconstruction = t.ifnt(t.fnt(function_values))
         eps = np.linalg.norm(reconstruction - function_values)
         assert eps < 1e-9
+    # assert False # TODO UNDO!
 
 
-@pytest.mark.parametrize("m, p, ba, pa, pr", mpbapapr)
-def test_dx(m: int, p: float, ba: str, pa: str, pr: bool):
-    if m > 3:  # TODO Remove
-        return
+@pytest.mark.parametrize("m, p, ba, pa", mpbapa)
+def test_dx(m: int, p: float, ba: str, pa: bool):
     for n in range(1, 5):
         f, df = monomial(m, n)
         t = lp.Transform(
@@ -127,7 +125,6 @@ def test_dx(m: int, p: float, ba: str, pa: str, pr: bool):
             p,
             basis=ba,
             parallel=pa,
-            precomputation=pr,
             report=False,
         )
         function_values = np.array([f(*x) for x in t.grid])
@@ -137,3 +134,5 @@ def test_dx(m: int, p: float, ba: str, pa: str, pr: bool):
             dx_reconstruction = t.ifnt(t.dx(coeffs, i))
             eps = np.linalg.norm(dx_reconstruction - dx_function_values)
             assert eps < 1e-7
+    # assert False # TODO UNDO!
+        

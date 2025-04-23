@@ -5,7 +5,7 @@ from numba import njit
 from math import gamma
 from typing import Tuple
 from lpfun import NP_FLOAT, NP_INT
-from lpfun.iterators import MultiIndexSet
+from lpfun.core import MultiIndexSet
 
 """Utility functions"""
 
@@ -106,7 +106,7 @@ def chebyshev2derivative(nodes: np.ndarray) -> np.ndarray:
 def newton2point(
     coefficients: np.ndarray, nodes: np.ndarray, x: np.ndarray, m: int, p: float
 ) -> NP_FLOAT:
-    """O(N*m*n)"""
+    """O(Nmn)"""
     coefficients = np.asarray(coefficients).astype(NP_FLOAT)
     nodes = np.asarray(nodes).astype(NP_FLOAT)
     x = np.asarray(x).astype(NP_FLOAT)
@@ -149,29 +149,29 @@ def classify(m: int, n: int, p: float) -> bool:
 
 
 @njit
-def is_lower_triangular(B: np.ndarray, atol=1e-8) -> bool:
-    B = np.asarray(B).astype(NP_FLOAT)
+def is_lower_triangular(M: np.ndarray, atol=1e-8) -> bool:
+    M = np.asarray(M).astype(NP_FLOAT)
     ###
-    n = B.shape[0]
+    n = len(M)
     for i in range(n):
         for j in range(i + 1, n):
-            if not np.abs(B[i, j]) < atol:
+            if not np.abs(M[i, j]) < atol:
                 return False
     ###
     return True
 
 
-# Row Major Ordering
+# Row major ordering
 
 
 @njit
-def lu(B: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+def lu(M: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
     """O(n^3)"""
-    B = np.asarray(B).astype(NP_FLOAT)
+    M = np.asarray(M).astype(NP_FLOAT)
     ###
-    n = B.shape[0]
+    n = len(M)
     L = np.eye(n, dtype=NP_FLOAT)
-    U = B[:, :]
+    U = M[:, :]
     for j in range(n):
         for i in range(j + 1, n):
             L[i, j] = U[i, j] / U[j, j]
@@ -185,7 +185,7 @@ def rmo(L: np.ndarray) -> np.ndarray:
     """O(n^2)"""
     L = np.asarray(L).astype(NP_FLOAT)
     ###
-    n = L.shape[0]
+    n = len(L)
     N = int(n * (n + 1) / 2)
     result = np.zeros(N, dtype=NP_FLOAT)
     k = 0
@@ -197,7 +197,7 @@ def rmo(L: np.ndarray) -> np.ndarray:
     return result
 
 
-# Tube Projection
+# Tube projections
 
 
 @njit
@@ -218,7 +218,6 @@ def _memory_allocation(m: int, n: int, p: float) -> int:
 
 @njit
 def _binomial(n: int, m: int) -> int:
-    """O(min(m, n-m))"""
     if m < 0 or m > n:
         return 0
     result = 1
@@ -238,7 +237,6 @@ def tube(m: int, n: int, p: float) -> np.ndarray:
 
 @njit
 def _tube(m: int, n: int, p: float) -> np.ndarray:
-    """O(k_m,n,p)"""
     mis = MultiIndexSet(m, n, p)
     memory_allocation = _memory_allocation(m - 1, n, p)
     tube = np.zeros(memory_allocation, dtype=NP_INT)
@@ -249,28 +247,27 @@ def _tube(m: int, n: int, p: float) -> np.ndarray:
     return tube[: mis.l]
 
 
-# Lower Grid
+# Grid
 
 
-def lower_grid(nodes: np.ndarray, m: int, n: int, p: float) -> np.ndarray:
+def grid(nodes: np.ndarray, m: int, n: int, p: float) -> np.ndarray:
     classify(m, n, p)
     if p == np.inf:
         return np.flip(list(itertools.product(nodes, repeat=m)), axis=1)
     else:
-        return _lower_grid(nodes, m, n, p)
+        return _grid(nodes, m, n, p)
 
 
 @njit
-def _lower_grid(nodes: np.ndarray, m: int, n: int, p: float) -> np.ndarray:
-    """O(N)"""
+def _grid(nodes: np.ndarray, m: int, n: int, p: float) -> np.ndarray:
     nodes = np.asarray(nodes).astype(NP_FLOAT)
     memory_allocation = _memory_allocation(m, n, p)
-    lower_grid = np.zeros((memory_allocation, m))
+    grid = np.zeros((memory_allocation, m))
     mis = MultiIndexSet(m, n, p)
     while mis.next():
         mi = mis.multi_index
-        lower_grid[mis.i] = [nodes[mi[_]] for _ in range(m)]
-    return lower_grid[: mis.i + 1]
+        grid[mis.i] = [nodes[mi[_]] for _ in range(m)]
+    return grid[: mis.i + 1]
 
 
 # Leja--ordered Nodes
@@ -285,7 +282,6 @@ def leja_nodes(nodes: np.ndarray) -> np.ndarray:
 @njit
 def _leja_order(nodes: np.ndarray) -> np.ndarray:
     """This function originates from minterpy."""
-    """O(n*n*n)"""
     nodes = np.asarray(nodes).astype(NP_FLOAT)
     n = len(nodes) - 1
     ord = np.arange(1, n + 1, dtype=NP_INT)
@@ -309,8 +305,12 @@ def _leja_order(nodes: np.ndarray) -> np.ndarray:
 
 
 @njit
-def permutation_max(m: int, n: int, i: int) -> np.ndarray:
-    """O(N)"""
+def permutation_max(
+    m: int,
+    n: int,
+    i: int,
+) -> np.ndarray:
+    """O((n+1)^m)"""
     N = (n + 1) ** m
     mat = np.zeros(N, dtype=NP_INT)
     iter_len = (n + 1) ** i
@@ -325,8 +325,10 @@ def permutation_max(m: int, n: int, i: int) -> np.ndarray:
 
 
 @njit
-def permutation(T: np.ndarray, i: int) -> np.ndarray:
-    """O(???)"""
+def permutation(
+    T: np.ndarray,
+    i: int,
+) -> np.ndarray:
     n = np.max(T)
     if i == 0:
         return np.arange(n)
@@ -341,8 +343,11 @@ def permutation(T: np.ndarray, i: int) -> np.ndarray:
 
 
 @njit
-def apply_permutation(P: np.ndarray, x: np.ndarray, invert: bool = False) -> np.ndarray:
-    """O(P)"""
+def apply_permutation(
+    P: np.ndarray,
+    x: np.ndarray,
+    invert: bool = False,
+) -> np.ndarray:
     x_p = np.zeros_like(x)
     if invert:
         for i, j in enumerate(P):
@@ -354,8 +359,7 @@ def apply_permutation(P: np.ndarray, x: np.ndarray, invert: bool = False) -> np.
 
 
 @njit
-def transposition(T) -> np.ndarray:
-    """O(???)"""
+def transposition(T: np.ndarray) -> np.ndarray:
     N, n = np.sum(T), np.max(T)
     permutation_vector = np.zeros(N, dtype=NP_INT)
     current_position = 0
@@ -368,20 +372,11 @@ def transposition(T) -> np.ndarray:
 
 
 @njit
-def concatenate_arrays(chunk_dot) -> np.ndarray:
-    total_length = sum([len(arr) for arr in chunk_dot])
-    result = np.empty(total_length, dtype=chunk_dot[0].dtype)
-    start = 0
-    for arr in chunk_dot:
-        end = start + arr.size
-        result[start:end] = arr
-        start = end
-    return result
-
-
-@njit
-def reduceat(array, split_indices) -> np.ndarray:
-    """O(array)"""
+def reduceat(
+    array: np.ndarray,
+    split_indices: np.ndarray,
+) -> np.ndarray:
+    """O(len(array))"""
     sums = np.zeros(len(split_indices) - 1, dtype=array.dtype)
     for i in range(len(split_indices) - 1):
         start = split_indices[i]
@@ -394,80 +389,87 @@ def reduceat(array, split_indices) -> np.ndarray:
 
 
 @njit
-def phi(m: int, T: np.ndarray, T_prime: np.ndarray) -> np.ndarray:
-    """O(???)"""
-    T = np.asarray(T, dtype=NP_INT)
-    T_prime = np.asarray(T_prime, dtype=NP_INT)
-    e_T = entropy(T)
-    e_T_prime = entropy(T_prime)
-    phi_size = sum(T)
-    phi = np.zeros(phi_size, dtype=NP_INT)
-    k, k_prime = 0, 0
-    l, l_prime = 0, 0
-    i, i_prime = np.zeros(m, dtype=NP_INT), np.zeros(m, dtype=NP_INT)
-    wait = False
-    while i is not None and i_prime is not None:
-        T_prime_prime_l = T_prime[l_prime]
-        if not wait:
-            T_l = T[l]
-            if T_l <= T_prime_prime_l:
-                for j in range(T_l):
-                    phi[k + j] = k_prime + j
-                k += T_l
-                l += 1
-            else:
-                raise ValueError("Undetermined condition encountered in the algorithm.")
-        k_prime += T_prime_prime_l
-        l_prime += 1
-        if not wait:
-            i, wait = plusplus(m, i, T, e_T)
-        i_prime, go = plusplus(m, i_prime, T_prime, e_T_prime)
-        if go:
-            wait = False
-    return phi
-
-
-@njit
 def entropy(T: np.ndarray) -> np.ndarray:
-    """O(???)"""
     cs_T = np.cumsum(T)
     e_T = np.array([cs_T[-1]], dtype=NP_INT)
-    if not e_T[0] == 1:
-        while True:
-            l = e_T[-1]
-            temp = cs_T[0:l]
-            index = np.where(temp == l)[0]
-            if len(index) == 0:
-                break
-            else:
-                index = index[0]
-            e_T = np.append(e_T, index + 1)
+    if e_T[0] == 1:
+        return e_T
+    while True:
+        l = e_T[-1]
+        temp = cs_T[0:l]
+        index = np.where(temp == l)[0]
+        if len(index) == 0:
+            break
+        else:
+            index = index[0]
+        e_T = np.append(e_T, index + 1)
     return e_T
 
 
 @njit
 def plusplus(
-    m: int, i: np.ndarray, T: np.ndarray, e_T: np.ndarray
-) -> Tuple[np.ndarray, bool]:
-    """O(???)"""
-    j = 1
-    while j < m:
-        Tj = T[0 : e_T[j]]
-        k = i[j + 1] if j < m - 1 else 0
-        if i[j] < Tj[k] - 1:
+    m: int,
+    i: np.ndarray,
+    d: np.ndarray,
+    T: np.ndarray,
+    e_T: np.ndarray,
+) -> Tuple[np.ndarray, np.ndarray, int]:
+    j = 0
+    max_j = 0
+    while j < m - 1:
+        if d[j] < T[: e_T[j + 2]][i[j + 1]] - 1:
+            d[j] += 1
             i[j] += 1
-            return i, j != 1
+            return i, d, max_j
         else:
-            i[j] = 0
+            d[j] = 0
+            i[j] += 1
             j += 1
-    return None, False
+        max_j = max(max_j, j)
+    return None, None, -1
 
 
 @njit
-def inv(L):
+def ordinal_embedding(
+    m: int,
+    T: np.ndarray,
+    T_prime: np.ndarray,
+) -> np.ndarray:
+    """O(||T_prime||_1)"""
+    T = np.asarray(T, dtype=NP_INT)
+    T_prime = np.asarray(T_prime, dtype=NP_INT)
+    e_T = entropy(T)
+    e_T_prime = entropy(T_prime)
+    N = np.sum(T)
+    phi = np.zeros(N, dtype=NP_INT)
+    k, k_prime = 0, 0
+    max_j, max_j_prime = 0, 0
+    i, i_prime = np.zeros(m, dtype=np.int64), np.zeros(m, dtype=np.int64)
+    d, d_prime = np.zeros(m, dtype=np.int64), np.zeros(m, dtype=np.int64)
+    while max_j != -1:
+        T0i0 = T[i[0]]
+        T_prime0i0 = T_prime[i_prime[0]]
+        if T0i0 <= T_prime0i0:
+            for j in range(T0i0):
+                phi[k + j] = k_prime + j
+            k = k + T0i0
+            i, d, max_j = plusplus(m, i, d, T, e_T)
+            max_j_prime = -1
+            while max_j_prime < max_j:
+                k_prime = k_prime + T_prime[i_prime[0]]
+                i_prime, d_prime, max_j_prime = plusplus(
+                    m, i_prime, d_prime, T_prime, e_T_prime
+                )
+        else:
+            raise ValueError("Undetermined condition encountered in the algorithm.")
+    return phi
+
+
+@njit
+def inv(L: np.ndarray) -> np.ndarray:
     """O(n^3)"""
     L = np.asarray(L).astype(np.float64)
-    n = L.shape[0]
+    n = len(L)
     ###
     invL = np.zeros_like(L)
     for i in range(n):

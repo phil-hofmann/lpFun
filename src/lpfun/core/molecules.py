@@ -9,25 +9,27 @@ from lpfun.utils import (
     apply_permutation,
 )
 from lpfun.core.atoms import (
-    itransform_lt_1d,
-    itransform_ut_1d,
-    itransform_lt_max,
-    itransform_ut_max,
-    itransform_lt_2d,
-    itransform_ut_2d,
-    itransform_lt_3d,
-    itransform_ut_3d,
-    itransform_lt_md,
-    # itransform_ut_md,
+    itransform_lt_1d,  # 1.
+    itransform_ut_1d,  # 2.
+    itransform_lt_max,  # 3.
+    itransform_ut_max,  # 4.
+    itransform_lt_2d,  # 5.
+    itransform_ut_2d,  # 6.
+    itransform_lt_3d,  # 7.
+    itransform_ut_3d,  # 8.
+    itransform_lt_md,  # 9.
+    itransform_ut_md,  # 10.
     ###
-    transform_lt_1d,
-    transform_ut_1d,
-    transform_lt_max,
-    transform_ut_max,
-    transform_lt_2d,
-    transform_ut_2d,
-    transform_lt_3d,
-    # transform_ut_3d,
+    transform_lt_1d,  # 1.
+    transform_ut_1d,  # 2.
+    transform_lt_max,  # 3.
+    transform_ut_max,  # 4.
+    transform_lt_2d,  # 5.
+    transform_ut_2d,  # 6.
+    transform_lt_3d,  # 7.
+    transform_ut_3d,  # 8.
+    # transform_lt_md, # TODO
+    # transform_ut_md, # TODO
     ###
     dtransform_max,
     dtransform_lt_md,
@@ -38,7 +40,6 @@ from typing import Literal
 
 def validate(
     mode: str,
-    parallel: str,
     T: np.ndarray,
     p: float,
     m: int,
@@ -46,27 +47,23 @@ def validate(
     if mode not in ("upper", "lower"):
         raise ValueError('Mode must be either "upper" or "lower".')
 
-    if parallel not in ("seq", "cpu"):
-        raise ValueError('Parallel must be either "seq" or "cpu".')
-
     if (T is None) and p != np.inf and m != 1:
         raise ValueError("Tube projection is required for p != np.inf and m != 1.")
 
 
 # @njit # NOTE optional
 def transform(
-    Qx: np.ndarray,
+    V: np.ndarray,
     f: np.ndarray,
     T: np.ndarray,
     m: int,
     p: float,
     mode: Literal["lower", "upper"],
-    parallel: Literal["seq", "cpu"],
 ) -> np.ndarray:
     """
     Fast Newton Transform
     ---------------------
-    Qx: np.ndarray
+    V: np.ndarray
         Row major ordering
     f: np.ndarray
         Input vector
@@ -76,6 +73,8 @@ def transform(
         Spatial dimension
     p: float
         Parameter of the lp space
+    mode: str
+        Lower or upper triangular
 
     Returns
     -------
@@ -84,58 +83,48 @@ def transform(
 
     Time Complexity
     ---------------
-    O(N*m*n)
+    O(Nmn)
     """
-    Qx, f, T = (
-        np.asarray(Qx).astype(NP_FLOAT),
+    V, f, T, m, p, mode = (
+        np.asarray(V).astype(NP_FLOAT),
         np.asarray(f).astype(NP_FLOAT),
         np.asarray(T).astype(NP_INT),
-    )
-    m, p = (
         int(m),
         float(p),
-    )
-    mode, parallel = (
         str(mode),
-        str(parallel),
     )
-    validate(mode, parallel, T, p, m)
+    validate(mode, T, p, m)
     classify(m, 0, p)
     mode = True if mode == "lower" else False
 
     if m == 1:
-        return transform_lt_1d(Qx, f) if mode else transform_ut_1d(Qx, f)
+        return transform_lt_1d(V, f) if mode else transform_ut_1d(V, f)
     elif p == np.inf:
-        return (
-            transform_lt_max(Qx, f, parallel)
-            if mode
-            else transform_ut_max(Qx, f, parallel)
-        )
+        return transform_lt_max(V, f) if mode else transform_ut_max(V, f)
     elif m == 2:
-        return transform_lt_2d(Qx, f, T) if mode else transform_ut_2d(Qx, f, T)
+        return transform_lt_2d(V, f, T) if mode else transform_ut_2d(V, f, T)
     elif m == 3:
-        return (
-            transform_lt_3d(Qx, f, T) if mode else None
-        )  # TODO: return transform_ut_3d(Qx, f, T)
-    return (
-        itransform_lt_md(Qx, f, T) if mode else None
-    )  # TODO: return itransform_ut_md(Qx, f, T)
+        return transform_lt_3d(V, f, T) if mode else transform_ut_3d(V, f, T)
+    # TODO:
+    # return (
+    #     transform_lt_md(V, f, T) if mode else transform_ut_md(V, f, T)
+    # )
 
 
 # @njit # NOTE optional
 def itransform(
-    Qx: np.ndarray,
+    V: np.ndarray,
     c: np.ndarray,
     T: np.ndarray,
     m: int,
     p: float,
     mode: Literal["lower", "upper"],
-    parallel: Literal["seq", "cpu"],
+    parallel: bool,
 ) -> np.ndarray:
     """
     Inverse Fast Newton Transform
     ---------------------
-    Qx: np.ndarray
+    V: np.ndarray
         Row major ordering
     c: np.ndarray
         Input vector
@@ -145,6 +134,10 @@ def itransform(
         Spatial dimension
     p: float
         Parameter of the lp space
+    mode: str
+        Lower or upper triangular
+    parallel: bool
+        CPU parallelization enabled or not
 
     Returns
     -------
@@ -153,68 +146,67 @@ def itransform(
 
     Time Complexity
     ---------------
-    O(N*m*n)
+    O(Nmn)
     """
-    Qx, c, T = (
-        np.asarray(Qx).astype(NP_FLOAT),
+    V, c, T, m, p, mode, parallel = (
+        np.asarray(V).astype(NP_FLOAT),
         np.asarray(c).astype(NP_FLOAT),
         np.asarray(T).astype(NP_INT),
-    )
-    m, p = (
         int(m),
         float(p),
-    )
-    mode, parallel = (
         str(mode),
-        str(parallel),
+        bool(parallel),
     )
-    validate(mode, parallel, T, p, m)
+    validate(mode, T, p, m)
     classify(m, 0, p)
-    if m > 3:
-        raise NotImplementedError("Spatial dimensions m > 3 are not supported.")
     mode = True if mode == "lower" else False
 
     if m == 1:
         return (
-            itransform_lt_1d(Qx, c, parallel)
+            itransform_lt_1d(V, c, parallel)
             if mode
-            else itransform_ut_1d(Qx, c, parallel)
+            else itransform_ut_1d(V, c, parallel)
         )
     elif p == np.inf:
         return (
-            itransform_lt_max(Qx, c, parallel)
+            itransform_lt_max(V, c, parallel)
             if mode
-            else itransform_ut_max(Qx, c, parallel)
+            else itransform_ut_max(V, c, parallel)
         )
     elif m == 2:
         return (
-            itransform_lt_2d(Qx, c, T, parallel)
+            itransform_lt_2d(V, c, T, parallel)
             if mode
-            else itransform_ut_2d(Qx, c, T, parallel)
+            else itransform_ut_2d(V, c, T, parallel)
         )
     elif m == 3:
         return (
-            itransform_lt_3d(Qx, c, T, parallel)
+            itransform_lt_3d(V, c, T, parallel)
             if mode
-            else itransform_ut_3d(Qx, c, T, parallel)
+            else itransform_ut_3d(V, c, T, parallel)
         )
+    return (
+        itransform_lt_md(V, c, T, parallel)
+        if mode
+        else itransform_ut_md(V, c, T, parallel)
+    )
 
 
 # @njit # NOTE optional
 def dtransform(
-    Dx: np.ndarray,
+    D: np.ndarray,
     c: np.ndarray,
     T: np.ndarray,
     m: int,
     p: float,
     i: int,
     mode: Literal["lower", "upper"],
-    parallel: Literal["seq", "cpu"],
+    parallel: bool,
 ) -> np.ndarray:
     """
     Fast Diagonal Newton Transformation
     -----------------------------
-    Dx: np.ndarray
+    D: np.ndarray
        Row major ordering (lower triangular)
     c: np.ndarray
         Input vector
@@ -226,6 +218,10 @@ def dtransform(
         Parameter of the lp space
     i: int
         Coordinate permutation
+    mode: str
+        Lower or upper triangular
+    parallel: bool
+        CPU parallelization enabled or not
 
     Returns
     -------
@@ -234,23 +230,19 @@ def dtransform(
 
     Time Complexity
     ---------------
-    O(N*n)
+    O(Nn)
     """
-    Dx, c, T = (
-        np.asarray(Dx).astype(NP_FLOAT),
+    D, c, T, m, p, i, mode, parallel = (
+        np.asarray(D).astype(NP_FLOAT),
         np.asarray(c).astype(NP_FLOAT),
         np.asarray(T).astype(NP_INT),
-    )
-    m, p, i = (
         int(m),
         float(p),
         int(i),
-    )
-    mode, parallel = (
         str(mode),
-        str(parallel),
+        bool(parallel),
     )
-    validate(mode, parallel, T, p, m)
+    validate(mode, T, p, m)
     classify(m, 0, p)
     if i < 0 or i >= m:
         raise ValueError(f"Choose a coordinate between i=0 and i={m - 1}.")
@@ -259,9 +251,9 @@ def dtransform(
     n = int(T[0] - 1)
     if m == 1:
         return (
-            itransform_lt_1d(Dx, c, parallel)
+            itransform_lt_1d(D, c, parallel)
             if mode
-            else itransform_ut_1d(Dx, c, parallel)
+            else itransform_ut_1d(D, c, parallel)
         )
     elif p == np.inf:
         Perm = None
@@ -269,9 +261,9 @@ def dtransform(
             Perm = permutation_max(m, n, i)
             c = apply_permutation(Perm, c)
         c = (
-            dtransform_max(Dx, c, parallel)
+            dtransform_max(D, c, parallel)
             if mode
-            else dtransform_max(Dx[::-1], c[::-1], parallel)[::-1]
+            else dtransform_max(D[::-1], c[::-1], parallel)[::-1]
         )
         if not i == 0:
             c = apply_permutation(Perm, c, invert=True)
@@ -281,9 +273,9 @@ def dtransform(
             Perm = permutation(T, i)
             c = apply_permutation(Perm, c, invert=True)
         c = (
-            dtransform_lt_md(Dx, c, T, parallel)
+            dtransform_lt_md(D, c, T, parallel)
             if mode
-            else dtransform_ut_md(Dx, c, T, parallel)
+            else dtransform_ut_md(D, c, T, parallel)
         )
         if not i == 0:
             c = apply_permutation(Perm, c)
