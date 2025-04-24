@@ -28,7 +28,7 @@ def transform_lt_1d(
     )
     n = len(x)
     ### indexing: j, k
-    ### NOTE: loop runs sequentially
+    ###
     dot, j = np.zeros_like(x), 0
     for k in range(n):
         j_next = j + k + 1
@@ -50,7 +50,7 @@ def transform_ut_1d(
     )
     n = len(x)
     ### indexing: j, k
-    ### NOTE: loop runs sequentially
+    ###
     dot, j = np.zeros_like(x), n * (n + 1) // 2
     for k in range(n):
         k_prime = n - k - 1
@@ -86,7 +86,7 @@ def _itransform_lt_1d(
     ###
     n = len(x)
     ### indexing: j, k
-    ### NOTE: loop runs sequentially
+    ###
     dot, j = np.zeros_like(x), 0
     for k in range(n):
         j_next = j + k + 1
@@ -136,7 +136,7 @@ def _itransform_ut_1d(U: np.ndarray, x: np.ndarray) -> np.ndarray:
     ###
     n = len(x)
     ### indexing: j, k
-    ### NOTE: loop runs sequentially
+    ###
     dot, j = np.zeros_like(x), 0
     for k in range(n):
         k_prime = n - k - 1
@@ -182,21 +182,21 @@ def transform_lt_max(
     )
     m = int(np.log(N) / np.log(n))
     ### indexing: s, r > j, k > l
-    ### NOTE: loop runs sequentially
+    ###
     dot, s, r = np.copy(x), 1, N
     for _ in range(m):
         s_next, r_next = s * n, r // n
-        ### NOTE: loop runs sequentially
+        ###
         pos = 0
         for _ in range(r_next):
             next_pos = pos + s_next
             block = dot[pos:next_pos]
-            ### NOTE: loop runs sequentially
+            ###
             dot_block, pos_k, j = np.zeros((s_next), dtype=NP_FLOAT), 0, 0
             for k in range(n):
                 next_pos_k = pos_k + s
                 j_next = j + k + 1
-                ### NOTE: loop runs sequentially
+                ###
                 dot_row, pos_l = np.zeros(s, dtype=NP_FLOAT), 0
                 for l in range(j, j_next - 1):
                     next_pos_l = pos_l + s
@@ -233,16 +233,16 @@ def transform_ut_max(
     )
     m = int(np.log(N) / np.log(n))
     ### indexing: s,r > j, k > l
-    ### NOTE: loop runs sequentially
+    ###
     dot, s, r = np.copy(x), 1, N
     for _ in range(m):
         s_next, r_next = s * n, r // n
-        ### NOTE: loop runs sequentially
+        ###
         pos = 0
         for _ in range(r_next):
             next_pos = pos + s_next
             block = dot[pos:next_pos]
-            ### NOTE: loop runs sequentially
+            ###
             dot_block, pos_k, j = (
                 np.zeros((s_next), dtype=NP_FLOAT),
                 s_next,
@@ -250,7 +250,7 @@ def transform_ut_max(
             )
             for k in range(n):
                 next_pos_k, j_next = pos_k - s, j - k - 1
-                ### NOTE: loop runs sequentially
+                ###
                 dot_row, pos_l = np.zeros(s, dtype=NP_FLOAT), s_next
                 for l in range(j - 1, j_next, -1):
                     next_pos_l = pos_l - s
@@ -300,20 +300,20 @@ def _itransform_lt_max(
     )
     m = int(np.log(N) / np.log(n))
     ### indexing: s, r > j, k > l
-    ### NOTE: loop runs sequentially
+    ###
     dot, s, r = np.copy(x), 1, N
     for _ in range(m):
         s_next, r_next = s * n, r // n
-        ### NOTE: loop runs sequentially
+        ###
         pos = 0
         for _ in range(r_next):
             next_pos = pos + s_next
             block = dot[pos:next_pos]
-            ### NOTE: loop runs sequentially
+            ###
             dot_block, pos_k, j = np.zeros((s_next), dtype=NP_FLOAT), 0, 0
             for k in range(n):
                 next_pos_k, j_next = pos_k + s, j + k + 1
-                ### NOTE: loop runs sequentially
+                ###
                 pos_l = 0
                 for l in range(j, j_next):
                     next_pos_l = pos_l + s
@@ -400,21 +400,21 @@ def _itransform_ut_max(
     )
     m = int(np.log(N) / np.log(n))
     ### indexing: s, r > j, k > l
-    ### NOTE: loop runs sequentially
+    ###
     dot, s, r = np.copy(x), 1, N
     for _ in range(m):
         s_next, r_next = s * n, r // n
-        ### NOTE: loop runs sequentially
+        ###
         pos = 0
         for _ in range(r_next):
             next_pos = pos + s_next
             block = dot[pos:next_pos]
-            ### NOTE: loop runs sequentially
+            ###
             dot_block, pos_k, j = np.zeros((s_next), dtype=NP_FLOAT), 0, 0
             for k in range(n):
                 k_prime = n - k - 1
                 next_pos_k, j_next = pos_k + s, j + k_prime + 1
-                ### NOTE: loop runs sequentially
+                ###
                 pos_l = int(pos_k)
                 for l in range(j, j_next):
                     next_pos_l = pos_l + s
@@ -498,12 +498,12 @@ def _dtransform_max(L: np.ndarray, x: np.ndarray) -> np.ndarray:
         int((np.sqrt(1 + 8 * len(L)) - 1) / 2),
     )
     ### indexing: s > j, k
-    ### NOTE: loop runs sequentially
+    ###
     pos, s, dot = 0, N // n, np.copy(x)
     for _ in range(s):
         next_pos = pos + n
         block = dot[pos:next_pos]
-        ### NOTE: loop runs sequentially
+        ###
         dot_block, j = np.zeros(n, dtype=NP_FLOAT), 0
         for k in range(n):
             j_next = j + k + 1
@@ -551,7 +551,6 @@ def _dtransform_max_parallel(
 @njit
 def transform_lt_2d(L: np.ndarray, x: np.ndarray, T: np.ndarray) -> np.ndarray:
     """O(2Nn)"""
-    ###
     L, x, T = (
         np.asarray(L).astype(NP_FLOAT),
         np.asarray(x).astype(NP_FLOAT),
@@ -560,13 +559,13 @@ def transform_lt_2d(L: np.ndarray, x: np.ndarray, T: np.ndarray) -> np.ndarray:
     N_1 = len(T)
     ### 1d
     ### indexing: i > j, k
-    ### NOTE: loop runs sequentially
+    ###
     dot_1d, pos_i = np.zeros_like(x), 0
     for i in range(N_1):
         t_i = T[i]
         next_pos_i = pos_i + t_i
         chunk = x[pos_i:next_pos_i]
-        ### NOTE: loop runs sequentially
+        ###
         dot_block, j = np.zeros(t_i, dtype=NP_FLOAT), 0
         for k in range(t_i):
             j_next = j + k + 1
@@ -580,12 +579,12 @@ def transform_lt_2d(L: np.ndarray, x: np.ndarray, T: np.ndarray) -> np.ndarray:
     ###
     ### 2d
     ### indexing: j, i > k
-    ### NOTE: loop runs sequentially
+    ###
     dot_2d, pos_i, j = np.zeros_like(x), 0, 0
     for i in range(N_1):
         t_i = T[i]
         next_pos_i = pos_i + t_i
-        ### NOTE: loop runs sequentially
+        ###
         pos_k, dot_row = 0, np.zeros(t_i, dtype=NP_FLOAT)
         for k in range(i):
             t_k = T[k]
@@ -601,64 +600,65 @@ def transform_lt_2d(L: np.ndarray, x: np.ndarray, T: np.ndarray) -> np.ndarray:
     return dot_2d
 
 
-@njit # NOTE REFACTORING
+@njit
 def transform_ut_2d(U: np.ndarray, x: np.ndarray, T: np.ndarray) -> np.ndarray:
     """O(2Nn)"""
-    ### NOTE: parallelization partially possible, not recommended
     U, x, T = (
         np.asarray(U).astype(NP_FLOAT),
         np.asarray(x).astype(NP_FLOAT),
         np.asarray(T).astype(NP_INT),
     )
-    N0, N1 = (
+    N_0, N_1 = (
         np.sum(T),
         len(T),
     )
     ### 1d
-    ### NOTE: loop runs sequentially
-    dot1, pos1 = np.zeros_like(x), 0
-    for i1 in range(N1):
-        t1 = T[i1]
-        next_pos1, delta = pos1 + t1, N1 - t1
-        chunk = x[pos1:next_pos1]
-        ### NOTE: loop runs sequentially
-        chunk_dot, j = (
-            np.zeros(t1, dtype=NP_FLOAT),
-            t1 * N1 - t1 * (t1 - 1) // 2 - delta,
-        )
-        for k in range(t1):
-            k_prime = t1 - k - 1
-            j_next = j - k - 1
-            dotsum = np.sum(U[j_next:j] * chunk_dot[k_prime:])
-            chunk_dot[k_prime] = (chunk[k_prime] - dotsum) / U[j_next]
-            j = j_next - delta
+    ### indexing: i > j, k
+    ###
+    dot_1d, pos_i = np.zeros_like(x), 0
+    for i in range(N_1):
+        t_i = T[i]
+        next_pos_i, delta = pos_i + t_i, N_1 - t_i
+        block = x[pos_i:next_pos_i]
         ###
-        dot1[pos1:next_pos1] = chunk_dot
-        pos1 = next_pos1
+        dot_block, j = (
+            np.zeros(t_i, dtype=NP_FLOAT),
+            t_i * N_1 - t_i * (t_i - 1) // 2 - delta,
+        )
+        for k in range(t_i):
+            k_prime = t_i - k - 1
+            j_next = j - k - 1 - delta
+            dot_block[k_prime] = (
+                block[k_prime] - np.sum(U[j_next + delta : j] * dot_block[k_prime:])
+            ) / U[j_next + delta]
+            j = j_next
+        ###
+        dot_1d[pos_i:next_pos_i] = dot_block
+        pos_i = next_pos_i
     ###
     ### 2d
-    ### NOTE: loop runs sequentially
-    dot2, pos1, j = np.zeros_like(x), N0, N1 * (N1 + 1) // 2
-    for i1 in range(N1):
-        i1_prime = N1 - i1 - 1
-        t1 = T[i1_prime]
-        next_pos1 = pos1 - t1
-        ### NOTE: loop runs sequentially
-        pos2, dotsum = N0, np.zeros(t1, dtype=NP_FLOAT)
-        for i2 in range(i1):
-            j -= 1
-            i2_prime = N1 - i2 - 1
-            t2 = T[i2_prime]
-            next_pos2 = pos2 - t2
-            chunk = dot2[next_pos2:pos2]
-            dotsum[:t2] += U[j] * chunk
-            pos2 = next_pos2
-        j -= 1
-        dot2[next_pos1:pos1] = (dot1[next_pos1:pos1] - dotsum) / U[j]
-        ###
-        pos1 = next_pos1
+    ### indexing: j, i > k
     ###
-    return dot2
+    dot_2d, pos_i, j = np.zeros_like(x), N_0, N_1 * (N_1 + 1) // 2
+    for i in range(N_1):
+        i_prime = N_1 - i - 1
+        t_i = T[i_prime]
+        next_pos_i = pos_i - t_i
+        ###
+        pos_k, dot_row = N_0, np.zeros(t_i, dtype=NP_FLOAT)
+        for k in range(i):
+            j -= 1
+            k_prime = N_1 - k - 1
+            t_k = T[k_prime]
+            next_pos_k = pos_k - t_k
+            dot_row[:t_k] += U[j] * dot_2d[next_pos_k:pos_k]
+            pos_k = next_pos_k
+        j -= 1
+        dot_2d[next_pos_i:pos_i] = (dot_1d[next_pos_i:pos_i] - dot_row) / U[j]
+        ###
+        pos_i = next_pos_i
+    ###
+    return dot_2d
 
 
 @njit
@@ -687,43 +687,44 @@ def _itransform_lt_2d(
     T: np.ndarray,
 ) -> np.ndarray:
     ###
-    N1 = len(T)
+    N_1 = len(T)
     ### 1d
-    ### NOTE: loop runs sequentially
-    dot1, pos1 = np.zeros_like(x), 0
-    for i1 in range(N1):
-        t1 = T[i1]
-        next_pos1 = pos1 + t1
-        chunk = x[pos1:next_pos1]
+    ### indexing: i > j, k
+    ###
+    dot_1d, pos_i = np.zeros_like(x), 0
+    for i in range(N_1):
+        t_i = T[i]
+        next_pos_i = pos_i + t_i
+        block = x[pos_i:next_pos_i]
         ### NOTE: loop runs sequentially
-        chunk_dot, j = np.zeros(t1, dtype=NP_FLOAT), 0
-        for k in range(t1):
+        dot_block, j = np.zeros(t_i, dtype=NP_FLOAT), 0
+        for k in range(t_i):
             j_next = j + k + 1
-            chunk_dot[k] = np.sum(L[j:j_next] * chunk[: k + 1])
+            dot_block[k] = np.sum(L[j:j_next] * block[: k + 1])
             j = j_next
         ###
-        dot1[pos1:next_pos1] = chunk_dot
-        pos1 = next_pos1
+        dot_1d[pos_i:next_pos_i] = dot_block
+        pos_i = next_pos_i
     ###
     ### 2d
-    ### NOTE: loop runs sequentially
-    dot2, j, pos1 = np.zeros_like(x), 0, 0
-    for i1 in range(N1):
-        t1 = T[i1]
-        next_pos1 = pos1 + t1
-        ### NOTE: loop runs sequentially
-        pos2 = 0
-        for i2 in range(i1 + 1):
-            t2 = T[i2]
-            next_pos2 = pos2 + t2
-            chunk = dot1[pos2 : pos2 + t1]
-            dot2[pos1:next_pos1] += L[j] * chunk
-            pos2 = next_pos2
+    ### indexing: j, i > k
+    ###
+    dot_2d, j, pos_i = np.zeros_like(x), 0, 0
+    for i in range(N_1):
+        t_i = T[i]
+        next_pos_i = pos_i + t_i
+        ###
+        pos_k = 0
+        for k in range(i + 1):
+            t_k = T[k]
+            next_pos_k = pos_k + t_k
+            dot_2d[pos_i:next_pos_i] += L[j] * dot_1d[pos_k : pos_k + t_i]
+            pos_k = next_pos_k
             j += 1
         ###
-        pos1 = next_pos1
+        pos_i = next_pos_i
     ###
-    return dot2
+    return dot_2d
 
 
 @njit(parallel=True)
@@ -733,38 +734,42 @@ def _itransform_lt_2d_parallel(
     T: np.ndarray,
 ) -> np.ndarray:
     ###
-    N1 = len(T)
-    cs_T = np.concatenate((np.array([0]), np.cumsum(T)))
+    zero = np.array([0], dtype=NP_INT)
+    N_1, cs_T = (
+        len(T),
+        np.concatenate((zero, np.cumsum(T))),
+    )
     ### 1d
-    dot1 = np.zeros_like(x)
-    for i1 in prange(N1):
-        t1, pos1, next_pos1 = T[i1], cs_T[i1], cs_T[i1 + 1]
-        chunk = x[pos1:next_pos1]
+    ### indexing: i > j, k
+    dot_1d = np.zeros_like(x)
+    for i in prange(N_1):
+        t_i, pos_i, next_pos_i = T[i], cs_T[i], cs_T[i + 1]
+        chunk = x[pos_i:next_pos_i]
         ### caution -- possible overhead or numerical instability
-        chunk_dot, j = np.zeros(t1, dtype=NP_FLOAT), 0
-        for k in range(t1):
+        dot_block, j = np.zeros(t_i, dtype=NP_FLOAT), 0
+        for k in range(t_i):
             j_next = j + k + 1
-            chunk_dot[k] = np.sum(L[j:j_next] * chunk[: k + 1])
+            dot_block[k] = np.sum(L[j:j_next] * chunk[: k + 1])
             j = j_next
         ###
-        dot1[pos1:next_pos1] = chunk_dot
+        dot_1d[pos_i:next_pos_i] = dot_block
     ###
     ### 2d
-    dot2 = np.zeros_like(x)
-    for i1 in prange(N1):
-        t1, pos1, next_pos1 = T[i1], cs_T[i1], cs_T[i1 + 1]
+    ### indexing: i > j, k
+    dot_2d = np.zeros_like(x)
+    for i in prange(N_1):
+        t_i, pos_i, next_pos_i = T[i], cs_T[i], cs_T[i + 1]
         ### caution -- possible overhead or numerical instability
-        pos2, j = 0, i1 * (i1 + 1) // 2
-        for i2 in range(i1 + 1):
-            t2 = T[i2]
-            next_pos2 = pos2 + t2
-            chunk = dot1[pos2 : pos2 + t1]
-            dot2[pos1:next_pos1] += L[j] * chunk
-            pos2 = next_pos2
+        pos_k, j = 0, i * (i + 1) // 2
+        for k in range(i + 1):
+            t2 = T[k]
+            next_pos_k = pos_k + t2
+            dot_2d[pos_i:next_pos_i] += L[j] * dot_1d[pos_k : pos_k + t_i]
+            pos_k = next_pos_k
             j += 1
         ###
     ###
-    return dot2
+    return dot_2d
 
 
 @njit
@@ -793,44 +798,45 @@ def _itransform_ut_2d(
     T: np.ndarray,
 ) -> np.ndarray:
     ###
-    N1 = len(T)
+    N_1 = len(T)
     ### 1d
-    ### NOTE: loop runs sequentially
-    dot1, pos1 = np.zeros_like(x), 0
-    for i1 in range(N1):
-        t1 = T[i1]
-        next_pos1, delta = pos1 + t1, N1 - t1
-        chunk = x[pos1:next_pos1]
-        ### NOTE: loop runs sequentially
-        chunk_dot, j = np.zeros(t1, dtype=NP_FLOAT), 0
-        for k in range(t1):
-            k_prime = t1 - k - 1
-            j_next = j + k_prime + 1
-            chunk_dot[k] = np.sum(U[j:j_next] * chunk[k:])
-            j = j_next + delta
+    ### indexing: i > j, k
+    ###
+    dot_1d, pos_i = np.zeros_like(x), 0
+    for i in range(N_1):
+        t_i = T[i]
+        next_pos_i, delta = pos_i + t_i, N_1 - t_i
+        block = x[pos_i:next_pos_i]
         ###
-        dot1[pos1:next_pos1] = chunk_dot
-        pos1 = next_pos1
+        dot_block, j = np.zeros(t_i, dtype=NP_FLOAT), 0
+        for k in range(t_i):
+            k_prime = t_i - k - 1
+            j_next = j + k_prime + 1 + delta
+            dot_block[k] = np.sum(U[j : j_next - delta] * block[k:])
+            j = j_next
+        ###
+        dot_1d[pos_i:next_pos_i] = dot_block
+        pos_i = next_pos_i
     ###
     ### 2d
-    ### NOTE: loop runs sequentially
-    dot2, pos1, j = np.zeros_like(x), 0, 0
-    for i1 in range(N1):
-        t1 = T[i1]
-        next_pos1 = pos1 + t1
-        ### NOTE: loop runs sequentially
-        pos2 = pos1
-        for i2 in range(N1 - i1):
-            t2 = T[i1 + i2]
-            next_pos2 = pos2 + t2
-            chunk = dot1[pos2:next_pos2]
-            dot2[pos1 : pos1 + t2] += U[j] * chunk
-            pos2 = next_pos2
+    ### indexing: j, i > k
+    ###
+    dot_2d, pos_i, j = np.zeros_like(x), 0, 0
+    for i in range(N_1):
+        t_i = T[i]
+        next_pos_i = pos_i + t_i
+        ###
+        pos_k = int(pos_i)
+        for k in range(N_1 - i):
+            t_k = T[i + k]
+            next_pos_k = pos_k + t_k
+            dot_2d[pos_i : pos_i + t_k] += U[j] * dot_1d[pos_k:next_pos_k]
+            pos_k = next_pos_k
             j += 1
         ###
-        pos1 = next_pos1
+        pos_i = next_pos_i
     ###
-    return dot2
+    return dot_2d
 
 
 @njit(parallel=True)
@@ -840,43 +846,45 @@ def _itransform_ut_2d_parallel(
     T: np.ndarray,
 ) -> np.ndarray:
     ####
-    N1, cs_T = (
+    zero = np.array([0], dtype=NP_INT)
+    N_1, cs_T = (
         len(T),
-        np.concatenate((np.array([0]), np.cumsum(T))),
+        np.concatenate((zero, np.cumsum(T))),
     )
     ### 1d
+    ### indexing: i > j, k
     ### NOTE: loop runs in parallel
-    dot1 = np.zeros_like(x)
-    for i1 in prange(N1):
-        t1, pos1, next_pos1 = T[i1], cs_T[i1], cs_T[i1 + 1]
-        chunk, delta = x[pos1:next_pos1], N1 - t1
+    dot_1d = np.zeros_like(x)
+    for i in prange(N_1):
+        t_i, pos_i, next_pos_i = T[i], cs_T[i], cs_T[i + 1]
+        block, delta = x[pos_i:next_pos_i], N_1 - t_i
         ### NOTE: possible overhead or numerical instability when parallelized, loop runs sequentially
-        chunk_dot, j = np.zeros(t1, dtype=NP_FLOAT), 0
-        for k in range(t1):
-            k_prime = t1 - k - 1
-            j_next = j + k_prime + 1
-            chunk_dot[k] = np.sum(U[j:j_next] * chunk[k:])
-            j = j_next + delta
+        dot_block, j = np.zeros(t_i, dtype=NP_FLOAT), 0
+        for k in range(t_i):
+            k_prime = t_i - k - 1
+            j_next = j + k_prime + 1 + delta
+            dot_block[k] = np.sum(U[j : j_next - delta] * block[k:])
+            j = j_next
         ###
-        dot1[pos1:next_pos1] = chunk_dot
+        dot_1d[pos_i:next_pos_i] = dot_block
     ###
     ### 2d
+    ### indexing: i > j, k
     ### NOTE: loop runs in parallel
-    dot2 = np.zeros_like(x)
-    for i1 in prange(N1):
-        t1, pos1, next_pos1 = T[i1], cs_T[i1], cs_T[i1 + 1]
+    dot_2d = np.zeros_like(x)
+    for i in prange(N_1):
+        pos_i = cs_T[i]
         ### NOTE: possible overhead or numerical instability when parallelized, loop runs sequentially
-        pos2, j = pos1, i1 * N1 - i1 * (i1 - 1) // 2
-        for i2 in range(N1 - i1):
-            t2 = T[i1 + i2]
-            next_pos2 = pos2 + t2
-            chunk = dot1[pos2:next_pos2]
-            dot2[pos1 : pos1 + t2] += U[j] * chunk
-            pos2 = next_pos2
+        pos_k, j = int(pos_i), i * N_1 - i * (i - 1) // 2
+        for k in range(N_1 - i):
+            t_k = T[i + k]
+            next_pos_k = pos_k + t_k
+            dot_2d[pos_i : pos_i + t_k] += U[j] * dot_1d[pos_k:next_pos_k]
+            pos_k = next_pos_k
             j += 1
         ###
     ###
-    return dot2
+    return dot_2d
 
 
 # 3d
@@ -889,93 +897,95 @@ def transform_lt_3d(
     T: np.ndarray,
 ) -> np.ndarray:
     """O(3Nn)"""
-    # NOTE: parallelization partially possible, not recommended
     L, x, T = (
         np.asarray(L).astype(NP_FLOAT),
         np.asarray(x).astype(NP_FLOAT),
         np.asarray(T).astype(NP_INT),
     )
-    N1, N2 = len(T), T[0]
+    N_1, N_2 = len(T), T[0]
     ### 1d
-    ### NOTE: loop runs sequentially
-    dot1, pos1 = np.zeros_like(x), 0
-    for i1 in range(N1):
-        t1 = T[i1]
-        next_pos1 = pos1 + t1
-        chunk = x[pos1:next_pos1]
-        ### NOTE: loop runs sequentially
-        chunk_dot, j = np.zeros(t1, dtype=NP_FLOAT), 0
-        for k in range(t1):
+    ### indexing: i > j, k
+    ###
+    dot_1d, pos_i = np.zeros_like(x), 0
+    for i in range(N_1):
+        t_i = T[i]
+        next_pos_i = pos_i + t_i
+        block = x[pos_i:next_pos_i]
+        ###
+        dot_block, j = np.zeros(t_i, dtype=NP_FLOAT), 0
+        for k in range(t_i):
             j_next = j + k + 1
-            dotsum = np.sum(L[j : j_next - 1] * chunk_dot[:k])
-            chunk_dot[k] = (chunk[k] - dotsum) / L[j_next - 1]
+            dot_block[k] = (block[k] - np.sum(L[j : j_next - 1] * dot_block[:k])) / L[
+                j_next - 1
+            ]
             j = j_next
         ###
-        dot1[pos1:next_pos1] = chunk_dot
-        pos1 = next_pos1
+        dot_1d[pos_i:next_pos_i] = dot_block
+        pos_i = next_pos_i
     ###
     ### 2d
-    ### NOTE: loop runs sequentially
-    pos1, vol1, dot2, V2 = 0, 0, np.zeros_like(x), np.zeros(N2, dtype=NP_INT)
-    for i1 in range(N2):
-        t1 = T[i1]
-        next_pos1 = pos1 + t1
-        sub_t1 = T[pos1:next_pos1]
-        ### NOTE: loop runs sequentially
-        _pos1, _vol1, j = vol1, 0, 0
-        for _i1 in range(t1):
-            _t1 = sub_t1[_i1]
-            _next_pos1 = _pos1 + _t1
-            ### NOTE: loop runs sequentially
-            _pos2, dotsum = vol1, np.zeros(_t1, dtype=NP_FLOAT)
-            for _i2 in range(_i1):
-                _t2 = sub_t1[_i2]
-                _next_pos2 = _pos2 + _t2
-                chunk = dot2[_pos2 : _pos2 + _t1]
-                dotsum += L[j] * chunk
-                _pos2 = _next_pos2
+    ### indexing: i > j, k > l
+    ###
+    dot_2d, V_2, pos_i, vol_i = np.zeros_like(x), np.zeros(N_2, dtype=NP_INT), 0, 0
+    for i in range(N_2):
+        t_i = T[i]
+        next_pos_i = pos_i + t_i
+        sub_t_i = T[pos_i:next_pos_i]
+        ###
+        pos_k, vol_k, j = int(vol_i), 0, 0
+        for k in range(t_i):
+            t_k = sub_t_i[k]
+            next_pos_k = pos_k + t_k
+            ###
+            pos_l, dot_row = int(vol_i), np.zeros(t_k, dtype=NP_FLOAT)
+            for l in range(k):
+                t_l = sub_t_i[l]
+                next_pos_l = pos_l + t_l
+                dot_row += L[j] * dot_2d[pos_l : pos_l + t_k]
+                pos_l = next_pos_l
                 j += 1
-            dot2[_pos1:_next_pos1] = (dot1[_pos1:_next_pos1] - dotsum) / L[j]
+            dot_2d[pos_k:next_pos_k] = (dot_1d[pos_k:next_pos_k] - dot_row) / L[j]
             j += 1
             ###
-            _pos1 = _next_pos1
-            _vol1 += _t1
+            pos_k = next_pos_k
+            vol_k += t_k
         ###
-        pos1 = next_pos1
-        vol1 += _vol1
-        V2[i1] = _vol1
+        pos_i = next_pos_i
+        vol_i += vol_k
+        V_2[i] = vol_k
     ###
     ### 3d
-    ### NOTE: loop runs sequentially
-    dot3, pos1, vol1, j = np.zeros_like(x), 0, 0, 0
-    for i1 in range(N2):
-        t1, v1 = T[i1], V2[i1]
-        next_pos1, next_vol1 = pos1 + t1, vol1 + v1
-        sub_t1 = T[pos1:next_pos1]
-        ### NOTE: loop runs sequentially
-        pos2, vol2, dotsum = 0, 0, np.zeros(v1, dtype=NP_FLOAT)
-        for i2 in range(i1):
-            t2, v2 = T[i2], V2[i2]
-            next_pos2, next_vol2 = pos2 + t2, vol2 + v2
-            sub_t2 = T[pos2:next_pos2]
-            chunk = dot3[vol2:next_vol2]
-            ### NOTE: loop runs sequentially
-            _pos1, _pos2, sub = 0, 0, np.zeros(v1, dtype=NP_FLOAT)
-            for i in range(t1):
-                _t1, _t2 = sub_t1[i], sub_t2[i]
-                _next_pos1, _next_pos2 = _pos1 + _t1, _pos2 + _t2
-                sub[_pos1:_next_pos1] = chunk[_pos2 : _pos2 + _t1]
-                _pos1, _pos2 = _next_pos1, _next_pos2
-            dotsum += L[j] * sub
+    ### indexing: j, i > k > l
+    ###
+    dot_3d, pos_i, vol_i, j = np.zeros_like(x), 0, 0, 0
+    for i in range(N_2):
+        t_i, v_i = T[i], V_2[i]
+        next_pos_i, next_vol_i = pos_i + t_i, vol_i + v_i
+        sub_t_i = T[pos_i:next_pos_i]
+        ###
+        pos_k, vol_k, dot_row = 0, 0, np.zeros(v_i, dtype=NP_FLOAT)
+        for k in range(i):
+            t_k, v_k = T[k], V_2[k]
+            next_pos_k, next_vol_k = pos_k + t_k, vol_k + v_k
+            sub_t_k = T[pos_k:next_pos_k]
+            block = dot_3d[vol_k:next_vol_k]
             ###
-            pos2, vol2 = next_pos2, next_vol2
+            pos_l_1, pos_l_2, sub = 0, 0, np.zeros(v_i, dtype=NP_FLOAT)
+            for l in range(t_i):
+                t_l_1, t_l_2 = sub_t_i[l], sub_t_k[l]
+                next_pos_l_1, next_pos_l_2 = pos_l_1 + t_l_1, pos_l_2 + t_l_2
+                sub[pos_l_1:next_pos_l_1] = block[pos_l_2 : pos_l_2 + t_l_1]
+                pos_l_1, pos_l_2 = next_pos_l_1, next_pos_l_2
+            dot_row += L[j] * sub
+            ###
+            pos_k, vol_k = next_pos_k, next_vol_k
             j += 1
-        dot3[vol1:next_vol1] = (dot2[vol1:next_vol1] - dotsum) / L[j]
+        dot_3d[vol_i:next_vol_i] = (dot_2d[vol_i:next_vol_i] - dot_row) / L[j]
         j += 1
         ###
-        pos1, vol1 = next_pos1, next_vol1
+        pos_i, vol_i = next_pos_i, next_vol_i
     ###
-    return dot3
+    return dot_3d
 
 
 @njit
@@ -985,103 +995,104 @@ def transform_ut_3d(
     T: np.ndarray,
 ) -> np.ndarray:
     """O(3Nn)"""
-    # NOTE: parallelization partially possible, not recommended
     U, x, T = (
         np.asarray(U).astype(NP_FLOAT),
         np.asarray(x).astype(NP_FLOAT),
         np.asarray(T).astype(NP_INT),
     )
-    N0, N1, N2 = np.sum(T), len(T), T[0]
+    N_0, N_1, N_2 = np.sum(T), len(T), T[0]
     ### 1d
-    ### NOTE: loop runs sequentially
-    dot1, pos1 = np.zeros_like(x), 0
-    for i1 in range(N1):
-        t1 = T[i1]
-        next_pos1, delta = pos1 + t1, N2 - t1
-        chunk = x[pos1:next_pos1]
-        ### NOTE: loop runs sequentially
-        chunk_dot, j = (
-            np.zeros(t1, dtype=NP_FLOAT),
-            t1 * N2 - t1 * (t1 - 1) // 2 - delta,
-        )
-        for k in range(t1):
-            k_prime = t1 - k - 1
-            j_next = j - k - 1
-            dotsum = np.sum(U[j_next:j] * chunk_dot[k_prime:])
-            chunk_dot[k_prime] = (chunk[k_prime] - dotsum) / U[j_next]
-            j = j_next - delta
+    ### indexing: i > j, k
+    ###
+    dot_1d, pos_i = np.zeros_like(x), 0
+    for i in range(N_1):
+        t_i = T[i]
+        next_pos_i, delta = pos_i + t_i, N_2 - t_i
+        block = x[pos_i:next_pos_i]
         ###
-        dot1[pos1:next_pos1] = chunk_dot
-        pos1 = next_pos1
+        dot_block, j = (
+            np.zeros(t_i, dtype=NP_FLOAT),
+            t_i * N_2 - t_i * (t_i - 1) // 2 - delta,
+        )
+        for k in range(t_i):
+            k_prime = t_i - k - 1
+            j_next = j - k - 1 - delta
+            dot_block[k_prime] = (
+                block[k_prime] - np.sum(U[j_next + delta : j] * dot_block[k_prime:])
+            ) / U[j_next + delta]
+            j = j_next
+        ###
+        dot_1d[pos_i:next_pos_i] = dot_block
+        pos_i = next_pos_i
     ###
     ### 2d
-    ### NOTE: loop runs sequentially
-    pos1, vol1, dot2, V2 = 0, 0, np.zeros_like(x), np.zeros(N2, dtype=NP_INT)
-    for i1 in range(N2):
-        t1 = T[i1]
-        next_pos1, delta = pos1 + t1, N2 - t1
-        sub_t1 = T[pos1:next_pos1]
-        _vol1 = np.sum(sub_t1)
-        vol1 += _vol1
-        V2[i1] = _vol1
-        ### NOTE: loop runs sequentially
-        _pos1, j = (vol1, t1 * N2 - t1 * (t1 - 1) // 2 - delta)
-        for _i1 in range(t1):
-            _i1_prime = t1 - _i1 - 1
-            _t1 = sub_t1[_i1_prime]
-            _next_pos1 = _pos1 - _t1
-            ### NOTE: loop runs sequentially
-            _pos2, dotsum = vol1, np.zeros(_t1, dtype=NP_FLOAT)
-            for _i2 in range(_i1):
+    ### indexing: i > j, k > l
+    ###
+    dot_2d, V_2, pos_i, vol_i = np.zeros_like(x), np.zeros(N_2, dtype=NP_INT), 0, 0
+    for i in range(N_2):
+        t_i = T[i]
+        next_pos_i, delta = pos_i + t_i, N_2 - t_i
+        sub_t_i = T[pos_i:next_pos_i]
+        sub_vol_i = np.sum(sub_t_i)
+        vol_i += sub_vol_i
+        V_2[i] = sub_vol_i
+        ###
+        pos_k, j = (vol_i, t_i * N_2 - t_i * (t_i - 1) // 2 - delta)
+        for k in range(t_i):
+            k_prime = t_i - k - 1
+            t_k = sub_t_i[k_prime]
+            next_pos_k = pos_k - t_k
+            ###
+            pos_l, dot_row = int(vol_i), np.zeros(t_k, dtype=NP_FLOAT)
+            for l in range(k):
                 j -= 1
-                _i2_prime = t1 - _i2 - 1
-                _t2 = sub_t1[_i2_prime]
-                _next_pos2 = _pos2 - _t2
-                chunk = dot2[_next_pos2:_pos2]
-                dotsum[:_t2] += U[j] * chunk
-                _pos2 = _next_pos2
+                l_prime = t_i - l - 1
+                t_l = sub_t_i[l_prime]
+                next_pos_l = pos_l - t_l
+                dot_row[:t_l] += U[j] * dot_2d[next_pos_l:pos_l]
+                pos_l = next_pos_l
             j -= 1
-            dot2[_next_pos1:_pos1] = (dot1[_next_pos1:_pos1] - dotsum) / U[j]
+            dot_2d[next_pos_k:pos_k] = (dot_1d[next_pos_k:pos_k] - dot_row) / U[j]
             j -= delta
             ###
-            _pos1 = _next_pos1
+            pos_k = next_pos_k
         ###
-        pos1 = next_pos1
+        pos_i = next_pos_i
     ###
-    ### 3d :: TODO
-    ### NOTE: loop runs sequentially..
-    dot3, pos1, vol1, j = np.zeros_like(x), V2[0], N0, N2 * (N2 + 1) // 2
-    for i1 in range(N2):
-        i1_prime = N2 - i1 - 1
-        t1, v1 = T[i1_prime], V2[i1_prime]
-        next_pos1, next_vol1 = pos1 - t1, vol1 - v1
-        sub_t1 = T[next_pos1:pos1]
-        ### NOTE: loop runs sequentially
-        pos2, vol2, dotsum = V2[0], N0, np.zeros(v1, dtype=NP_FLOAT)
-        for i2 in range(i1):
+    ### 3d
+    ### indexing: j, i > k > l
+    ###
+    dot_3d, pos_i, vol_i, j = np.zeros_like(x), int(V_2[0]), N_0, N_2 * (N_2 + 1) // 2
+    for i in range(N_2):
+        i_prime = N_2 - i - 1
+        t_i, v_i = T[i_prime], V_2[i_prime]
+        next_pos_i, next_vol_i = pos_i - t_i, vol_i - v_i
+        sub_t_i = T[next_pos_i:pos_i]
+        ###
+        pos_k, vol_k, dot_row = int(V_2[0]), N_0, np.zeros(v_i, dtype=NP_FLOAT)
+        for k in range(i):
             j -= 1
-            i2_prime = N2 - i2 - 1
-            t2, v2 = T[i2_prime], V2[i2_prime]
-            next_pos2, next_vol2 = pos2 - t2, vol2 - v2
-            sub_t2 = T[next_pos2:pos2]
-            chunk = dot3[next_vol2:vol2]
-            ### NOTE: loop runs sequentially
-            _pos1, _pos2, ext = 0, 0, np.zeros(v1, dtype=NP_FLOAT)
-            # TODO: swap t1 with t2
-            for i in range(t2):
-                _t1, _t2 = sub_t1[i], sub_t2[i]
-                _next_pos1, _next_pos2 = _pos1 + _t1, _pos2 + _t2
-                ext[_pos1 : _pos1 + _t2] = chunk[_pos2:_next_pos2]
-                _pos1, _pos2 = _next_pos1, _next_pos2
-            dotsum += U[j] * ext
+            k_prime = N_2 - k - 1
+            t_k, v_k = T[k_prime], V_2[k_prime]
+            next_pos_k, next_vol_k = pos_k - t_k, vol_k - v_k
+            sub_t2 = T[next_pos_k:pos_k]
+            block = dot_3d[next_vol_k:vol_k]
             ###
-            pos2, vol2 = next_pos2, next_vol2
+            pos_l_1, pos_l_2, ext = 0, 0, np.zeros(v_i, dtype=NP_FLOAT)
+            for l in range(t_k):
+                t_l_1, t_l_2 = sub_t_i[l], sub_t2[l]
+                next_pos_l_1, next_pos_l_2 = pos_l_1 + t_l_1, pos_l_2 + t_l_2
+                ext[pos_l_1 : pos_l_1 + t_l_2] = block[pos_l_2:next_pos_l_2]
+                pos_l_1, pos_l_2 = next_pos_l_1, next_pos_l_2
+            dot_row += U[j] * ext
+            ###
+            pos_k, vol_k = next_pos_k, next_vol_k
         j -= 1
-        dot3[next_vol1:vol1] = (dot2[next_vol1:vol1] - dotsum) / U[j]
+        dot_3d[next_vol_i:vol_i] = (dot_2d[next_vol_i:vol_i] - dot_row) / U[j]
         ###
-        pos1, vol1 = next_pos1, next_vol1
+        pos_i, vol_i = next_pos_i, next_vol_i
     ###
-    return dot3
+    return dot_3d
 
 
 @njit
@@ -1110,83 +1121,85 @@ def _itransform_lt_3d(
     T: np.ndarray,
 ) -> np.ndarray:
     ##
-    N1, N2 = (
+    N_1, N_2 = (
         len(T),
         T[0],
     )
     ### 1d
-    ### NOTE: loop runs sequentially
-    dot1, pos1 = np.zeros_like(x), 0
-    for i1 in range(N1):
-        t1 = T[i1]
-        next_pos1 = pos1 + t1
-        chunk = x[pos1:next_pos1]
-        ### NOTE: loop runs sequentially
-        chunk_dot, j = np.zeros(t1, dtype=NP_FLOAT), 0
-        for k in range(t1):
+    ### indexing: i > j, k
+    ###
+    dot_1d, pos_i = np.zeros_like(x), 0
+    for i in range(N_1):
+        t_i = T[i]
+        next_pos_i = pos_i + t_i
+        block = x[pos_i:next_pos_i]
+        ###
+        dot_block, j = np.zeros(t_i, dtype=NP_FLOAT), 0
+        for k in range(t_i):
             j_next = j + k + 1
-            chunk_dot[k] = np.sum(L[j:j_next] * chunk[: k + 1])
+            dot_block[k] = np.sum(L[j:j_next] * block[: k + 1])
             j = j_next
         ###
-        dot1[pos1:next_pos1] = chunk_dot
-        pos1 = next_pos1
+        dot_1d[pos_i:next_pos_i] = dot_block
+        pos_i = next_pos_i
     ###
     ### 2d
-    ### NOTE: loop runs sequentially
-    pos1, vol1, dot2, V2 = 0, 0, np.zeros_like(x), np.zeros(N2, dtype=NP_INT)
-    for i1 in range(N2):
-        t1 = T[i1]
-        next_pos1 = pos1 + t1
-        sub_t1 = T[pos1:next_pos1]
-        ### NOTE: loop runs sequentially
-        _pos1, _vol1, j = vol1, 0, 0
-        for _i1 in range(t1):
-            _t1 = sub_t1[_i1]
-            _next_pos1 = _pos1 + _t1
-            _pos2 = vol1
-            for _i2 in range(_i1 + 1):
-                _t2 = sub_t1[_i2]
-                _next_pos2 = _pos2 + _t2
-                chunk = dot1[_pos2 : _pos2 + _t1]
-                dot2[_pos1:_next_pos1] += L[j] * chunk
-                _pos2 = _next_pos2
-                j += 1
-            _pos1 = _next_pos1
-            _vol1 += _t1
+    ### indexing: i > j, k > l
+    ###
+    dot_2d, V_2, pos_i, vol_i = np.zeros_like(x), np.zeros(N_2, dtype=NP_INT), 0, 0
+    for i in range(N_2):
+        t_i = T[i]
+        next_pos_i = pos_i + t_i
+        sub_t_i = T[pos_i:next_pos_i]
         ###
-        pos1 = next_pos1
-        vol1 += _vol1
-        V2[i1] = _vol1
+        pos_k, vol_k, j = int(vol_i), 0, 0
+        for k in range(t_i):
+            t_k = sub_t_i[k]
+            next_pos_k = pos_k + t_k
+            pos_l = int(vol_i)
+            for l in range(k + 1):
+                t_l = sub_t_i[l]
+                next_pos_l = pos_l + t_l
+                dot_2d[pos_k:next_pos_k] += L[j] * dot_1d[pos_l : pos_l + t_k]
+                pos_l = next_pos_l
+                j += 1
+            pos_k = next_pos_k
+            vol_k += t_k
+        ###
+        pos_i = next_pos_i
+        vol_i += vol_k
+        V_2[i] = vol_k
     ###
     ### 3d
-    ### NOTE: loop runs sequentially
-    dot3, pos1, vol1, j = np.zeros_like(x), 0, 0, 0
-    for i1 in range(N2):
-        t1, v1 = T[i1], V2[i1]
-        next_pos1, next_vol1 = pos1 + t1, vol1 + v1
-        sub_t1 = T[pos1:next_pos1]
-        ### NOTE: loop runs sequentially
-        pos2, vol2 = 0, 0
-        for i2 in range(i1 + 1):
-            t2, v2 = T[i2], V2[i2]
-            next_pos2, next_vol2 = pos2 + t2, vol2 + v2
-            sub_t2 = T[pos2:next_pos2]
-            chunk = dot2[vol2:next_vol2]
-            ### NOTE: loop runs sequentially
-            _pos1, _pos2, sub = 0, 0, np.zeros(v1, dtype=NP_FLOAT)
-            for i in range(t1):
-                _t1, _t2 = sub_t1[i], sub_t2[i]
-                _next_pos1, _next_pos2 = _pos1 + _t1, _pos2 + _t2
-                sub[_pos1:_next_pos1] = chunk[_pos2 : _pos2 + _t1]
-                _pos1, _pos2 = _next_pos1, _next_pos2
-            dot3[vol1:next_vol1] += L[j] * sub
+    ### indexing: j, i > k > l
+    ###
+    dot_3d, pos_i, vol_i, j = np.zeros_like(x), 0, 0, 0
+    for i in range(N_2):
+        t_i, v_i = T[i], V_2[i]
+        next_pos_i, next_vol_i = pos_i + t_i, vol_i + v_i
+        sub_t_i = T[pos_i:next_pos_i]
+        ###
+        pos_k, vol_k = 0, 0
+        for k in range(i + 1):
+            t_k, v_k = T[k], V_2[k]
+            next_pos_k, next_vol_k = pos_k + t_k, vol_k + v_k
+            sub_t_k = T[pos_k:next_pos_k]
+            block = dot_2d[vol_k:next_vol_k]
             ###
-            pos2, vol2 = next_pos2, next_vol2
+            pos_l_1, pos_l_2, sub = 0, 0, np.zeros(v_i, dtype=NP_FLOAT)
+            for l in range(t_i):
+                t_l_1, t_l_2 = sub_t_i[l], sub_t_k[l]
+                next_pos_l_1, next_pos_l_2 = pos_l_1 + t_l_1, pos_l_2 + t_l_2
+                sub[pos_l_1:next_pos_l_1] = block[pos_l_2 : pos_l_2 + t_l_1]
+                pos_l_1, pos_l_2 = next_pos_l_1, next_pos_l_2
+            dot_3d[vol_i:next_vol_i] += L[j] * sub
+            ###
+            pos_k, vol_k = next_pos_k, next_vol_k
             j += 1
         ###
-        pos1, vol1 = next_pos1, next_vol1
+        pos_i, vol_i = next_pos_i, next_vol_i
     ###
-    return dot3
+    return dot_3d
 
 
 @njit(parallel=True)
@@ -1194,83 +1207,84 @@ def _itransform_lt_3d_parallel(
     L: np.ndarray, x: np.ndarray, T: np.ndarray
 ) -> np.ndarray:
     ###
-    N1, N2, cs_T = (
+    N_1, N_2, cs_T = (
         len(T),
         T[0],
         np.concatenate((np.array([0]), np.cumsum(T))),
     )
-    V2 = np.array([np.sum(T[cs_T[i] : cs_T[i + 1]]) for i in range(N2)], dtype=NP_INT)
-    cs_V2 = np.concatenate((np.array([0]), np.cumsum(V2)))
+    V_2 = np.array([np.sum(T[cs_T[i] : cs_T[i + 1]]) for i in range(N_2)], dtype=NP_INT)
+    cs_V_2 = np.concatenate((np.array([0]), np.cumsum(V_2)))
     ### 1d
+    ### indexing: i > j, k
     ### NOTE: loop runs in parallel
-    dot1 = np.zeros_like(x)
-    for i1 in prange(N1):
-        t1, pos1, next_pos1 = T[i1], cs_T[i1], cs_T[i1 + 1]
-        chunk = x[pos1:next_pos1]
+    dot_1d = np.zeros_like(x)
+    for i in prange(N_1):
+        t_i, pos_i, next_pos_i = T[i], cs_T[i], cs_T[i + 1]
+        block = x[pos_i:next_pos_i]
         ### NOTE: possible overhead or numerical instability when parallelized, loop runs sequentially
-        chunk_dot, j = np.zeros(t1, dtype=NP_FLOAT), 0
-        for k in range(t1):
+        dot_block, j = np.zeros(t_i, dtype=NP_FLOAT), 0
+        for k in range(t_i):
             j_next = j + k + 1
-            chunk_dot[k] = np.sum(L[j:j_next] * chunk[: k + 1])
+            dot_block[k] = np.sum(L[j:j_next] * block[: k + 1])
             j = j_next
         ###
-        dot1[pos1:next_pos1] = chunk_dot
+        dot_1d[pos_i:next_pos_i] = dot_block
     ###
     ### 2d
+    ### indexing: i > j, k > l
     ### NOTE: loop runs in parallel
-    dot2 = np.zeros_like(x)
-    for i1 in prange(N2):
-        t1, pos1, vol1, next_pos1 = T[i1], cs_T[i1], cs_V2[i1], cs_T[i1 + 1]
-        sub_t1 = T[pos1:next_pos1]
+    dot_2d = np.zeros_like(x)
+    for i in prange(N_2):
+        t_i, pos_i, vol_i, next_pos_i = T[i], cs_T[i], cs_V_2[i], cs_T[i + 1]
+        sub_t1 = T[pos_i:next_pos_i]
         ### NOTE: possible overhead or numerical instability when parallelized, loop runs sequentially
-        _pos1, _vol1, j = vol1, 0, 0
-        for _i1 in range(t1):
-            _t1 = sub_t1[_i1]
-            _next_pos1 = _pos1 + _t1
-            _pos2 = vol1
+        pos_k, _vol1, j = vol_i, 0, 0
+        for k in range(t_i):
+            t_k = sub_t1[k]
+            next_pos_k = pos_k + t_k
             ### NOTE: possible overhead or numerical instability when parallelized, loop runs sequentially
-            for _i2 in range(_i1 + 1):
-                _t2 = sub_t1[_i2]
-                _next_pos2 = _pos2 + _t2
-                chunk = dot1[_pos2 : _pos2 + _t1]
-                dot2[_pos1:_next_pos1] += L[j] * chunk
-                _pos2 = _next_pos2
+            pos_l = int(vol_i)
+            for l in range(k + 1):
+                t_l = sub_t1[l]
+                next_pos_l = pos_l + t_l
+                dot_2d[pos_k:next_pos_k] += L[j] * dot_1d[pos_l : pos_l + t_k]
+                pos_l = next_pos_l
                 j += 1
-            _pos1 = _next_pos1
-            _vol1 += _t1
+            pos_k = next_pos_k
+            _vol1 += t_k
         ###
     ###
     ### 3d
+    ### indexing: i, j > k > l
     ### NOTE: loop runs in parallel
-    dot3 = np.zeros_like(x)
-    for i1 in prange(N2):
-        j = i1 * (i1 + 1) // 2
-        t1, v1 = T[i1], V2[i1]
-        pos1, vol1 = cs_T[i1], cs_V2[i1]
-        next_pos1, next_vol1 = cs_T[i1 + 1], cs_V2[i1 + 1]
-        sub_t1 = T[pos1:next_pos1]
+    dot_3d = np.zeros_like(x)
+    for i in prange(N_2):
+        j = i * (i + 1) // 2
+        t_i, v_i = T[i], V_2[i]
+        pos_i, vol_i = cs_T[i], cs_V_2[i]
+        next_pos_i, next_vol_i = cs_T[i + 1], cs_V_2[i + 1]
+        sub_t_i = T[pos_i:next_pos_i]
         ### NOTE: possible overhead or numerical instability when parallelized, loop runs sequentially
-        pos2, vol2 = 0, 0
-        for i2 in range(i1 + 1):
-            t2, v2 = T[i2], V2[i2]
-            next_pos2, next_vol2 = pos2 + t2, vol2 + v2
-            sub_t2 = T[pos2:next_pos2]
-            chunk = dot2[vol2:next_vol2]
+        pos_k, vol_k = 0, 0
+        for k in range(i + 1):
+            t_k, v_k = T[k], V_2[k]
+            next_pos_k, next_vol_k = pos_k + t_k, vol_k + v_k
+            sub_t_k = T[pos_k:next_pos_k]
+            block = dot_2d[vol_k:next_vol_k]
             ### NOTE: possible overhead or numerical instability when parallelized, loop runs sequentially
-            _pos1, _pos2, sub = 0, 0, np.zeros(v1, dtype=NP_FLOAT)
-            for i in range(t1):
-                _t1, _t2 = sub_t1[i], sub_t2[i]
-                _next_pos1, _next_pos2 = _pos1 + _t1, _pos2 + _t2
-                sub[_pos1:_next_pos1] = chunk[_pos2 : _pos2 + _t1]
-                _pos1, _pos2 = _next_pos1, _next_pos2
-            dot3[vol1:next_vol1] += L[j] * sub
+            pos_l_1, _pos2, sub = 0, 0, np.zeros(v_i, dtype=NP_FLOAT)
+            for l in range(t_i):
+                t_l_1, t_l_2 = sub_t_i[l], sub_t_k[l]
+                next_pos_l_1, next_pos_l_2 = pos_l_1 + t_l_1, _pos2 + t_l_2
+                sub[pos_l_1:next_pos_l_1] = block[_pos2 : _pos2 + t_l_1]
+                pos_l_1, _pos2 = next_pos_l_1, next_pos_l_2
+            dot_3d[vol_i:next_vol_i] += L[j] * sub
             ###
-            pos2, vol2 = next_pos2, next_vol2
+            pos_k, vol_k = next_pos_k, next_vol_k
             j += 1
         ###
-        pos1, vol1 = next_pos1, next_vol1
     ###
-    return dot3
+    return dot_3d
 
 
 @njit
@@ -1299,181 +1313,187 @@ def _itransform_ut_3d(
     T: np.ndarray,
 ) -> np.ndarray:
     ###
-    N1, N2 = (
+    N_1, N_2 = (
         len(T),
         T[0],
     )
     ### 1d
-    ### NOTE: loop runs sequentially
-    dot1, pos1 = np.zeros_like(x), 0
-    for i1 in range(N1):
-        t1 = T[i1]
-        next_pos1, delta = pos1 + t1, N2 - t1
-        chunk = x[pos1:next_pos1]
-        ### NOTE: loop runs sequentially
-        chunk_dot, j = np.zeros(t1, dtype=NP_FLOAT), 0
-        for k in range(t1):
-            k_prime = t1 - k - 1
+    ### indexing: i > j, k
+    ###
+    dot_1d, pos_i = np.zeros_like(x), 0
+    for i in range(N_1):
+        t_i = T[i]
+        next_pos_i, delta = pos_i + t_i, N_2 - t_i
+        block = x[pos_i:next_pos_i]
+        ###
+        dot_block, j = np.zeros(t_i, dtype=NP_FLOAT), 0
+        for k in range(t_i):
+            k_prime = t_i - k - 1
             j_next = j + k_prime + 1
-            chunk_dot[k] = np.sum(U[j:j_next] * chunk[k:])
+            dot_block[k] = np.sum(U[j:j_next] * block[k:])
             j = j_next + delta
         ###
-        dot1[pos1:next_pos1] = chunk_dot
-        pos1 = next_pos1
+        dot_1d[pos_i:next_pos_i] = dot_block
+        pos_i = next_pos_i
     ###
     ### 2d
-    ### NOTE: loop runs sequentially
-    pos1, vol1, dot2, V2 = 0, 0, np.zeros_like(x), np.zeros(N2, dtype=NP_INT)
-    for i1 in range(N2):
-        t1 = T[i1]
-        next_pos1, delta = pos1 + t1, N2 - t1
-        sub_t1 = T[pos1:next_pos1]
-        ### NOTE: loop runs sequentially
-        _pos1, _vol1, j = vol1, 0, 0
-        for _i1 in range(t1):
-            _t1 = sub_t1[_i1]
-            _next_pos1 = _pos1 + _t1
-            _pos2 = vol1 + _vol1
-            for _i2 in range(t1 - _i1):
-                _i1_i2 = _i1 + _i2
-                _t2 = sub_t1[_i1_i2]
-                _next_pos2 = _pos2 + _t2
-                chunk = dot1[_pos2:_next_pos2]
-                dot2[_pos1 : _pos1 + _t2] += U[j] * chunk
-                _pos2 = _next_pos2
+    ### indexing: i > j, k > l
+    ###
+    dot_2d, V_2, pos_i, vol_i = np.zeros_like(x), np.zeros(N_2, dtype=NP_INT), 0, 0
+    for i in range(N_2):
+        t_i = T[i]
+        next_pos_i, delta = pos_i + t_i, N_2 - t_i
+        sub_t_i = T[pos_i:next_pos_i]
+        ###
+        pos_k, vol_k, j = int(vol_i), 0, 0
+        for k in range(t_i):
+            t_k = sub_t_i[k]
+            next_pos_k = pos_k + t_k
+            ###
+            pos_l = int(vol_i + vol_k)
+            for l in range(t_i - k):
+                t_l = sub_t_i[k + l]
+                next_pos_l = pos_l + t_l
+                dot_2d[pos_k : pos_k + t_l] += U[j] * dot_1d[pos_l:next_pos_l]
+                pos_l = next_pos_l
                 j += 1
             j += delta
-            _pos1 = _next_pos1
-            _vol1 += _t1
+            ###
+            pos_k = next_pos_k
+            vol_k += t_k
         ###
-        pos1, vol1, V2[i1] = next_pos1, _pos1, _vol1
+        pos_i, vol_i, V_2[i] = next_pos_i, pos_k, vol_k
     ###
     ### 3d
-    ### NOTE: loop runs sequentially
-    dot3, pos1, vol1, j = np.zeros_like(x), 0, 0, 0
-    for i1 in range(N2):
-        t1, v1 = T[i1], V2[i1]
-        next_pos1, next_vol1 = pos1 + t1, vol1 + v1
-        sub_t1 = T[pos1:next_pos1]
-        ### NOTE: loop runs sequentially
-        pos2, vol2 = pos1, vol1
-        for i2 in range(N2 - i1):
-            i1_i2 = i1 + i2
-            t2, v2 = T[i1_i2], V2[i1_i2]
-            next_pos2, next_vol2 = pos2 + t2, vol2 + v2
-            sub_t2 = T[pos2:next_pos2]
-            chunk = dot2[vol2:next_vol2]
-            ### NOTE: loop runs sequentially
-            _pos1, _pos2, sub = 0, 0, np.zeros(v1, dtype=NP_FLOAT)
-            for i in range(t2):
-                _t1, _t2 = sub_t1[i], sub_t2[i]
-                _next_pos1, _next_pos2 = _pos1 + _t1, _pos2 + _t2
-                sub[_pos1 : _pos1 + _t2] = chunk[_pos2:_next_pos2]
-                _pos1, _pos2 = _next_pos1, _next_pos2
-            dot3[vol1:next_vol1] += U[j] * sub
+    ### indexing: j, i > k > l
+    ###
+    dot_3d, pos_i, vol_i, j = np.zeros_like(x), 0, 0, 0
+    for i in range(N_2):
+        t_i, v_i = T[i], V_2[i]
+        next_pos_i, next_vol_i = pos_i + t_i, vol_i + v_i
+        sub_t_i = T[pos_i:next_pos_i]
+        ###
+        pos_k, vol_k = int(pos_i), int(vol_i)
+        for k in range(N_2 - i):
+            i_plus_k = i + k
+            t_k, v_k = T[i_plus_k], V_2[i_plus_k]
+            next_pos_k, next_vol_k = pos_k + t_k, vol_k + v_k
+            sub_t_k = T[pos_k:next_pos_k]
+            block = dot_2d[vol_k:next_vol_k]
             ###
-            pos2, vol2 = next_pos2, next_vol2
+            pos_l_1, pos_l_2, sub = 0, 0, np.zeros(v_i, dtype=NP_FLOAT)
+            for l in range(t_k):
+                t_l_1, t_l_2 = sub_t_i[l], sub_t_k[l]
+                next_pos_l_1, next_pos_l_2 = pos_l_1 + t_l_1, pos_l_2 + t_l_2
+                sub[pos_l_1 : pos_l_1 + t_l_2] = block[pos_l_2:next_pos_l_2]
+                pos_l_1, pos_l_2 = next_pos_l_1, next_pos_l_2
+            dot_3d[vol_i:next_vol_i] += U[j] * sub
+            ###
+            pos_k, vol_k = next_pos_k, next_vol_k
             j += 1
         ###
-        pos1, vol1 = next_pos1, next_vol1
+        pos_i, vol_i = next_pos_i, next_vol_i
     ###
-    return dot3
+    return dot_3d
 
 
-@njit(parallel=True)  # TODO Check!
+@njit(parallel=True)
 def _itransform_ut_3d_parallel(
     U: np.ndarray,
     x: np.ndarray,
     T: np.ndarray,
 ) -> np.ndarray:
     ###
-    N1, N2, cs_T = (
+    N_1, N_2, cs_T = (
         len(T),
         T[0],
         np.concatenate((np.array([0]), np.cumsum(T))),
     )
-    V2 = np.array([np.sum(T[cs_T[i] : cs_T[i + 1]]) for i in range(N2)], dtype=NP_INT)
-    cs_V2 = np.concatenate((np.array([0]), np.cumsum(V2)))
+    V_2 = np.array([np.sum(T[cs_T[i] : cs_T[i + 1]]) for i in range(N_2)], dtype=NP_INT)
+    cs_V2 = np.concatenate((np.array([0]), np.cumsum(V_2)))
     ### 1d
+    ### indexing: i > j, k
     ### NOTE: loop runs in parallel
-    dot1 = np.zeros_like(x)
-    for i1 in prange(N1):
-        t1, pos1, next_pos1 = T[i1], cs_T[i1], cs_T[i1 + 1]
-        chunk, delta = x[pos1:next_pos1], N2 - t1
+    dot_1d = np.zeros_like(x)
+    for i in prange(N_1):
+        t_i, pos_i, next_pos_i = T[i], cs_T[i], cs_T[i + 1]
+        chunk, delta = x[pos_i:next_pos_i], N_2 - t_i
         ### NOTE: possible overhead or numerical instability when parallelized, loop runs sequentially
-        chunk_dot, j = np.zeros(t1, dtype=NP_FLOAT), 0
-        for k in range(t1):
-            k_prime = t1 - k - 1
-            j_next = j + k_prime + 1
-            chunk_dot[k] = np.sum(U[j:j_next] * chunk[k:])
-            j = j_next + delta
+        dot_block, j = np.zeros(t_i, dtype=NP_FLOAT), 0
+        for k in range(t_i):
+            k_prime = t_i - k - 1
+            j_next = j + k_prime + 1 + delta
+            dot_block[k] = np.sum(U[j : j_next - delta] * chunk[k:])
+            j = j_next
         ###
-        dot1[pos1:next_pos1] = chunk_dot
+        dot_1d[pos_i:next_pos_i] = dot_block
     ###
     ### 2d
+    ### indexing: i > j, k > l
     ### NOTE: loop runs in parallel
-    dot2 = np.zeros_like(x)
-    for i1 in prange(N2):
-        t1, pos1, vol1, next_pos1 = T[i1], cs_T[i1], cs_V2[i1], cs_T[i1 + 1]
-        sub_t1, delta = T[pos1:next_pos1], N2 - t1
+    dot_2d = np.zeros_like(x)
+    for i in prange(N_2):
+        t_i, pos_i, vol_i, next_pos_i = T[i], cs_T[i], cs_V2[i], cs_T[i + 1]
+        sub_t_i, delta = T[pos_i:next_pos_i], N_2 - t_i
         ### NOTE: possible overhead or numerical instability when parallelized, loop runs sequentially
-        _pos1, _vol1, j = vol1, 0, 0
-        for _i1 in range(t1):
-            _t1 = sub_t1[_i1]
-            _next_pos1 = _pos1 + _t1
-            _pos2 = vol1 + _vol1
+        pos_k, vol_k, j = int(vol_i), 0, 0
+        for k in range(t_i):
+            t_k = sub_t_i[k]
+            next_pos_k = pos_k + t_k
             ### NOTE: possible overhead or numerical instability when parallelized, loop runs sequentially
-            for _i2 in range(t1 - _i1):
-                _i1_i2 = _i1 + _i2
-                _t2 = sub_t1[_i1_i2]
-                _next_pos2 = _pos2 + _t2
-                chunk = dot1[_pos2:_next_pos2]
-                dot2[_pos1 : _pos1 + _t2] += U[j] * chunk
-                _pos2 = _next_pos2
+            pos_l = int(vol_i + vol_k)
+            for l in range(t_i - k):
+                t_l = sub_t_i[k + l]
+                next_pos_l = pos_l + t_l
+                dot_2d[pos_k : pos_k + t_l] += U[j] * dot_1d[pos_l:next_pos_l]
+                pos_l = next_pos_l
                 j += 1
             j += delta
-            _pos1 = _next_pos1
-            _vol1 += _t1
+            ###
+            pos_k = next_pos_k
+            vol_k += t_k
         ###
-        pos1 = next_pos1
-        vol1 += _vol1
-        V2[i1] = _vol1
+        vol_i += vol_k
+        V_2[i] = vol_k
     ###
     ### 3d
+    ### indexing: i, j > k > l
     ### NOTE: loop runs in parallel
-    dot3 = np.zeros_like(x)
-    for i1 in prange(N2):
-        j = i1 * N2 - i1 * (i1 - 1) // 2
-        t1, v1 = T[i1], V2[i1]
-        pos1, vol1 = cs_T[i1], cs_V2[i1]
-        next_pos1, next_vol1 = cs_T[i1 + 1], cs_V2[i1 + 1]
-        sub_t1 = T[pos1:next_pos1]
+    dot_3d = np.zeros_like(x)
+    for i in prange(N_2):
+        j = i * N_2 - i * (i - 1) // 2
+        v_i = V_2[i]
+        pos_i, vol_i = cs_T[i], cs_V2[i]
+        next_pos_i, next_vol_i = cs_T[i + 1], cs_V2[i + 1]
+        sub_t_i = T[pos_i:next_pos_i]
         ### NOTE: possible overhead or numerical instability when parallelized, loop runs sequentially
-        pos2, vol2 = pos1, vol1
-        for i2 in range(N2 - i1):
-            i1_i2 = i1 + i2
-            t2, v2 = T[i1_i2], V2[i1_i2]
-            next_pos2, next_vol2 = pos2 + t2, vol2 + v2
-            sub_t2 = T[pos2:next_pos2]
-            chunk = dot2[vol2:next_vol2]
+        pos_k, vol_k = int(pos_i), int(vol_i)
+        for k in range(N_2 - i):
+            i_plus_k = i + k
+            t_k, v_k = T[i_plus_k], V_2[i_plus_k]
+            next_pos_k, next_vol_k = pos_k + t_k, vol_k + v_k
+            sub_t_k = T[pos_k:next_pos_k]
+            block = dot_2d[vol_k:next_vol_k]
             ### NOTE: possible overhead or numerical instability when parallelized, loop runs sequentially
-            _pos1, _pos2, sub = 0, 0, np.zeros(v1, dtype=NP_FLOAT)
-            for i in range(t2):
-                _t1, _t2 = sub_t1[i], sub_t2[i]
-                _next_pos1, _next_pos2 = _pos1 + _t1, _pos2 + _t2
-                sub[_pos1 : _pos1 + _t2] = chunk[_pos2:_next_pos2]
-                _pos1, _pos2 = _next_pos1, _next_pos2
-            dot3[vol1:next_vol1] += U[j] * sub
+            pos_l_1, pos_l_2, sub = 0, 0, np.zeros(v_i, dtype=NP_FLOAT)
+            for l in range(t_k):
+                t_l_1, t_l_2 = sub_t_i[l], sub_t_k[l]
+                next_pos_l_1, next_pos_l_2 = pos_l_1 + t_l_1, pos_l_2 + t_l_2
+                sub[pos_l_1 : pos_l_1 + t_l_2] = block[pos_l_2:next_pos_l_2]
+                pos_l_1, pos_l_2 = next_pos_l_1, next_pos_l_2
+            dot_3d[vol_i:next_vol_i] += U[j] * sub
             ###
-            pos2, vol2 = next_pos2, next_vol2
+            pos_k, vol_k = next_pos_k, next_vol_k
             j += 1
         ###
-        pos1, vol1 = next_pos1, next_vol1
     ###
-    return dot3
+    return dot_3d
 
 
-@njit
+# md
+
+
+@njit # NOTE refactor me!
 def itransform_lt_md(
     L: np.ndarray,
     x: np.ndarray,
@@ -1676,6 +1696,7 @@ def _itransform_lt_md_parallel(
     return dot
 
 
+# TODO CONTINUE ...
 # @njit # TODO CHANGE!
 def itransform_ut_md(
     U: np.ndarray,
