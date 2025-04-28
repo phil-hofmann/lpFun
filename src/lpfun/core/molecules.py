@@ -1,6 +1,6 @@
 import numpy as np
 
-# from numba import njit # NOTE optional
+from numba import njit
 from lpfun import NP_INT, NP_FLOAT
 from lpfun.core.utils import classify, apply_permutation
 from lpfun.core.set import permutation_max, permutation
@@ -21,7 +21,7 @@ from lpfun.core.atoms import (
 )
 from typing import Literal
 
-
+@njit
 def validate(
     mode: str,
     T: np.ndarray,
@@ -35,7 +35,7 @@ def validate(
         raise ValueError("Tube projection is required for p != np.inf and m != 1.")
 
 
-# @njit # NOTE optional
+@njit
 def itransform(
     Vx: np.ndarray,
     c: np.ndarray,
@@ -92,7 +92,7 @@ def itransform(
     return itransform_lt_md(Vx, c, T) if lt else itransform_ut_md(Vx, c, T)
 
 
-# @njit # NOTE optional
+@njit
 def dtransform(
     Dx: np.ndarray,
     c: np.ndarray,

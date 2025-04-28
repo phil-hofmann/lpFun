@@ -30,39 +30,39 @@ def reduceat(
 # 1d
 
 
-@njit(parallel=True)
+@njit
 def itransform_lt_1d(
     L: np.ndarray,
     x: np.ndarray,
 ) -> np.ndarray:
-    """O(n^2)"""
+    ###
     n = len(x)
-    ### indexing: k > j
-    ### NOTE: loop runs in parallel
-    dot = np.zeros_like(x)
-    for k in prange(n):
-        j = (k * (k + 1)) // 2
+    ### indexing: j, k
+    ###
+    dot, j = np.zeros_like(x), 0
+    for k in range(n):
         j_next = j + k + 1
         dot[k] = np.sum(L[j:j_next] * x[: k + 1])
+        j = j_next
     ###
     return dot
 
 
-@njit(parallel=True)
+@njit
 def itransform_ut_1d(
     U: np.ndarray,
     x: np.ndarray,
 ) -> np.ndarray:
-    """O(n^2)"""
+    ###
     n = len(x)
-    ### indexing: k > j
-    ### NOTE: loop runs in parallel
-    dot = np.zeros_like(x)
-    for k in prange(n):
+    ### indexing: j, k
+    ###
+    dot, j = np.zeros_like(x), 0
+    for k in range(n):
         k_prime = n - k - 1
-        j = k * n - k * (k - 1) // 2
         j_next = j + k_prime + 1
         dot[k] = np.sum(U[j:j_next] * x[k:])
+        j = j_next
     ###
     return dot
 

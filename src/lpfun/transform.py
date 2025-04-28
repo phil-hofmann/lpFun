@@ -307,8 +307,16 @@ class Transform(AbstractTransform):
             self._lex_order, function_values, invert=True
         )
         ###
-        coefficients = np.zeros(len(self), dtype=NP_FLOAT)
-        if self._inv_Vx_lt is not None:
+        if self._inv_Vx_lt is not None and self._inv_Vx_ut is None:
+            return itransform(
+                self._inv_Vx_lt,
+                function_values,
+                self._T,
+                self._m,
+                self._p,
+                mode="lower",
+            )
+        elif self._inv_Vx_ut is not None and self._inv_Vx_ut is not None:
             coefficients = itransform(
                 self._inv_Vx_lt,
                 function_values,
@@ -317,8 +325,7 @@ class Transform(AbstractTransform):
                 self._p,
                 mode="lower",
             )
-        if self._inv_Vx_ut is not None:
-            coefficients = itransform(
+            return itransform(
                 self._inv_Vx_ut,
                 coefficients,
                 self._T,
@@ -326,10 +333,9 @@ class Transform(AbstractTransform):
                 self._p,
                 mode="upper",
             )
-        if self._inv_Vx_lt is None and self._inv_Vx_ut is None:
-            raise ValueError("Unexpected error: either _Vx_lt or _Vx_ut must exist.")
+        else:
+            raise ValueError("Unexpected error: _Vx_lt must exist, _Vx_ut is optional.")
         ###
-        return coefficients
 
     def ifnt(self, coefficients: np.ndarray) -> np.ndarray:
         """Inverse Fast Newton Transform"""
@@ -363,7 +369,7 @@ class Transform(AbstractTransform):
                 mode="lower",
             )
         else:
-            raise ValueError("Unexpected error: either _Vx_lt or _Vx_ut must exist.")
+            raise ValueError("Unexpected error: _Vx_lt must exist, _Vx_ut is optional.")
         ###
         function_values = apply_permutation(
             self._lex_order, function_values, invert=False
@@ -387,7 +393,7 @@ class Transform(AbstractTransform):
             raise ValueError("Invalid value for k. Please choose 1, 2 or 3.")
         ###
         if self._Dx_lt is not None and self._Dx_ut is None:
-            coefficients = dtransform(
+            return dtransform(
                 self._Dx_lt[k - 1],
                 coefficients,
                 self._T,
@@ -406,7 +412,7 @@ class Transform(AbstractTransform):
                 i,
                 mode="upper",
             )
-            coefficients = dtransform(
+            return dtransform(
                 self._Dx_lt[k - 1],
                 coefficients,
                 self._T,
@@ -416,9 +422,8 @@ class Transform(AbstractTransform):
                 mode="lower",
             )
         else:
-            raise ValueError("Unexpected error: either _Dx_lt or _Dx_ut must exist.")
+            raise ValueError("Unexpected error: _Dx_lt must exist, _Dx_ut is optional.")
         ###
-        return coefficients
 
     def dxT(
         self, coefficients: np.ndarray, i: int, k: Literal[1, 2, 3] = 1
@@ -437,7 +442,7 @@ class Transform(AbstractTransform):
             raise ValueError("Invalid value for k. Please choose 1, 2 or 3.")
         ###
         if self._DxT_lt is not None and self._DxT_ut is None:
-            coefficients = dtransform(
+            return dtransform(
                 self._DxT_lt[k - 1],
                 coefficients,
                 self._T,
@@ -456,7 +461,7 @@ class Transform(AbstractTransform):
                 i,
                 mode="upper",
             )
-            coefficients = dtransform(
+            return dtransform(
                 self._DxT_lt[k - 1],
                 coefficients,
                 self._T,
@@ -466,9 +471,8 @@ class Transform(AbstractTransform):
                 mode="lower",
             )
         else:
-            raise ValueError("Unexpected error: either _DxT_lt or _DxT_ut must exist.")
+            raise ValueError("Unexpected error: _DxT_lt must exist, _DxT_ut is optional.")
         ###
-        return coefficients
 
     def eval(self, coefficients: np.ndarray, x: np.ndarray) -> NP_FLOAT:
         """Point Evaluation"""
