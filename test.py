@@ -1,121 +1,127 @@
+import lpfun
 import pytest
 import numpy as np
-import lpfun as lp
+from itertools import product
 
 # Parameters
 
 ms = [1, 2, 3, 4, 5, 6]
 ps = [1.0, 2.0, np.inf]
-
+bases = ["newton", "chebyshev"]
+m_p_ba = list(product(ms, ps, bases))
 
 # Prerequisites
 
 
 def ns(m: int) -> np.ndarray:
     # Generate random ns
-    n_max_m = {1: 120, 2: 80, 3: 40, 4: 20, 5: 10}
-    n_max = n_max_m.get(m, 5)
-    num = max(int(n_max * 0.2), 1)
-    ns = np.random.randint(1, n_max, num)
+    n_max_m, default = {1: 35, 2: 30, 3: 25, 4: 20, 5: 15, 6: 10}, 5
+    n_max = n_max_m.get(m, default)
+    ns = np.random.randint(3, n_max, max(int(n_max * 0.2), 1))
     return ns
-
-
-def monomial(m=2, n=3):
-    # Generate random coefficient for the monomial
-    c = 2 * np.random.rand() - 1
-
-    # Generate random exponents for each dimension
-    exponents = np.random.randint(0, n + 1, size=m)
-
-    # Generate the monomial and its derivative
-    def f(*x):
-        return c * np.prod(np.array(x) ** exponents)
-
-    def df(i, *x):
-        if exponents[i] == 0:
-            return 0.0
-        else:
-            return (
-                c
-                * exponents[i]
-                * np.prod(
-                    np.array(x)
-                    ** [exp if j != i else exp - 1 for j, exp in enumerate(exponents)]
-                )
-            )
-
-    return f, df
 
 
 # Tests
 
 
-def test_n2l_and_l2n():
+def test_newton2lagrange():
     for n in ns(1):
-        # Generate unisolvent nodes 1d
-        nodes = lp.utils.leja_nodes(n, lp.utils.cheb)
-
-        # Forward and backward transformations
-        l2n = lp.utils.l2n(nodes)
-        n2l = lp.utils.n2l(nodes)
-
-        # Check if the transformations are inverse to each other
+        nodes = lpfun.utils.leja_nodes(lpfun.utils.cheb2nd(n))
+        n2l = lpfun.utils.newton2lagrange(nodes)
+        l2n = lpfun.utils.inv(n2l)
         identity = n2l @ l2n
-        assert np.allclose(identity, np.eye(n), rtol=1e-4, atol=1e-6)
+        eps = np.linalg.norm(identity - np.eye(n))
+        assert eps < 1e-8
 
 
-@pytest.mark.parametrize("m", [1, 2, 3, 4, 5, 6])
+def test_chebyshev2lagrange():
+    for n in ns(1):
+        nodes = lpfun.utils.leja_nodes(lpfun.utils.cheb2nd(n))
+        c2l = lpfun.utils.chebyshev2lagrange(nodes)
+        L, U = lpfun.utils.lu(c2l)
+        L_inv, U_inv = lpfun.utils.inv(L), lpfun.utils.inv(U[::-1, ::-1])[::-1, ::-1]
+        l2c = U_inv @ L_inv
+        identity = c2l @ l2c
+        eps = np.linalg.norm(identity - np.eye(n))
+        assert eps < 1e-8
+
+
+@pytest.mark.parametrize("m", ms)
 def test_tube_absolute_degree(m: int):
     for n in ns(m):
-        # Check if the tube is valid for p = 1.0
-        tube = lp.utils.tube(m, n, 1.0)
+        A = lpfun.core.set.lp_set(m, n, 1.0)
+        tube = lpfun.core.set.lp_tube(A, m, n, 1.0)
         tube_sum = np.sum(tube)
-        binom = lp.utils._binomial(n + m, m)
-        assert tube_sum == binom
+        cardinality = lpfun.core.utils.binomial(n + m, m)
+        assert tube_sum == cardinality
 
 
-@pytest.mark.parametrize("m, p", [(m, p) for m in ms for p in ps])
-def test_newton_fnt_and_ifnt(m: int, p: float):
+@pytest.mark.parametrize("m", ms)
+def test_tube_euclidean_degree(m: int):
     for n in ns(m):
-        # Transform object
-        t = lp.Transform(m, n, p)
+        A = lpfun.core.set.lp_set(m, n, 2.0)
+        tube = lpfun.core.set.lp_tube(A, m, n, 2.0)
+        tube_sum = np.sum(tube)
+        cardinality = len(
+            [
+                point
+                for point in product(range(n + 1), repeat=m)
+                if np.linalg.norm(point) <= n
+            ]
+        )
+        assert tube_sum == cardinality
 
-        # Generate random function values
+
+@pytest.mark.parametrize("m, p, ba", m_p_ba)
+def test_fnt_ifnt(m: int, p: float, ba: str):
+    for n in ns(m):
+        t = lpfun.Transform(m, n, p, basis=ba, precompilation=False, report=False)
         function_values = np.random.rand(len(t))
-
-        # Apply forward and backward transformations
         reconstruction = t.ifnt(t.fnt(function_values))
+        eps = np.linalg.norm(reconstruction - function_values)
+        assert eps < 1e-9
 
-        # Compare the reconstruction with the exact
-        assert np.allclose(reconstruction, function_values)
 
+@pytest.mark.parametrize("m, p, ba", m_p_ba)
+def test_dx(m: int, p: float, ba: str):
+    for n in ns(m):
+        t = lpfun.Transform(m, n, p, basis=ba, report=False)
+        seed = np.random.rand(m)
 
-@pytest.mark.parametrize("m, p", [(m, p) for m in ms for p in ps])
-def test_newton_dx(m: int, p: float):
-    if m > 3:
-        return
-    for n in range(3, 8):
-        # Generate a monomial
-        f, df = monomial(m, n)
+        def f(x):
+            return np.sum(seed * x**n)
 
-        # We need to increase the number of nodes for p != infinity
-        n_prime = int(1 + 2 * m / p) * (n + 1)
+        def df(i, k, x):
+            if k == 1:
+                return n * seed[i] * x[i] ** (n - 1)
+            elif k == 2:
+                return n * (n - 1) * seed[i] * x[i] ** (n - 2)
+            elif k == 3:
+                return n * (n - 1) * (n - 2) * seed[i] * x[i] ** (n - 3)
 
-        # Transform object
-        t = lp.Transform(m, n_prime, p)
-
-        # Calculate the exact function values
-        function_values = np.array([f(*x) for x in t.grid])
-
-        # Perform the fast Newton transformation
+        function_values = np.array([f(x) for x in t.grid])
         coeffs = t.fnt(function_values)
+        for k in [1, 2, 3]:
+            for i in range(m):
+                dx_function_values = np.array([df(i, k, x) for x in t.grid])
+                dx_reconstruction = t.ifnt(t.dx(coeffs, i, k))
+                eps = np.linalg.norm(dx_reconstruction - dx_function_values)
+                assert eps < 1e-6
 
-        for i in range(m):
-            # Calculate the exact derivative
-            dx_function_values = np.array([df(i, *x) for x in t.grid])
 
-            # Apply forward, derivative and backward transformations
-            dx_reconstruction = t.ifnt(t.dx(coeffs, i))
+@pytest.mark.parametrize("m, p, ba", m_p_ba)
+def test_eval(m: int, p: float, ba: str):
+    for n in ns(m):
+        t = lpfun.Transform(m, n, p, basis=ba, report=False)
+        seed = np.random.rand(m)
 
-            # Compare the reconstruction with the exact
-            assert np.allclose(dx_reconstruction, dx_function_values)
+        def f(x):
+            return np.sum(seed * x**n)
+
+        function_values = np.array([f(x) for x in t.grid])
+        coeffs = t.fnt(function_values)
+        x = np.random.rand(m)
+        function_value = f(x)
+        reconstruction = t.eval(coeffs, x)
+        eps = np.abs(reconstruction - function_value)
+        assert eps < 1e-6

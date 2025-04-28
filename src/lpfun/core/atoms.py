@@ -1,475 +1,702 @@
 import numpy as np
 from numba import njit, prange
-from lpfun import NP_FLOAT, NP_INT, PARALLEL
-from lpfun.utils import concatenate_arrays, reduceat
-from lpfun.iterators import CompatibleIntegerList as CIL
+from lpfun import NP_FLOAT, NP_INT
+from lpfun.core.set import ordinal_embedding, entropy
 
 """
-This module contains the Numba JIT-compiled functions for the transformation of a vector x by a matrix A.
-
-The functions are divided into the following categories:
-- 1D transformations
-- Maximal transformations
-- 2D transformations
-- Transformations
-
-The functions are used in the Transform methods in the molecules.py module.
+- This module contains numba jit-compiled functions for the transformation of a vector by a matrix.
+- The functions are divided into the following categories: 1d, maximal, 2d, 3d and md transformations.
+- The functions are used in the transform methods in the molecules.py module.
 """
 
-# 1D Transformations
-
-
-@njit(parallel=PARALLEL)
-def lt_transform(A: np.ndarray, x: np.ndarray) -> np.ndarray:
-    """O(n^2)"""
-    return _lt_transform_parallel(A, x) if PARALLEL else _lt_transform_sequential(A, x)
-
 
 @njit
-def _lt_transform_sequential(A: np.ndarray, x: np.ndarray):
+def reduceat(
+    array: np.ndarray,
+    split_indices: np.ndarray,
+) -> np.ndarray:
+    """O(len(array))"""
+    sums = np.zeros(len(split_indices) - 1, dtype=array.dtype)
+    for i in range(len(split_indices) - 1):
+        start = split_indices[i]
+        end = split_indices[i + 1]
+        if start >= len(array):
+            break
+        end = min(end, len(array))
+        sums[i] = np.sum(array[start:end])
+    return sums[:i]
+
+
+# 1d
+
+
+@njit(parallel=True)
+def itransform_lt_1d(
+    L: np.ndarray,
+    x: np.ndarray,
+) -> np.ndarray:
     """O(n^2)"""
-    x = np.asarray(x).astype(NP_FLOAT)
-    dot, j, n = np.zeros_like(x), 0, x.shape[0]
-    for i in range(n):  # O(n)
-        j_next = j + i + 1
-        dot[i] = np.sum(A[j:j_next] * x[: i + 1])  # O(2i)
-        j = j_next
+    n = len(x)
+    ### indexing: k > j
+    ### NOTE: loop runs in parallel
+    dot = np.zeros_like(x)
+    for k in prange(n):
+        j = (k * (k + 1)) // 2
+        j_next = j + k + 1
+        dot[k] = np.sum(L[j:j_next] * x[: k + 1])
+    ###
     return dot
 
 
 @njit(parallel=True)
-def _lt_transform_parallel(A: np.ndarray, x: np.ndarray):
+def itransform_ut_1d(
+    U: np.ndarray,
+    x: np.ndarray,
+) -> np.ndarray:
     """O(n^2)"""
-    x = np.asarray(x).astype(NP_FLOAT)
-    dot, n = np.zeros_like(x), x.shape[0]
-    for i in prange(n):  # O(n)
-        j = (i * (i + 1)) // 2
-        dot[i] = np.sum(A[j : j + i + 1] * x[: i + 1])  # O(2i)
+    n = len(x)
+    ### indexing: k > j
+    ### NOTE: loop runs in parallel
+    dot = np.zeros_like(x)
+    for k in prange(n):
+        k_prime = n - k - 1
+        j = k * n - k * (k - 1) // 2
+        j_next = j + k_prime + 1
+        dot[k] = np.sum(U[j:j_next] * x[k:])
+    ###
     return dot
 
 
-@njit(parallel=PARALLEL)
-def ut_transform(A: np.ndarray, x: np.ndarray) -> np.ndarray:
-    """O(n^2)"""
-    return _ut_transform_parallel(A, x) if PARALLEL else _ut_transform_sequential(A, x)
-
-
-@njit
-def _ut_transform_sequential(A: np.ndarray, x: np.ndarray):
-    """O(n^2)"""
-    x = np.asarray(x).astype(NP_FLOAT)
-    dot, j, n = np.zeros_like(x), 0, x.shape[0]
-    for i in range(n):  # O(n)
-        i_prime = n - i - 1
-        j_next = j + i_prime + 1
-        dot[i] = np.sum(A[j:j_next] * x[i:n])  # O(2i)
-        j = j_next
-    return dot
+# maximal
 
 
 @njit(parallel=True)
-def _ut_transform_parallel(A: np.ndarray, x: np.ndarray):
-    """O(n^2)"""
-    x = np.asarray(x).astype(NP_FLOAT)
-    dot, n = np.zeros_like(x), x.shape[0]
-    for i in prange(n):  # O(n)
-        i_prime = n - i - 1
-        j = (i_prime * (i_prime + 1)) // 2
-        j_next = j + i_prime + 1
-        dot[i] = np.sum(A[j:j_next] * x[i:n])  # O(2i)
-    return dot
-
-
-# Maximal Transformations
-
-
-@njit(parallel=PARALLEL)
-def transform_maximal(A: np.ndarray, x: np.ndarray) -> np.ndarray:
-    """O(N*n*m)"""
-    return (
-        _transform_maximal_parallel(A, x)
-        if PARALLEL
-        else _transform_maximal_sequential(A, x)
+def itransform_lt_max(
+    L: np.ndarray,
+    x: np.ndarray,
+) -> np.ndarray:
+    ###
+    N, n = (
+        len(x),
+        int((np.sqrt(1 + 8 * len(L)) - 1) / 2),
     )
-
-
-@njit
-def _transform_maximal_sequential(A: np.ndarray, x: np.ndarray):
-    """O(N*n*m)"""
-    N, n = x.shape[0], int((np.sqrt(1 + 8 * A.shape[0]) - 1) / 2)
     m = int(np.log(N) / np.log(n))
-    dot, slot, remainder = np.copy(x), 1, N
-    for _ in range(m):  # O(m)
-        slot *= n  # = n^(l+1)
-        remainder //= n  # = n^(m-l-1)
-        splits = slot // n  # = n^l
-        pos = 0
-        for _ in range(remainder):  # O(remainder)
-            next_pos = pos + slot
-            chunk = dot[pos:next_pos]
-            chunk_splits = np.array_split(chunk, n)
-            chunk_dot, j = np.zeros((n, splits), dtype=NP_FLOAT), 0
-            for i in range(n):  # O(n)
-                j_next = j + i + 1
-                chunk_splits_i = chunk_splits[0 : i + 1]
-                for k, a in enumerate(A[j:j_next]):  # O(i)
-                    chunk_dot[i] += a * chunk_splits_i[k]  # O(2splits)
-                j = j_next
-            dot[pos:next_pos] = chunk_dot.reshape(-1)
-            pos = next_pos
+    ### indexing: s, r > i > j, k > l
+    ### NOTE: loop not parallelizable, runs sequentially
+    dot, s, r = np.copy(x), 1, N
+    for _ in range(m):
+        s_next, r_next = s * n, r // n
+        ### NOTE: loop runs in parallel
+        for i in prange(r_next):
+            pos_i = i * s_next
+            next_pos_i = pos_i + s_next
+            block = dot[pos_i:next_pos_i]
+            ### NOTE: possible overhead or numerical instability when parallelized, loop runs sequentially
+            dot_block, pos_k, j = np.zeros((s_next), dtype=NP_FLOAT), 0, 0
+            for k in range(n):
+                next_pos_k, j_next = pos_k + s, j + k + 1
+                ### NOTE: possible overhead or numerical instability when parallelized, loop runs sequentially
+                pos_l = 0
+                for l in range(j, j_next):
+                    next_pos_l = pos_l + s
+                    dot_block[pos_k:next_pos_k] += L[l] * block[pos_l:next_pos_l]
+                    pos_l = next_pos_l
+                ###
+                pos_k, j = next_pos_k, j_next
+            ###
+            dot[pos_i:next_pos_i] = dot_block
+        ###
+        s, r = s_next, r_next
+    ###
     return dot
 
 
 @njit(parallel=True)
-def _transform_maximal_parallel(A: np.ndarray, x: np.ndarray):
-    """O(N*n*m)"""
-    N, n = x.shape[0], int((np.sqrt(1 + 8 * A.shape[0]) - 1) / 2)
+def itransform_ut_max(
+    U: np.ndarray,
+    x: np.ndarray,
+) -> np.ndarray:
+    ###
+    N, n = (
+        len(x),
+        int((np.sqrt(1 + 8 * len(U)) - 1) / 2),
+    )
     m = int(np.log(N) / np.log(n))
-    dot, slot, remainder = np.copy(x), 1, N
-    # caution -- loop not parallelizable
-    for _ in range(m):  # O(m)
-        slot *= n  # = n^(l+1)
-        remainder //= n  # = n^(m-l-1)
-        splits = slot // n  # = n^l
-        for f in prange(remainder):  # O(remainder)
-            pos = f * slot
-            next_pos = pos + slot
-            chunk = dot[pos:next_pos]
-            chunk_splits = np.array_split(chunk, n)
-            chunk_dot = np.zeros((n, splits), dtype=NP_FLOAT)
-            # caution -- possible overhead
-            for i in range(n):  # O(n)
-                j = (i * (i + 1)) // 2
-                chunk_splits_i = chunk_splits[: i + 1]
-                # caution -- possible overhead
-                for k, a in enumerate(A[j : j + i + 1]):  # O(i)
-                    chunk_dot[i] += a * chunk_splits_i[k]  # O(2splits)
-            dot[pos:next_pos] = chunk_dot.reshape(-1)
-            pos = next_pos
+    ### indexing: s, r > i > j, k > l
+    ### NOTE: loop not parallelizable, runs sequentially
+    dot, s, r = np.copy(x), 1, N
+    for _ in range(m):
+        s_next, r_next = s * n, r // n
+        ### NOTE: loop runs in parallel
+        for i in prange(r_next):
+            pos_i = i * s_next
+            next_pos_i = pos_i + s_next
+            block = dot[pos_i:next_pos_i]
+            ### NOTE: possible overhead or numerical instability when parallelized, loop runs sequentially
+            dot_block, pos_k, j = np.zeros((s_next), dtype=NP_FLOAT), 0, 0
+            for k in range(n):
+                k_prime = n - k - 1
+                next_pos_k, j_next = pos_k + s, j + k_prime + 1
+                ### NOTE: possible overhead or numerical instability when parallelized, loop runs sequentially
+                pos_l = pos_k
+                for l in range(j, j_next):
+                    next_pos_l = pos_l + s
+                    dot_block[pos_k:next_pos_k] += U[l] * block[pos_l:next_pos_l]
+                    pos_l = next_pos_l
+                ###
+                pos_k, j = next_pos_k, j_next
+            ###
+            dot[pos_i:next_pos_i] = dot_block
+        ###
+        s, r = s_next, r_next
+    ###
     return dot
 
 
-@njit(parallel=PARALLEL)
-def ut_diag_transform_maximal(A: np.ndarray, x: np.ndarray):
-    """O(N*n)"""
-    return (
-        _ut_diag_transform_maximal_parallel(A, x)
-        if PARALLEL
-        else _ut_diag_transform_maximal_sequential(A, x)
-    )
-
-
-@njit
-def _ut_diag_transform_maximal_sequential(A: np.ndarray, x: np.ndarray):
-    """O(N*n)"""
-    N, n = x.shape[0], int((np.sqrt(1 + 8 * A.shape[0]) - 1) / 2)
-    pos, splits, result = 0, N // n, np.copy(x)
-    for _ in range(splits):  # O(n^m)
-        next_pos = pos + n
-        chunk = result[pos:next_pos]
-        chunk_dot, j, s, k = np.zeros(n, dtype=NP_FLOAT), 0, 0, n
-        for i in range(n):  # O(n)
-            j_next = j + k
-            chunk_dot[i] = np.sum(A[j:j_next] * chunk[s:n])  # O(2*i)
-            j, k, s = j_next, k - 1, s + 1
-        result[pos:next_pos] = chunk_dot
-        pos = next_pos
-    return result
-
-
 @njit(parallel=True)
-def _ut_diag_transform_maximal_parallel(A: np.ndarray, x: np.ndarray):
-    """O(N*n)"""
-    # TODO
-    raise NotImplementedError("Not implemented yet.")
-
-
-@njit(parallel=PARALLEL)
-def lt_diag_transform_maximal(A: np.ndarray, x: np.ndarray):
-    """O(N*n)"""
-    return (
-        _lt_diag_transform_maximal_parallel(A, x)
-        if PARALLEL
-        else _lt_diag_transform_maximal_sequential(A, x)
+def dtransform_max(
+    L: np.ndarray,
+    x: np.ndarray,
+) -> np.ndarray:
+    ###
+    N, n = (
+        len(x),
+        int((np.sqrt(1 + 8 * len(L)) - 1) / 2),
     )
-
-
-@njit
-def _lt_diag_transform_maximal_sequential(A: np.ndarray, x: np.ndarray):
-    """O(N*n)"""
-    N, n = x.shape[0], int((np.sqrt(1 + 8 * A.shape[0]) - 1) / 2)
-    pos, splits, result = 0, N // n, np.copy(x)
-    for _ in range(splits):  # O(n^m)
+    ### indexing: s > i > j, k
+    ### NOTE: loop runs in parallel
+    s, dot = N // n, np.copy(x)
+    for i in prange(s):
+        pos = i * n
         next_pos = pos + n
-        chunk = result[pos:next_pos]
-        chunk_dot, j = np.zeros(n, dtype=NP_FLOAT), 0
-        for i in range(n):  # O(n)
-            j_next = j + i + 1
-            chunk_dot[i] = np.sum(A[j:j_next] * chunk[: i + 1])  # O(2*i)
+        block = dot[pos:next_pos]
+        ### NOTE: possible overhead or numerical instability when parallelized, loop runs sequentially
+        dot_block, j = np.zeros(n, dtype=NP_FLOAT), 0
+        for k in range(n):
+            j_next = j + k + 1
+            dot_block[k] = np.sum(L[j:j_next] * block[: k + 1])
             j = j_next
-        result[pos:next_pos] = chunk_dot
-        pos = next_pos
-    return result
+        ###
+        dot[pos:next_pos] = dot_block
+    ###
+    return dot
+
+
+# 2d
 
 
 @njit(parallel=True)
-def _lt_diag_transform_maximal_parallel(A: np.ndarray, x: np.ndarray):
-    """O(N*n)"""
-    # TODO
-    raise NotImplementedError("Not implemented yet.")
-
-
-# 2D Transformations
-
-
-@njit(parallel=PARALLEL)
-def transform_2d(A: np.ndarray, x: np.ndarray, T: np.ndarray) -> np.ndarray:
-    """O(sum(T^2)*2)"""
-    return (
-        _transform_2d_parallel(A, x, T)
-        if PARALLEL
-        else _transform_2d_sequential(A, x, T)
+def itransform_lt_2d(
+    L: np.ndarray,
+    x: np.ndarray,
+    T: np.ndarray,
+) -> np.ndarray:
+    """O(2Nn)"""
+    zero = np.array([0], dtype=NP_INT)
+    N_1, cs_T = (
+        len(T),
+        np.concatenate((zero, np.cumsum(T))),
     )
-
-
-@njit
-def _transform_2d_sequential(A: np.ndarray, x: np.ndarray, T: np.ndarray):
-    """O(sum(T^2))"""
+    ### 1d
+    ### indexing: i > j, k
     dot_1d = np.zeros_like(x)
+    for i in prange(N_1):
+        t_i, pos_i, next_pos_i = T[i], cs_T[i], cs_T[i + 1]
+        chunk = x[pos_i:next_pos_i]
+        ### caution -- possible overhead or numerical instability
+        dot_block, j = np.zeros(t_i, dtype=NP_FLOAT), 0
+        for k in range(t_i):
+            j_next = j + k + 1
+            dot_block[k] = np.sum(L[j:j_next] * chunk[: k + 1])
+            j = j_next
+        ###
+        dot_1d[pos_i:next_pos_i] = dot_block
+    ###
+    ### 2d
+    ### indexing: i > j, k
     dot_2d = np.zeros_like(x)
-    l, pos = 0, 0
-    for i, slot in enumerate(T):  # O(T) = O(n) (in 2d)
-        next_pos = pos + slot
-        chunk = x[pos : pos + slot]
-        chunk_dot, k = np.zeros(slot, dtype=NP_FLOAT), 0
-        for j in range(slot):  # O(T_i)
-            k_next = k + j + 1
-            chunk_dot[j] = np.sum(A[k:k_next] * chunk[: j + 1])  # O(2j)
-            k = k_next
-        dot_1d[pos:next_pos] = chunk_dot
-        inner_pos = 0
-        for j in range(i + 1):  # O(i)
-            dot_2d[pos:next_pos] += (
-                A[l] * dot_1d[inner_pos : inner_pos + slot]
-            )  # O(2T_i)
-            inner_pos += T[j]
-            l += 1
-        pos = next_pos
+    for i in prange(N_1):
+        t_i, pos_i, next_pos_i = T[i], cs_T[i], cs_T[i + 1]
+        ### caution -- possible overhead or numerical instability
+        pos_k, j = 0, i * (i + 1) // 2
+        for k in range(i + 1):
+            t2 = T[k]
+            next_pos_k = pos_k + t2
+            dot_2d[pos_i:next_pos_i] += L[j] * dot_1d[pos_k : pos_k + t_i]
+            pos_k = next_pos_k
+            j += 1
+        ###
+    ###
     return dot_2d
 
 
 @njit(parallel=True)
-def _transform_2d_parallel(A: np.ndarray, x: np.ndarray, T: np.ndarray):
-    """O(sum(T^2))"""
-    length = T.shape[0]
+def itransform_ut_2d(
+    U: np.ndarray,
+    x: np.ndarray,
+    T: np.ndarray,
+) -> np.ndarray:
+    """O(2Nn)"""
+    zero = np.array([0], dtype=NP_INT)
+    N_1, cs_T = (
+        len(T),
+        np.concatenate((zero, np.cumsum(T))),
+    )
+    ### 1d
+    ### indexing: i > j, k
+    ### NOTE: loop runs in parallel
     dot_1d = np.zeros_like(x)
-    for i in prange(length):  # O(T)
-        slot, pos = T[i], np.sum(T[:i])
-        next_pos = pos + slot
-        chunk = x[pos : pos + slot]
-        chunk_dot = np.zeros(slot, dtype=NP_FLOAT)
-        # caution -- possible overhead
-        for j in range(slot):  # O(T_i)
-            k = (j * (j + 1)) // 2
-            chunk_dot[j] = np.sum(A[k : k + j + 1] * chunk[0 : j + 1])  # O(2*j)
-        dot_1d[pos:next_pos] = chunk_dot
+    for i in prange(N_1):
+        t_i, pos_i, next_pos_i = T[i], cs_T[i], cs_T[i + 1]
+        block, delta = x[pos_i:next_pos_i], N_1 - t_i
+        ### NOTE: possible overhead or numerical instability when parallelized, loop runs sequentially
+        dot_block, j = np.zeros(t_i, dtype=NP_FLOAT), 0
+        for k in range(t_i):
+            j_next = j + t_i - k
+            dot_block[k] = np.sum(U[j:j_next] * block[k:])
+            j = j_next + delta
+        ###
+        dot_1d[pos_i:next_pos_i] = dot_block
+    ###
+    ### 2d
+    ### indexing: i > j, k
+    ### NOTE: loop runs in parallel
     dot_2d = np.zeros_like(x)
-    for i in prange(length):  # O(T)
-        slot, pos = T[i], np.sum(T[:i])
-        next_pos = pos + slot
-        # caution -- possible overhead
-        for j in range(i + 1):  # O(i)
-            inner_pos = np.sum(T[:j])
-            dot_2d[pos:next_pos] += (
-                A[(i * (i + 1)) // 2 + j] * dot_1d[inner_pos : inner_pos + slot]
-            )  # O(2T_i)
-        pos = next_pos
+    for i in prange(N_1):
+        pos_i = cs_T[i]
+        ### NOTE: possible overhead or numerical instability when parallelized, loop runs sequentially
+        pos_k, j = int(pos_i), i * N_1 - i * (i - 1) // 2
+        for k in range(N_1 - i):
+            t_k = T[i + k]
+            next_pos_k = pos_k + t_k
+            dot_2d[pos_i : pos_i + t_k] += U[j] * dot_1d[pos_k:next_pos_k]
+            pos_k = next_pos_k
+            j += 1
+        ###
+    ###
     return dot_2d
 
 
-# Transformations
+# 3d
 
 
-@njit(parallel=PARALLEL)
-def transform_md(A: np.ndarray, x: np.ndarray, T: np.ndarray) -> np.ndarray:
-    """O(sum(T^2)*m)"""
-    return (
-        _transform_md_parallel(A, x, T)
-        if PARALLEL
-        else _transform_md_sequential(A, x, T)
-    )
-
-
-@njit
-def _transform_md_sequential(A: np.ndarray, x: np.ndarray, T: np.ndarray):
-    """O(sum(T^2)*m)"""
-    N = x.shape[0]
-    (
-        dot,
-        cumsum_T,
-        T0,
-        T1,
-    ) = (
-        np.copy(x),
+@njit(parallel=True)
+def itransform_lt_3d(
+    L: np.ndarray,
+    x: np.ndarray,
+    T: np.ndarray,
+) -> np.ndarray:
+    """O(3Nn)"""
+    N_1, N_2, cs_T = (
+        len(T),
+        T[0],
         np.concatenate((np.array([0]), np.cumsum(T))),
-        np.ones(N, dtype=NP_INT),
-        np.copy(T),
     )
-    # caution -- loop not parallelizable
-    l = 0
-    while True:
-        if len(T0) == 1:
-            break
-        pos = 0
-        cumsum_T0 = np.concatenate((np.array([0]), np.cumsum(T0)))
-        for _, slot in enumerate(T1):
-            next_pos = pos + slot
-            chunk = dot[pos:next_pos]
-            chunk_T0 = T0[
-                np.searchsorted(cumsum_T0, pos) : np.searchsorted(cumsum_T0, next_pos)
-            ]
-            len_chunk_T0 = len(chunk_T0)
-            cumsum_chunk_T0 = np.concatenate((np.array([0]), np.cumsum(chunk_T0)))
-            chunk_T = T[
-                np.searchsorted(cumsum_T, pos) : np.searchsorted(cumsum_T, next_pos)
-            ]
-            cumsum_chunk_T = np.concatenate((np.array([0]), np.cumsum(chunk_T)))
-            if l > 0:  # Case mD
-                chunk_T0_Ts = [
-                    chunk_T[
-                        np.searchsorted(
-                            cumsum_chunk_T, cumsum_chunk_T0[i]
-                        ) : np.searchsorted(cumsum_chunk_T, cumsum_chunk_T0[i + 1])
-                    ]
-                    for i in range(len_chunk_T0)
-                ]
-                # BEGIN DOT_LP #
-                chunk_dot, j = [
-                    np.zeros((size), dtype=NP_FLOAT) for size in chunk_T0
-                ], 0
-                for i in range(len(chunk_T0_Ts)):  # O(n)
-                    j_next = j + i + 1
-                    follower = chunk_T0_Ts[i]
-                    chunk_pos = 0
-                    for k, a in enumerate(A[j:j_next]):
-                        leader = chunk_T0_Ts[k]
-                        next_chunk_pos = chunk_pos + np.sum(leader)
-                        sub = np.copy(chunk[chunk_pos:next_chunk_pos])
-                        sub_rc = _rightchoices(sub, leader, follower, l + 1)
-                        chunk_dot[i] += a * sub_rc
-                        chunk_pos = next_chunk_pos
-                    j = j_next
-                dot[pos:next_pos] = concatenate_arrays(chunk_dot)
-                # END DOT_LP #
-            else:  # Case 1D
-                chunk_dot_1D, k = np.zeros(slot, dtype=NP_FLOAT), 0
-                for j in range(slot):  # O(T_i)
-                    k_next = k + j + 1
-                    chunk_dot_1D[j] = np.sum(A[k:k_next] * chunk[: j + 1])  # O(2*j)
-                    k = k_next
-                dot[pos:next_pos] = chunk_dot_1D
-            pos = next_pos
-        T0 = np.copy(T1)
-        T1 = reduceat(T1, cumsum_T)
-        l += 1
-    return dot
-
-
-@njit
-def _rightchoices(x: np.ndarray, leader: np.ndarray, follower: np.ndarray, depth: int):
-    """O(???)"""
-    cil_l = CIL()
-    cil_l.init(leader, depth)
-    cil_f = CIL()
-    cil_f.init(follower, depth)
-    y = np.zeros(np.sum(follower), dtype=NP_FLOAT)
-    pos_l, pos_f, go = 0, 0, True
-    while go:
-        indices = cil_l.indices
-        next_pos_l = pos_l + cil_l.element
-        if cil_f.eval(indices):
-            next_pos_f = pos_f + cil_f.element
-            y[pos_f:next_pos_f] = x[pos_l : pos_l + cil_f.element]
-            pos_f = next_pos_f
-        else:
-            pass
-        if next_pos_f == len(y):
-            break
-        pos_l = next_pos_l
-        go = cil_l.next()
-    return y
+    V_2 = np.array([np.sum(T[cs_T[i] : cs_T[i + 1]]) for i in range(N_2)], dtype=NP_INT)
+    cs_V_2 = np.concatenate((np.array([0]), np.cumsum(V_2)))
+    ### 1d
+    ### indexing: i > j, k
+    ### NOTE: loop runs in parallel
+    dot_1d = np.zeros_like(x)
+    for i in prange(N_1):
+        t_i, pos_i, next_pos_i = T[i], cs_T[i], cs_T[i + 1]
+        block = x[pos_i:next_pos_i]
+        ### NOTE: possible overhead or numerical instability when parallelized, loop runs sequentially
+        dot_block, j = np.zeros(t_i, dtype=NP_FLOAT), 0
+        for k in range(t_i):
+            j_next = j + k + 1
+            dot_block[k] = np.sum(L[j:j_next] * block[: k + 1])
+            j = j_next
+        ###
+        dot_1d[pos_i:next_pos_i] = dot_block
+    ###
+    ### 2d
+    ### indexing: i > j, k > l
+    ### NOTE: loop runs in parallel
+    dot_2d = np.zeros_like(x)
+    for i in prange(N_2):
+        t_i, pos_i, vol_i, next_pos_i = T[i], cs_T[i], cs_V_2[i], cs_T[i + 1]
+        sub_t1 = T[pos_i:next_pos_i]
+        ### NOTE: possible overhead or numerical instability when parallelized, loop runs sequentially
+        pos_k, _vol1, j = vol_i, 0, 0
+        for k in range(t_i):
+            t_k = sub_t1[k]
+            next_pos_k = pos_k + t_k
+            ### NOTE: possible overhead or numerical instability when parallelized, loop runs sequentially
+            pos_l = int(vol_i)
+            for l in range(k + 1):
+                t_l = sub_t1[l]
+                next_pos_l = pos_l + t_l
+                dot_2d[pos_k:next_pos_k] += L[j] * dot_1d[pos_l : pos_l + t_k]
+                pos_l = next_pos_l
+                j += 1
+            pos_k = next_pos_k
+            _vol1 += t_k
+        ###
+    ###
+    ### 3d
+    ### indexing: i, j > k > l
+    ### NOTE: loop runs in parallel
+    dot_3d = np.zeros_like(x)
+    for i in prange(N_2):
+        j = i * (i + 1) // 2
+        t_i, v_i = T[i], V_2[i]
+        pos_i, vol_i = cs_T[i], cs_V_2[i]
+        next_pos_i, next_vol_i = cs_T[i + 1], cs_V_2[i + 1]
+        sub_t_i = T[pos_i:next_pos_i]
+        ### NOTE: possible overhead or numerical instability when parallelized, loop runs sequentially
+        pos_k, vol_k = 0, 0
+        for k in range(i + 1):
+            t_k, v_k = T[k], V_2[k]
+            next_pos_k, next_vol_k = pos_k + t_k, vol_k + v_k
+            sub_t_k = T[pos_k:next_pos_k]
+            block = dot_2d[vol_k:next_vol_k]
+            ### NOTE: possible overhead or numerical instability when parallelized, loop runs sequentially
+            pos_l_1, _pos2, sub = 0, 0, np.zeros(v_i, dtype=NP_FLOAT)
+            for l in range(t_i):
+                t_l_1, t_l_2 = sub_t_i[l], sub_t_k[l]
+                next_pos_l_1, next_pos_l_2 = pos_l_1 + t_l_1, _pos2 + t_l_2
+                sub[pos_l_1:next_pos_l_1] = block[_pos2 : _pos2 + t_l_1]
+                pos_l_1, _pos2 = next_pos_l_1, next_pos_l_2
+            dot_3d[vol_i:next_vol_i] += L[j] * sub
+            ###
+            pos_k, vol_k = next_pos_k, next_vol_k
+            j += 1
+        ###
+    ###
+    return dot_3d
 
 
 @njit(parallel=True)
-def _transform_md_parallel(A: np.ndarray, x: np.ndarray, T: np.ndarray):
-    """O(sum(T^2)*m)"""
-    # TODO
-    raise NotImplementedError("Not implemented yet.")
-
-
-@njit(parallel=PARALLEL)
-def ut_diag_transform(A: np.ndarray, x: np.ndarray, T: np.ndarray):
-    """O(sum(T^2))"""
-    return (
-        _ut_diag_transform_parallel(A, x, T)
-        if PARALLEL
-        else _ut_diag_transform_sequential(A, x, T)
+def itransform_ut_3d(
+    U: np.ndarray,
+    x: np.ndarray,
+    T: np.ndarray,
+) -> np.ndarray:
+    """O(3Nn)"""
+    N_1, N_2, cs_T = (
+        len(T),
+        T[0],
+        np.concatenate((np.array([0]), np.cumsum(T))),
     )
+    V_2 = np.array([np.sum(T[cs_T[i] : cs_T[i + 1]]) for i in range(N_2)], dtype=NP_INT)
+    cs_V2 = np.concatenate((np.array([0]), np.cumsum(V_2)))
+    ### 1d
+    ### indexing: i > j, k
+    ### NOTE: loop runs in parallel
+    dot_1d = np.zeros_like(x)
+    for i in prange(N_1):
+        t_i, pos_i, next_pos_i = T[i], cs_T[i], cs_T[i + 1]
+        block, delta = x[pos_i:next_pos_i], N_2 - t_i
+        ### NOTE: possible overhead or numerical instability when parallelized, loop runs sequentially
+        dot_block, j = np.zeros(t_i, dtype=NP_FLOAT), 0
+        for k in range(t_i):
+            j_next = j + t_i - k
+            dot_block[k] = np.sum(U[j:j_next] * block[k:])
+            j = j_next + delta
+        ###
+        dot_1d[pos_i:next_pos_i] = dot_block
+    ###
+    ### 2d
+    ### indexing: i > j, k > l
+    ### NOTE: loop runs in parallel
+    dot_2d = np.zeros_like(x)
+    for i in prange(N_2):
+        t_i, pos_i, vol_i, next_pos_i = T[i], cs_T[i], cs_V2[i], cs_T[i + 1]
+        sub_t_i, delta = T[pos_i:next_pos_i], N_2 - t_i
+        ### NOTE: possible overhead or numerical instability when parallelized, loop runs sequentially
+        pos_k, vol_k, j = int(vol_i), 0, 0
+        for k in range(t_i):
+            t_k = sub_t_i[k]
+            next_pos_k = pos_k + t_k
+            ### NOTE: possible overhead or numerical instability when parallelized, loop runs sequentially
+            pos_l = int(vol_i + vol_k)
+            for l in range(t_i - k):
+                t_l = sub_t_i[k + l]
+                next_pos_l = pos_l + t_l
+                dot_2d[pos_k : pos_k + t_l] += U[j] * dot_1d[pos_l:next_pos_l]
+                pos_l = next_pos_l
+                j += 1
+            j += delta
+            ###
+            pos_k = next_pos_k
+            vol_k += t_k
+        ###
+        vol_i += vol_k
+        V_2[i] = vol_k
+    ###
+    ### 3d
+    ### indexing: i, j > k > l
+    ### NOTE: loop runs in parallel
+    dot_3d = np.zeros_like(x)
+    for i in prange(N_2):
+        j = i * N_2 - i * (i - 1) // 2
+        v_i = V_2[i]
+        pos_i, vol_i = cs_T[i], cs_V2[i]
+        next_pos_i, next_vol_i = cs_T[i + 1], cs_V2[i + 1]
+        sub_t_i = T[pos_i:next_pos_i]
+        ### NOTE: possible overhead or numerical instability when parallelized, loop runs sequentially
+        pos_k, vol_k = int(pos_i), int(vol_i)
+        for k in range(N_2 - i):
+            i_plus_k = i + k
+            t_k, v_k = T[i_plus_k], V_2[i_plus_k]
+            next_pos_k, next_vol_k = pos_k + t_k, vol_k + v_k
+            sub_t_k = T[pos_k:next_pos_k]
+            block = dot_2d[vol_k:next_vol_k]
+            ### NOTE: possible overhead or numerical instability when parallelized, loop runs sequentially
+            pos_l_1, pos_l_2, sub = 0, 0, np.zeros(v_i, dtype=NP_FLOAT)
+            for l in range(t_k):
+                t_l_1, t_l_2 = sub_t_i[l], sub_t_k[l]
+                next_pos_l_1, next_pos_l_2 = pos_l_1 + t_l_1, pos_l_2 + t_l_2
+                sub[pos_l_1 : pos_l_1 + t_l_2] = block[pos_l_2:next_pos_l_2]
+                pos_l_1, pos_l_2 = next_pos_l_1, next_pos_l_2
+            dot_3d[vol_i:next_vol_i] += U[j] * sub
+            ###
+            pos_k, vol_k = next_pos_k, next_vol_k
+            j += 1
+        ###
+    ###
+    return dot_3d
 
 
-@njit
-def _ut_diag_transform_sequential(A: np.ndarray, x: np.ndarray, T: np.ndarray):
-    """O(sum(T^2))"""
-    n, pos, result = np.max(T), 0, np.zeros_like(x)
-    for slot in T:  # O(len(T))
-        next_pos = pos + slot
-        chunk = x[pos:next_pos]
-        chunk_dot, j, s, k = np.zeros(slot, dtype=NP_FLOAT), 0, 0, n
-        for i in range(slot):  # O(slot)
-            j_next, j_inner = j + k, j + slot - s
-            chunk_dot[i] = np.sum(A[j:j_inner] * chunk[s:slot])  # O(2*slot)
-            j, k, s = j_next, k - 1, s + 1
-        result[pos:next_pos] = chunk_dot
-        pos = next_pos
-    return result
+# md
 
 
-@njit
-def _ut_diag_transform_parallel(A: np.ndarray, x: np.ndarray, T: np.ndarray):
-    """O(sum(T^2))"""
-    # TODO
-    raise NotImplementedError("Not implemented yet.")
-
-
-@njit(parallel=PARALLEL)
-def lt_diag_transform(A: np.ndarray, x: np.ndarray, T: np.ndarray):
-    """O(sum(T^2))"""
-    return (
-        _lt_diag_transform_parallel(A, x, T)
-        if PARALLEL
-        else _lt_diag_transform_sequential(A, x, T)
+@njit(parallel=True)
+def itransform_lt_md(
+    L: np.ndarray,
+    x: np.ndarray,
+    T: np.ndarray,
+) -> np.ndarray:
+    """O(Nmn)"""
+    zero = np.array([0], dtype=NP_INT)
+    dot, cs_T, V_0, e_T = (
+        np.zeros_like(x),
+        np.concatenate((zero, np.cumsum(T))),
+        np.copy(T),
+        entropy(T),
     )
-
-
-@njit
-def _lt_diag_transform_sequential(A: np.ndarray, x: np.ndarray, T: np.ndarray):
-    """O(sum(T^2))"""
-    pos, result = 0, np.zeros_like(x)
-    for slot in T:  # O(len(T))
-        next_pos = pos + slot
-        chunk = x[pos:next_pos]
-        chunk_dot, j = np.zeros(slot, dtype=NP_FLOAT), 0
-        for i in range(slot):  # O(slot)
-            j_next = j + i + 1
-            chunk_dot[i] = np.sum(A[j:j_next] * chunk[: i + 1])  # O(2*slot)
+    m = len(e_T) - 1
+    ### 1d
+    ### indexing: i > j, k
+    ### NOTE: loop runs in parallel
+    for i in prange(e_T[1]):
+        t_i, pos_i, next_pos_i = T[i], cs_T[i], cs_T[i + 1]
+        block = x[pos_i:next_pos_i]
+        ###
+        dot_block, j = np.zeros(t_i, dtype=NP_FLOAT), 0
+        for k in range(t_i):
+            j_next = j + k + 1
+            dot_block[k] = np.sum(L[j:j_next] * block[: k + 1])
             j = j_next
-        result[pos:next_pos] = chunk_dot
+        ###
+        dot[pos_i:next_pos_i] = dot_block
+    ###
+    ### md
+    ### indexing: h > i > j, k > l
+    ### NOTE: no parallelization
+    V_1 = reduceat(V_0, cs_T)
+    for h in range(1, m):
+        cs_V_0, cs_V_1 = (
+            np.concatenate((zero, np.cumsum(V_0))),  # NOTE: else, unexpected behaviour
+            np.concatenate((zero, np.cumsum(V_1))),
+        )
+        ### outer loop
+        ### NOTE: loop runs in parallel
+        for i in prange(e_T[h + 1]):
+            pos, next_pos = cs_V_1[i], cs_V_1[i + 1]
+            block = dot[pos:next_pos]
+            interval = np.array([pos, next_pos])
+            pos_T, next_pos_T = np.searchsorted(cs_T, interval)
+            pos_V_0, next_pos_V_0 = np.searchsorted(cs_V_0, interval)
+            block_T, block_V_0 = (
+                T[pos_T:next_pos_T],
+                V_0[pos_V_0:next_pos_V_0],
+            )
+            cs_block_T, cs_block_V_0 = (
+                np.concatenate((zero, np.cumsum(block_T))),
+                np.concatenate((zero, np.cumsum(block_V_0))),
+            )
+            ids_block_T = np.searchsorted(cs_block_T, cs_block_V_0)
+            len_block_V_0 = len(block_V_0)
+            ### start inner loop
+            ### NOTE: possible overhead or numerical instability when parallelized, loop runs sequentially
+            dot_block, j = np.zeros(cs_block_V_0[-1], dtype=NP_FLOAT), 0
+            for k in range(len_block_V_0):
+                follower, pos_follower, next_pos_follower = (
+                    block_T[ids_block_T[k] : ids_block_T[k + 1]],
+                    cs_block_V_0[k],
+                    cs_block_V_0[k + 1],
+                )
+                ### NOTE: possible overhead or numerical instability when parallelized, loop runs sequentially
+                for l in range(k + 1):
+                    leader, pos_leader, next_pos_leader = (
+                        block_T[ids_block_T[l] : ids_block_T[l + 1]],
+                        cs_block_V_0[l],
+                        cs_block_V_0[l + 1],
+                    )
+                    vec = block[pos_leader:next_pos_leader]
+                    phi = ordinal_embedding(h, follower, leader)
+                    dot_block[pos_follower:next_pos_follower] += L[j] * vec[phi]
+                    j += 1
+                ###
+            dot[pos:next_pos] = dot_block
+            ### end inner loop
+        ### end outer loop
+        V_0 = V_1
+        V_1 = reduceat(V_1, cs_T)
+    ###
+    return dot
+
+
+@njit(parallel=True)
+def itransform_ut_md(
+    U: np.ndarray,
+    x: np.ndarray,
+    T: np.ndarray,
+) -> np.ndarray:
+    """O(Nmn)"""
+    zero = np.array([0], dtype=NP_INT)
+    dot, cs_T, V_0, e_T, n = (
+        np.zeros_like(x),
+        np.concatenate((zero, np.cumsum(T))),
+        np.copy(T),
+        entropy(T),
+        T[0],
+    )
+    m = len(e_T) - 1
+    ### 1d
+    ### indexing: i > j, k
+    ### NOTE: loop runs in parallel
+    for i in prange(e_T[1]):
+        t_i, pos_i, next_pos_i = T[i], cs_T[i], cs_T[i + 1]
+        delta, block = n - t_i, x[pos_i:next_pos_i]
+        ### NOTE: possible overhead or numerical instability when parallelized, loop runs sequentially
+        dot_block, j = np.zeros(t_i, dtype=NP_FLOAT), 0
+        for k in range(t_i):
+            j_next = j + t_i - k
+            dot_block[k] = np.sum(U[j:j_next] * block[k:])
+            j = j_next + delta
+        ###
+        dot[pos_i:next_pos_i] = dot_block
+    ###
+    ### md
+    ### indexing: h > i > j, k > l
+    ### NOTE: no parallelization
+    V_1 = reduceat(V_0, cs_T)
+    for h in range(1, m):
+        cs_V_0, cs_V_1 = (
+            np.concatenate((zero, np.cumsum(V_0))),  # NOTE: else unexpected behaviour
+            np.concatenate((zero, np.cumsum(V_1))),
+        )
+        ### start outer loop
+        ### NOTE: loop runs in parallel
+        for i in prange(e_T[h + 1]):
+            pos, next_pos = cs_V_1[i], cs_V_1[i + 1]
+            block = dot[pos:next_pos]
+            interval = np.array([pos, next_pos])
+            pos_T, next_pos_T = np.searchsorted(cs_T, interval)
+            pos_V_0, next_pos_V_0 = np.searchsorted(cs_V_0, interval)
+            block_T, block_V_0 = (
+                T[pos_T:next_pos_T],
+                V_0[pos_V_0:next_pos_V_0],
+            )
+            cs_block_T, cs_block_V_0 = (
+                np.concatenate((zero, np.cumsum(block_T))),
+                np.concatenate((zero, np.cumsum(block_V_0))),
+            )
+            ids_block_T = np.searchsorted(cs_block_T, cs_block_V_0)
+            len_block_V_0 = len(block_V_0)
+            delta = n - len_block_V_0
+            ### start inner loop
+            ### NOTE: possible overhead or numerical instability when parallelized, loop runs sequentially
+            dot_block, j = np.zeros(cs_block_V_0[-1], dtype=NP_FLOAT), 0
+            for k in range(len_block_V_0):
+                follower, pos_follower, next_pos_follower = (
+                    block_T[ids_block_T[k] : ids_block_T[k + 1]],
+                    cs_block_V_0[k],
+                    cs_block_V_0[k + 1],
+                )
+                sum_follower = next_pos_follower - pos_follower
+                ### NOTE: possible overhead or numerical instability when parallelized, loop runs sequentially
+                for l in range(len_block_V_0 - k):
+                    leader, pos_leader, next_pos_leader = (
+                        block_T[ids_block_T[k + l] : ids_block_T[k + l + 1]],
+                        cs_block_V_0[k + l],
+                        cs_block_V_0[k + l + 1],
+                    )
+                    vec = block[pos_leader:next_pos_leader]
+                    phi = ordinal_embedding(h, leader, follower)
+                    ext = np.zeros(sum_follower, dtype=NP_FLOAT)
+                    ext[phi] = vec
+                    dot_block[pos_follower:next_pos_follower] += U[j] * ext
+                    j += 1
+                ###
+                j += delta
+            dot[pos:next_pos] = dot_block
+            ### end inner loop
+        ### end outer loop
+        V_0 = V_1
+        V_1 = reduceat(V_1, cs_T)
+    ###
+    return dot
+
+
+@njit(parallel=True)
+def dtransform_lt_md(
+    L: np.ndarray,
+    x: np.ndarray,
+    T: np.ndarray,
+):
+    """O(Nn)"""
+    N1, cs_T = (
+        len(T),
+        np.concatenate((np.array([0]), np.cumsum(T))),
+    )
+    ### NOTE: loop runs in parallel
+    dot = np.zeros_like(x)
+    for i in prange(N1):
+        t, pos, next_pos = T[i], cs_T[i], cs_T[i + 1]
+        chunk = x[pos:next_pos]
+        ### NOTE: possible overhead or numerical instability when parallelized, loop runs sequentially
+        chunk_dot, j = np.zeros(t, dtype=NP_FLOAT), 0
+        for k in range(t):
+            j_next = j + k + 1
+            chunk_dot[k] = np.sum(L[j:j_next] * chunk[: k + 1])
+            j = j_next
+        dot[pos:next_pos] = chunk_dot
+        ###
         pos = next_pos
-    return result
+    ###
+    return dot
 
 
-@njit
-def _lt_diag_transform_parallel(A: np.ndarray, x: np.ndarray, T: np.ndarray):
-    """O(sum(T^2))"""
-    # TODO
-    raise NotImplementedError("Not implemented yet.")
+@njit(parallel=True)
+def dtransform_ut_md(
+    U: np.ndarray,
+    x: np.ndarray,
+    T: np.ndarray,
+):
+    """O(Nn)"""
+    N1, Nm, cs_T = (
+        len(T),
+        int(T[0]),
+        np.concatenate((np.array([0]), np.cumsum(T))),
+    )
+    ### NOTE: loop runs in parallel
+    dot = np.zeros_like(x)
+    for i in prange(N1):
+        t, pos, next_pos = T[i], cs_T[i], cs_T[i + 1]
+        chunk, delta = x[pos:next_pos], Nm - t
+        ### NOTE: possible overhead or numerical instability when parallelized, loop runs sequentially
+        chunk_dot, j = np.zeros(t, dtype=np.float64), 0
+        for k in range(t):
+            k_prime = t - k - 1
+            j_next = j + k_prime + 1
+            chunk_dot[k] = np.sum(U[j:j_next] * chunk[k:])
+            j = j_next + delta
+        dot[pos:next_pos] = chunk_dot
+        ###
+        pos = next_pos
+    ###
+    return dot
