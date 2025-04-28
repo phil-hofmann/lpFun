@@ -4,31 +4,80 @@ import threading
 import numpy as np
 from typing import Literal
 from lpfun import NP_FLOAT
+from abc import ABC, abstractmethod
+from lpfun.core.set import lp_set, lp_tube, ordinal_embedding
 from lpfun.core.molecules import (
-    transform,
     itransform,
     dtransform,
 )
+from lpfun.core.utils import apply_permutation
 from lpfun.utils import (
     cheb2nd,
+    ###
     newton2lagrange,
     newton2derivative,
     newton2point,
+    ###
     chebyshev2lagrange,
     chebyshev2derivative,
-    # chebyshev2point, # TODO
-    apply_permutation,
+    chebyshev2point,
+    ###
     inv,
     is_lower_triangular,
     leja_nodes,
-    grid,
+    gen_grid,
     lu,
     rmo,
-    tube,
 )
 
+import numpy as np
+from abc import ABC, abstractmethod
 
-class Transform:
+
+class AbstractTransform(ABC):
+    @property
+    @abstractmethod
+    def spatial_dimension(self) -> int:
+        """Returns the spatial dimension"""
+        pass
+
+    @property
+    @abstractmethod
+    def polynomial_degree(self) -> int:
+        """Returns the polynomial degree"""
+        pass
+
+    @property
+    @abstractmethod
+    def lp_degree(self) -> int:
+        """Returns the lp degree"""
+        pass
+
+    @abstractmethod
+    def tube(self) -> np.ndarray:
+        """Returns the tube array"""
+        pass
+
+    @property
+    @abstractmethod
+    def multi_index_set(self) -> np.ndarray:
+        """Returns the multi-index set array"""
+        pass
+
+    @property
+    @abstractmethod
+    def nodes(self) -> np.ndarray:
+        """Returns the nodes array"""
+        pass
+
+    @property
+    @abstractmethod
+    def grid(self) -> np.ndarray:
+        """Returns the grid array"""
+        pass
+
+
+class Transform(AbstractTransform):
     """Transform class."""
 
     def __init__(
@@ -38,9 +87,8 @@ class Transform:
         lp_degree: float = 2.0,  # ... p
         nodes: callable = cheb2nd,  # ... x
         basis: Literal["newton", "chebyshev"] = "newton",
-        parallel=True,
         precompilation: bool = True,
-        threshold: int = 20_000_000,
+        threshold: int = 150_000_000,
         report: bool = True,
     ):
         """
@@ -52,7 +100,6 @@ class Transform:
             lp_degree (float): The p-norm of the polynomial space.
             nodes (callable): A callable function that takes an integer and returns a one dimensional numpy array of nodes.
             basis (str): The basis to use for the Vandermonde and differentiation matrices. Either "newton" or "chebyshev".
-            parallel (bool): Decide whether to use parallel execution on the CPU. Utilizes precomputations for the inverse of the Vandermonde matrix if activated.
             precompilation (bool): Precompile all the JIT functions with dummy inputs.
             threshold (int): The threshold for the dimension of the lower space. If the dimension is greater than the threshold, an error is raised.
             report (bool): Print a report after initialization.
@@ -63,26 +110,23 @@ class Transform:
         self._m = int(spatial_dimension)
         self._n = int(polynomial_degree)
         self._p = float(lp_degree)
-        self._parallel = bool(parallel)
+        self._basis = str(basis)
 
-        if basis == "newton":
-            vandermonde_matrix = newton2lagrange
-            differentiation_matrix = newton2derivative
-            self._eval_at_point = newton2point
-        elif basis == "chebyshev":
-            vandermonde_matrix = chebyshev2lagrange
-            differentiation_matrix = chebyshev2derivative
-            self._eval_at_point = None
-        else:
+        if not basis in ["newton", "chebyshev"]:
             self._stop_spinner() if report else None
             raise ValueError("Invalid choice for basis.")
 
-        # Compute tube only if p is not np.inf
-        self._spinner_label = "Compute Tubes"
-        self._T = tube(self._m, self._n, self._p)
-        self._length = np.sum(self._T)
+        # multi index set
+        self._spinner_label = "Construct multi index set"
+        self._A = lp_set(self._m, self._n, self._p)
+        self._length = (self._n + 1) ** self._m if self._p is np.inf else len(self._A)
 
-        # Check the threshold
+        # tube projection
+        self._spinner_label = "Construct tube projections"
+        self._T = lp_tube(self._A, self._m, self._n, self._p)
+
+        # check threshold
+        self._spinner_label = "Check threshold"
         if threshold is None:
             warnings.warn("Threshold is set to None. This may lead to memory issues.")
         elif self._length > threshold:
@@ -94,15 +138,8 @@ class Transform:
                 """
             )
 
-        # TODO REMOVE...
-        # if not parallel and self._m > 3:
-        #     self._stop_spinner() if report else None
-        #     raise ValueError(
-        #         "Precomputation must be enabled when the spatial dimension is greater than three."
-        #     )
-
-        # One dimensional (unisolvent, leja-ordered) nodes
-        self._spinner_label = "Compute Nodes"
+        # one dimensional (unisolvent, leja-ordered) nodes
+        self._spinner_label = "Construct nodes"
         x = nodes(self._n + 1)
         if len(np.unique(x)) != self._n + 1:
             self._stop_spinner() if report else None
@@ -110,67 +147,90 @@ class Transform:
         x = leja_nodes(x)
         self._x = x
 
-        # Grid
-        G = grid(x, self._m, self._n, self._p)
+        # grid
+        self._spinner_label = "Construct grid"
+        grid = gen_grid(x, self._A, self._m, self._n, self._p)
+        self._lex_order = np.lexsort(grid.T)  # user experience
+        self._grid = apply_permutation(self._lex_order, grid, invert=False)
 
-        # Lex order: User experience
-        self._lex_order = np.lexsort(G.T)
-        self._G = apply_permutation(self._lex_order, G, invert=False)
+        # compute matrices
+        self._spinner_label = "Construct matrices"
+        if basis == "newton":
+            self._Vx = newton2lagrange(x)
+            self._Dx = newton2derivative(x)
+        elif basis == "chebyshev":
+            self._Vx = chebyshev2lagrange(x)
+            self._Dx = chebyshev2derivative(x)
+        self._Dx2 = self._Dx @ self._Dx
+        self._Dx3 = self._Dx @ self._Dx2
 
-        # Compute matrices
-        self._spinner_label = "Compute Matrices"
-        V = vandermonde_matrix(x)
-        D = differentiation_matrix(x)
+        # compute condition number
+        self._cond_Vx = np.linalg.cond(self._Vx)
 
-        # Compute condition number
-        self._cond_V = np.linalg.cond(V)
-
-        # Row major ordering V
-        self._spinner_label = "Row Major Ordering V"
-        if not is_lower_triangular(V):
-            self._V, self._invV = (None, None)
-            V_L, V_U = lu(V)
-            self._V_L, self._V_U = rmo(V_L), rmo(V_U[::-1, ::-1])[::-1]
-            invV_L, invV_U = inv(V_L), inv(V_U[::-1, ::-1])[::-1, ::-1]
-            self._invV_L, self._invV_U = (
-                (rmo(invV_L), rmo(invV_U[::-1, ::-1])[::-1])
-                if self._parallel
-                else (None, None)
+        # row major ordering V
+        self._spinner_label = "Row major ordering V"
+        if not is_lower_triangular(self._Vx):
+            Vx_lt, Vx_ut = lu(self._Vx)
+            self._Vx_lt, self._inv_Vx_lt = rmo(Vx_lt), rmo(inv(Vx_lt))
+            self._Vx_ut, self._inv_Vx_ut = (
+                rmo(Vx_ut[::-1, ::-1])[::-1],
+                rmo(inv(Vx_ut[::-1, ::-1]))[::-1],
             )
         else:
-            self._V, self._invV = rmo(V), rmo(inv(V)) if self._parallel else None
-            self._V_L, self._V_U, self._invV_L, self._invV_U = (
-                None,
-                None,
-                None,
-                None,
-            )
+            self._Vx_lt, self._inv_Vx_lt = rmo(self._Vx), rmo(inv(self._Vx))
+            self._Vx_ut, self._inv_Vx_ut = None, None
 
-        # Row major ordering D
-        self._spinner_label = "Row Major Ordering D"
-        if not is_lower_triangular(D.T):
-            self._D, self._DT = (None, None)
-            D_L, D_U = lu(D)
-            self._D_L, self._D_U = (rmo(D_L), rmo(D_U[::-1, ::-1])[::-1])
-            self._DT_L, self._DT_U = (rmo(D_U.T), rmo(D_L.T[::-1, ::-1])[::-1])
+        # row major ordering D
+        self._spinner_label = "Row major ordering D"
+        if not is_lower_triangular(self._Dx.T):
+            Dx_lt, Dx_ut = lu(self._Dx)
+            Dx2_lt, Dx2_ut = lu(self._Dx2)
+            Dx3_lt, Dx3_ut = lu(self._Dx3)
+            #
+            self._Dx_lt = [rmo(Dx_lt), rmo(Dx2_lt), rmo(Dx3_lt)]
+            self._Dx_ut = [
+                rmo(Dx_ut[::-1, ::-1])[::-1],
+                rmo(Dx2_ut[::-1, ::-1])[::-1],
+                rmo(Dx3_ut[::-1, ::-1])[::-1],
+            ]
+            #
+            self._DxT_lt = [rmo(Dx_ut.T), rmo(Dx2_ut.T), rmo(Dx3_ut.T)]
+            self._DxT_ut = [
+                rmo(Dx_lt.T[::-1, ::-1])[::-1],
+                rmo(Dx2_lt.T[::-1, ::-1])[::-1],
+                rmo(Dx3_lt.T[::-1, ::-1])[::-1],
+            ]
+
+            # self._Dx_lt, self._Dx_ut = (rmo(Dx_lt), rmo(Dx_ut[::-1, ::-1])[::-1])
+            # self._DxT_lt, self._DxT_ut = (rmo(Dx_ut.T), rmo(Dx_lt.T[::-1, ::-1])[::-1])
         else:
-            self._D, self._DT = rmo(D[::-1, ::-1])[::-1], rmo(D.T)
-            self._D_L, self._D_U, self._DT_L, self._DT_U = (None, None, None, None)
+            self._Dx_lt = [
+                rmo(self._Dx[::-1, ::-1])[::-1],
+                rmo(self._Dx2[::-1, ::-1])[::-1],
+                rmo(self._Dx3[::-1, ::-1])[::-1],
+            ]
+            self._DxT_lt = [rmo(self._Dx.T), rmo(self._Dx2.T), rmo(self._Dx3.T)]
+            #
+            self._Dx_ut, self._DxT_ut = None, None
+
+            # self._Dx_lt, self._DxT_lt = rmo(self._Dx[::-1, ::-1])[::-1], rmo(self._Dx.T)
+            # self._Dx_ut, self._DxT_ut = None, None
 
         construction_end = time.time()
         self._construction_ms = (construction_end - construction_start) * 1000
 
-        # Warmup the JIT compiler
-        self._spinner_label = "Precompilation"
+        # warmup JIT compiler
+        self._spinner_label = "Precompile jit functions"
         precompilation_start = time.time()
         if precompilation:
             self.warmup()
         precompilation_end = time.time()
         self._precompilation_ms = (precompilation_end - precompilation_start) * 1000
 
+        # stop spinner
         self._stop_spinner() if report else None
 
-        # Print report
+        # print report
         print()
         print(self) if report else None
 
@@ -210,25 +270,34 @@ class Transform:
         return self._p
 
     @property
+    def tube(self) -> np.ndarray:
+        return self._T
+
+    @property
+    def multi_index_set(self) -> np.ndarray:
+        return self._A
+
+    @property
     def nodes(self) -> np.ndarray:
         return self._x
 
     @property
     def grid(self) -> np.ndarray:
-        return self._G
-
-    @property
-    def tube(self) -> np.ndarray:
-        return self._T if len(self._T) > 0 else None
+        return self._grid
 
     def warmup(self) -> None:
         """Warmup the JIT compiler."""
         zeros_N = np.zeros(len(self), dtype=NP_FLOAT)
         zeros_m = np.zeros(self._m, dtype=NP_FLOAT)
+        self._spinner_label = "Precompile fast Newton transform"
         self.fnt(zeros_N)
+        self._spinner_label = "Precompile inverse fast Newton transform"
         self.ifnt(zeros_N)
+        self._spinner_label = "Precompile derivative"
         self.dx(zeros_N, 0)
+        self._spinner_label = "Precompile transposed derivative"
         self.dxT(zeros_N, 0)
+        self._spinner_label = "Precompile point evaluation"
         self.eval(zeros_N, zeros_m)
 
     def fnt(self, function_values: np.ndarray) -> np.ndarray:
@@ -239,63 +308,26 @@ class Transform:
         )
         ###
         coefficients = np.zeros(len(self), dtype=NP_FLOAT)
-        if self._invV is not None:
+        if self._inv_Vx_lt is not None:
             coefficients = itransform(
-                self._invV,
-                function_values,
-                self._T,
-                self._m,
-                self._p,
-                mode="lower",
-                parallel=self._parallel,
-            )
-        elif self._V is not None:
-            coefficients = transform(
-                self._V,
+                self._inv_Vx_lt,
                 function_values,
                 self._T,
                 self._m,
                 self._p,
                 mode="lower",
             )
-        elif self._invV_L is not None and self._invV_U is not None:
+        if self._inv_Vx_ut is not None:
             coefficients = itransform(
-                self._invV_L,
-                function_values,
-                self._T,
-                self._m,
-                self._p,
-                mode="lower",
-                parallel=self._parallel,
-            )
-            coefficients = itransform(
-                self._invV_U,
-                coefficients,
-                self._T,
-                self._m,
-                self._p,
-                mode="upper",
-                parallel=self._parallel,
-            )
-        elif self._V_L is not None and self._V_U is not None:
-            coefficients = transform(
-                self._V_L,
-                function_values,
-                self._T,
-                self._m,
-                self._p,
-                mode="lower",
-            )
-            coefficients = transform(
-                self._V_U,
+                self._inv_Vx_ut,
                 coefficients,
                 self._T,
                 self._m,
                 self._p,
                 mode="upper",
             )
-        else:
-            raise ValueError("Unexpected error.")
+        if self._inv_Vx_lt is None and self._inv_Vx_ut is None:
+            raise ValueError("Unexpected error: either _Vx_lt or _Vx_ut must exist.")
         ###
         return coefficients
 
@@ -304,130 +336,149 @@ class Transform:
         coefficients = np.asarray(coefficients).astype(NP_FLOAT)
         ###
         function_values = np.zeros(len(self), dtype=NP_FLOAT)
-        if self._V is not None:
+        if self._Vx_lt is not None and self._Vx_ut is None:
             function_values = itransform(
-                self._V,
+                self._Vx_lt,
                 coefficients,
                 self._T,
                 self._m,
                 self._p,
                 mode="lower",
-                parallel=self._parallel,
             )
-        elif self._V_L is not None and self._V_U is not None:
+        elif self._Vx_lt is not None and self._Vx_ut is not None:
             function_values = itransform(
-                self._V_U,
+                self._Vx_ut,
                 coefficients,
                 self._T,
                 self._m,
                 self._p,
                 mode="upper",
-                parallel=self._parallel,
             )
             function_values = itransform(
-                self._V_L,
+                self._Vx_lt,
                 function_values,
                 self._T,
                 self._m,
                 self._p,
                 mode="lower",
-                parallel=self._parallel,
             )
         else:
-            raise ValueError("Unexpected error.")
+            raise ValueError("Unexpected error: either _Vx_lt or _Vx_ut must exist.")
         ###
         function_values = apply_permutation(
             self._lex_order, function_values, invert=False
         )
         return function_values
 
-    def dx(self, coefficients: np.ndarray, i: int) -> np.ndarray:
+    def dx(
+        self, coefficients: np.ndarray, i: int, k: Literal[1, 2, 3] = 1
+    ) -> np.ndarray:
         """Fast Differentiation"""
-        coefficients = np.asarray(coefficients).astype(NP_FLOAT)
+        coefficients, i, k = (
+            np.asarray(coefficients).astype(NP_FLOAT),
+            int(i),
+            int(k),
+        )
+        if (i < 0) or (i > self._m):
+            raise ValueError(
+                f"Invalid value for i. Please choose i in between 1 and {self._m}."
+            )
+        if not k in [1, 2, 3]:
+            raise ValueError("Invalid value for k. Please choose 1, 2 or 3.")
         ###
-        if self._D is not None:
+        if self._Dx_lt is not None and self._Dx_ut is None:
             coefficients = dtransform(
-                self._D,
+                self._Dx_lt[k - 1],
                 coefficients,
                 self._T,
                 self._m,
                 self._p,
                 i,
                 mode="upper",
-                parallel=self._parallel,
             )
-        elif self._D_L is not None and self._D_U is not None:
+        elif self._Dx_lt is not None and self._Dx_ut is not None:
             coefficients = dtransform(
-                self._D_U,
+                self._Dx_ut[k - 1],
                 coefficients,
                 self._T,
                 self._m,
                 self._p,
                 i,
                 mode="upper",
-                parallel=self._parallel,
             )
             coefficients = dtransform(
-                self._D_L,
+                self._Dx_lt[k - 1],
                 coefficients,
                 self._T,
                 self._m,
                 self._p,
                 i,
                 mode="lower",
-                parallel=self._parallel,
             )
         else:
-            raise ValueError("Unexpected error.")
+            raise ValueError("Unexpected error: either _Dx_lt or _Dx_ut must exist.")
         ###
         return coefficients
 
-    def dxT(self, coefficients: np.ndarray, i: int) -> np.ndarray:
+    def dxT(
+        self, coefficients: np.ndarray, i: int, k: Literal[1, 2, 3] = 1
+    ) -> np.ndarray:
         """Fast Differentiation (Transpose)"""
-        coefficients = np.asarray(coefficients).astype(NP_FLOAT)
+        coefficients, i, k = (
+            np.asarray(coefficients).astype(NP_FLOAT),
+            int(i),
+            int(k),
+        )
+        if (i < 0) or (i > self._m):
+            raise ValueError(
+                f"Invalid value for i. Please choose i in between 1 and {self._m}."
+            )
+        if not k in [1, 2, 3]:
+            raise ValueError("Invalid value for k. Please choose 1, 2 or 3.")
         ###
-        if self._DT is not None:
+        if self._DxT_lt is not None and self._DxT_ut is None:
             coefficients = dtransform(
-                self._DT,
+                self._DxT_lt[k - 1],
                 coefficients,
                 self._T,
                 self._m,
                 self._p,
                 i,
                 mode="lower",
-                parallel=self._parallel,
             )
-        elif self._DT_L is not None and self._DT_U is not None:
+        elif self._DxT_lt is not None and self._DxT_ut is not None:
             coefficients = dtransform(
-                self._DT_U,
+                self._DxT_ut[k - 1],
                 coefficients,
                 self._T,
                 self._m,
                 self._p,
                 i,
                 mode="upper",
-                parallel=self._parallel,
             )
             coefficients = dtransform(
-                self._DT_L,
+                self._DxT_lt[k - 1],
                 coefficients,
                 self._T,
                 self._m,
                 self._p,
                 i,
                 mode="lower",
-                parallel=self._parallel,
             )
         else:
-            raise ValueError("Unexpected error.")
+            raise ValueError("Unexpected error: either _DxT_lt or _DxT_ut must exist.")
         ###
         return coefficients
 
     def eval(self, coefficients: np.ndarray, x: np.ndarray) -> NP_FLOAT:
         """Point Evaluation"""
-        if self._eval_at_point is None:  # TODO Remove this
-            return 0.0
-        return self._eval_at_point(coefficients, self._x, x, self._m, self._p)
+        if self._basis == "newton":
+            return newton2point(coefficients, self._x, x, self._A, self._m, self._n)
+        elif self._basis == "chebyshev":
+            return chebyshev2point(coefficients, x, self._A, self._m, self._n)
+
+    def embed(self, t: AbstractTransform) -> np.ndarray:
+        return ordinal_embedding(self._m, t.tube, self._T)
 
     def __len__(self) -> int:
         return self._length
@@ -451,7 +502,7 @@ class Transform:
             f"{'Spatial Dimension':<20} | {self._m}\n"
             f"{'Polynomial Degree':<20} | {self._n:_}\n"
             f"{'lp Degree':<20} | {self._p}\n"
-            f"{'Condition V':<20} | {self._cond_V:.2e}\n"
+            f"{'Condition V':<20} | {self._cond_Vx:.2e}\n"
             f"{'Amount of Coeffs':<20} | {len(self):_}\n"
             f"{'Construction':<20} | {self._construction_ms:_.2f} ms\n"
             f"{'Precompilation':<20} | {self._precompilation_ms:_.2f} ms\n"

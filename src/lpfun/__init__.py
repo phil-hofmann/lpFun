@@ -11,4 +11,6 @@ NB_FLOAT = nb.float64
 
 ###
 
+import lpfun.core as core
 from .transform import Transform
+import lpfun.utils as utils
