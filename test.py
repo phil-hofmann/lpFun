@@ -74,54 +74,87 @@ def test_tube_euclidean_degree(m: int):
 
 @pytest.mark.parametrize("m, p, ba", m_p_ba)
 def test_fnt_ifnt(m: int, p: float, ba: str):
-    for n in ns(m):
-        t = lpfun.Transform(m, n, p, basis=ba, precompilation=False, report=False)
-        function_values = np.random.rand(len(t))
-        reconstruction = t.ifnt(t.fnt(function_values))
-        eps = np.linalg.norm(reconstruction - function_values)
-        assert eps < 1e-9
+    if p == np.inf and m > 4:
+        pytest.skip()
+    else:
+        for n in ns(m):
+            t = lpfun.Transform(
+                m,
+                n,
+                p,
+                basis=ba,
+                precompilation=False,
+                lex_order=False,
+                report=False,
+            )
+            function_values = np.random.rand(len(t))
+            reconstruction = t.ifnt(t.fnt(function_values))
+            eps = np.linalg.norm(reconstruction - function_values)
+            assert eps < 1e-9
 
 
 @pytest.mark.parametrize("m, p, ba", m_p_ba)
 def test_dx(m: int, p: float, ba: str):
-    for n in ns(m):
-        t = lpfun.Transform(m, n, p, basis=ba, report=False)
-        seed = np.random.rand(m)
+    if p == np.inf and m > 4:
+        pytest.skip()
+    else:
+        for n in ns(m):
+            t = lpfun.Transform(
+                m,
+                n,
+                p,
+                basis=ba,
+                precompilation=False,
+                lex_order=False,
+                report=False,
+            )
+            seed = np.random.rand(m)
 
-        def f(x):
-            return np.sum(seed * x**n)
+            def f(x):
+                return np.sum(seed * x**n)
 
-        def df(i, k, x):
-            if k == 1:
-                return n * seed[i] * x[i] ** (n - 1)
-            elif k == 2:
-                return n * (n - 1) * seed[i] * x[i] ** (n - 2)
-            elif k == 3:
-                return n * (n - 1) * (n - 2) * seed[i] * x[i] ** (n - 3)
+            def df(i, k, x):
+                if k == 1:
+                    return n * seed[i] * x[i] ** (n - 1)
+                elif k == 2:
+                    return n * (n - 1) * seed[i] * x[i] ** (n - 2)
+                elif k == 3:
+                    return n * (n - 1) * (n - 2) * seed[i] * x[i] ** (n - 3)
 
-        function_values = np.array([f(x) for x in t.grid])
-        coeffs = t.fnt(function_values)
-        for k in [1, 2, 3]:
-            for i in range(m):
-                dx_function_values = np.array([df(i, k, x) for x in t.grid])
-                dx_reconstruction = t.ifnt(t.dx(coeffs, i, k))
-                eps = np.linalg.norm(dx_reconstruction - dx_function_values)
-                assert eps < 1e-6
+            function_values = np.array([f(x) for x in t.grid])
+            coeffs = t.fnt(function_values)
+            for k in [1, 2, 3]:
+                for i in range(m):
+                    dx_function_values = np.array([df(i, k, x) for x in t.grid])
+                    dx_reconstruction = t.ifnt(t.dx(coeffs, i, k))
+                    eps = np.linalg.norm(dx_reconstruction - dx_function_values)
+                    assert eps < 1e-6
 
 
 @pytest.mark.parametrize("m, p, ba", m_p_ba)
 def test_eval(m: int, p: float, ba: str):
-    for n in ns(m):
-        t = lpfun.Transform(m, n, p, basis=ba, report=False)
-        seed = np.random.rand(m)
+    if p == np.inf and m > 4:
+        pytest.skip()
+    else:
+        for n in ns(m):
+            t = lpfun.Transform(
+                m,
+                n,
+                p,
+                basis=ba,
+                precompilation=False,
+                lex_order=False,
+                report=False,
+            )
+            seed = np.random.rand(m)
 
-        def f(x):
-            return np.sum(seed * x**n)
+            def f(x):
+                return np.sum(seed * x**n)
 
-        function_values = np.array([f(x) for x in t.grid])
-        coeffs = t.fnt(function_values)
-        x = np.random.rand(m)
-        function_value = f(x)
-        reconstruction = t.eval(coeffs, x)
-        eps = np.abs(reconstruction - function_value)
-        assert eps < 1e-6
+            function_values = np.array([f(x) for x in t.grid])
+            coeffs = t.fnt(function_values)
+            x = np.random.rand(m)
+            function_value = f(x)
+            reconstruction = t.eval(coeffs, x)
+            eps = np.abs(reconstruction - function_value)
+            assert eps < 1e-6

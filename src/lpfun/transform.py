@@ -88,6 +88,7 @@ class Transform(AbstractTransform):
         nodes: callable = cheb2nd,  # ... x
         basis: Literal["newton", "chebyshev"] = "newton",
         precompilation: bool = True,
+        lex_order: bool = True,
         threshold: int = 150_000_000,
         report: bool = True,
     ):
@@ -150,8 +151,8 @@ class Transform(AbstractTransform):
         # grid
         self._spinner_label = "Construct grid"
         grid = gen_grid(x, self._A, self._m, self._n, self._p)
-        self._lex_order = np.lexsort(grid.T)  # user experience
-        self._grid = apply_permutation(self._lex_order, grid, invert=False)
+        self._lex_order = np.lexsort(grid.T) if lex_order else None  # user experience
+        self._grid = apply_permutation(self._lex_order, grid, invert=False) if lex_order else grid
 
         # compute matrices
         self._spinner_label = "Construct matrices"
@@ -200,9 +201,6 @@ class Transform(AbstractTransform):
                 rmo(Dx2_lt.T[::-1, ::-1])[::-1],
                 rmo(Dx3_lt.T[::-1, ::-1])[::-1],
             ]
-
-            # self._Dx_lt, self._Dx_ut = (rmo(Dx_lt), rmo(Dx_ut[::-1, ::-1])[::-1])
-            # self._DxT_lt, self._DxT_ut = (rmo(Dx_ut.T), rmo(Dx_lt.T[::-1, ::-1])[::-1])
         else:
             self._Dx_lt = [
                 rmo(self._Dx[::-1, ::-1])[::-1],
@@ -212,9 +210,6 @@ class Transform(AbstractTransform):
             self._DxT_lt = [rmo(self._Dx.T), rmo(self._Dx2.T), rmo(self._Dx3.T)]
             #
             self._Dx_ut, self._DxT_ut = None, None
-
-            # self._Dx_lt, self._DxT_lt = rmo(self._Dx[::-1, ::-1])[::-1], rmo(self._Dx.T)
-            # self._Dx_ut, self._DxT_ut = None, None
 
         construction_end = time.time()
         self._construction_ms = (construction_end - construction_start) * 1000
@@ -303,9 +298,10 @@ class Transform(AbstractTransform):
     def fnt(self, function_values: np.ndarray) -> np.ndarray:
         """Fast Newton Transform"""
         function_values = np.asarray(function_values).astype(NP_FLOAT)
-        function_values = apply_permutation(
-            self._lex_order, function_values, invert=True
-        )
+        if self._lex_order is not None:
+            function_values = apply_permutation(
+                self._lex_order, function_values, invert=True
+            )
         ###
         if self._inv_Vx_lt is not None and self._inv_Vx_ut is None:
             return itransform(
@@ -371,9 +367,10 @@ class Transform(AbstractTransform):
         else:
             raise ValueError("Unexpected error: _Vx_lt must exist, _Vx_ut is optional.")
         ###
-        function_values = apply_permutation(
-            self._lex_order, function_values, invert=False
-        )
+        if self._lex_order is not None:
+            function_values = apply_permutation(
+                self._lex_order, function_values, invert=False
+            )
         return function_values
 
     def dx(
@@ -471,7 +468,9 @@ class Transform(AbstractTransform):
                 mode="lower",
             )
         else:
-            raise ValueError("Unexpected error: _DxT_lt must exist, _DxT_ut is optional.")
+            raise ValueError(
+                "Unexpected error: _DxT_lt must exist, _DxT_ut is optional."
+            )
         ###
 
     def eval(self, coefficients: np.ndarray, x: np.ndarray) -> NP_FLOAT:

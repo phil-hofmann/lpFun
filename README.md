@@ -81,7 +81,7 @@ pip install -e .
 5. Run the tests to verify the installation
 
 ```bash
-pytest
+pytest -v
 ```
 
 6. If you want to deactivate the environment
