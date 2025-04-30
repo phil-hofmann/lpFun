@@ -153,8 +153,8 @@ def test_eval(m: int, p: float, ba: str):
 
             function_values = np.array([f(x) for x in t.grid])
             coeffs = t.fnt(function_values)
-            x = np.random.rand(m)
-            function_value = f(x)
-            reconstruction = t.eval(coeffs, x)
-            eps = np.abs(reconstruction - function_value)
+            points = np.random.rand(10, m)
+            function_value = np.array([f(x) for x in points])
+            reconstruction = t.eval(coeffs, points)
+            eps = np.max(np.abs(reconstruction - function_value))
             assert eps < 1e-6

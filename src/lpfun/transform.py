@@ -283,7 +283,7 @@ class Transform(AbstractTransform):
     def warmup(self) -> None:
         """Warmup the JIT compiler."""
         zeros_N = np.zeros(len(self), dtype=NP_FLOAT)
-        zeros_m = np.zeros(self._m, dtype=NP_FLOAT)
+        one_zero = np.zeros((1,self._m), dtype=NP_FLOAT)
         self._spinner_label = "Precompile fast Newton transform"
         self.fnt(zeros_N)
         self._spinner_label = "Precompile inverse fast Newton transform"
@@ -293,7 +293,7 @@ class Transform(AbstractTransform):
         self._spinner_label = "Precompile transposed derivative"
         self.dxT(zeros_N, 0)
         self._spinner_label = "Precompile point evaluation"
-        self.eval(zeros_N, zeros_m)
+        self.eval(zeros_N, one_zero)
 
     def fnt(self, function_values: np.ndarray) -> np.ndarray:
         """Fast Newton Transform"""
@@ -473,12 +473,17 @@ class Transform(AbstractTransform):
             )
         ###
 
-    def eval(self, coefficients: np.ndarray, x: np.ndarray) -> NP_FLOAT:
+    def eval(self, coefficients: np.ndarray, points: np.ndarray) -> NP_FLOAT:
         """Point Evaluation"""
+        coefficients, points = (
+            np.asarray(coefficients).astype(NP_FLOAT),
+            np.asarray(points).astype(NP_FLOAT),
+        )
+        
         if self._basis == "newton":
-            return newton2point(coefficients, self._x, x, self._A, self._m, self._n)
+            return newton2point(coefficients, self._x, points, self._A, self._m, self._n)
         elif self._basis == "chebyshev":
-            return chebyshev2point(coefficients, x, self._A, self._m, self._n)
+            return chebyshev2point(coefficients, points, self._A, self._m, self._n)
 
     def embed(self, t: AbstractTransform) -> np.ndarray:
         return ordinal_embedding(self._m, t.tube, self._T)
