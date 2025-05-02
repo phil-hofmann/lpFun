@@ -3,7 +3,7 @@ from typing import Tuple
 from numba import njit
 from itertools import product
 from lpfun import NP_INT, NP_FLOAT
-from lpfun.core.utils import classify, apply_permutation, memory_estimate
+from lpfun.core.utils import apply_permutation, memory_estimate
 
 """
 - This file is not parallelized.
@@ -66,8 +66,6 @@ def lp_set(
         int(n),
         float(p),
     )
-    classify(m, n, p)
-    ###
     if m == 1:
         return np.array(range(n + 1), dtype=NP_INT).reshape(-1, 1)
     elif p == np.inf:
@@ -103,7 +101,6 @@ def lp_tube(A: np.ndarray, m: int, n: int, p: float) -> np.ndarray:
         int(n),
         float(p),
     )
-    classify(m, n, p)
     if m == 1:
         return np.array([n + 1], dtype=NP_INT)
     elif p == np.inf:

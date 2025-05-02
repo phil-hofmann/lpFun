@@ -3,10 +3,25 @@ import numpy as np
 from numba import njit, prange
 from typing import Tuple
 from lpfun import NP_FLOAT, NP_INT
-from lpfun.core.utils import classify, apply_permutation
+from lpfun.core.utils import apply_permutation
 
 
 """Utility functions"""
+
+
+@njit
+def classify(m: int, n: int, p: float) -> bool:
+    m, n, p = int(m), int(n), float(p)
+    ###
+    if m < 1:
+        raise ValueError("The parameter dim should be at least 1.")
+    if (p <= 0.0 or p > 2.0) and (not p == np.inf):
+        raise ValueError(f"The parameter p should be in the range (0, 2] or inf.")
+    if n < 0:
+        raise ValueError("The parameter degree should be non-negative.")
+    ###
+    return True
+
 
 # nodes
 
@@ -28,37 +43,50 @@ def cheb2nd(n: int) -> np.ndarray:
 
 
 @njit
-def newton2lagrange(nodes: np.ndarray) -> np.ndarray:
+def newton2lagrange(x: np.ndarray) -> np.ndarray:
     """O(n^2)"""
-    nodes = np.asarray(nodes).astype(np.float64)
-    x = nodes[:]
+    x = np.asarray(x).astype(np.float64)
     n = len(x)
     ###
-    Qx = np.zeros((n, n))
+    Vx = np.zeros((n, n))
     for i in range(n):
         monomials = np.ones(n, dtype=np.float64)
         for j in range(1, n):
             monomials[j] *= monomials[j - 1] * (x[i] - x[j - 1])
-        Qx[i, :n] = monomials
+        Vx[i, :n] = monomials
     ###
-    return Qx
+    return Vx
 
 
 @njit
-def chebyshev2lagrange(nodes: np.ndarray) -> np.ndarray:
+def chebyshev2lagrange(x: np.ndarray) -> np.ndarray:
     """O(n^2)"""
-    nodes = np.asarray(nodes).astype(np.float64)
-    x = nodes[:]
+    x = np.asarray(x).astype(np.float64)
     n = len(x)
     ###
-    Qx = np.zeros((n, n), dtype=np.float64)
+    Vx = np.zeros((n, n), dtype=np.float64)
     for i in range(n):
-        Qx[i, 0] = 1.0
+        Vx[i, 0] = 1.0
         if n > 0:
-            Qx[i, 1] = x[i]
+            Vx[i, 1] = x[i]
         for j in range(2, n + 1):
-            Qx[i, j] = 2 * x[i] * Qx[i, j - 1] - Qx[i, j - 2]
-    return Qx
+            Vx[i, j] = 2 * x[i] * Vx[i, j - 1] - Vx[i, j - 2]
+    return Vx
+
+
+# inverse vandermonde matrices
+
+
+@njit
+def lagrange2newton(x: np.ndarray):
+    x = np.asarray(x)
+    n = len(x)
+    inv_V = np.eye(n)
+
+    for j in range(1, n):
+        for i in range(n - 1, j - 1, -1):
+            inv_V[i, :] = (inv_V[i, :] - inv_V[i - 1, :]) / (x[i] - x[i - j])
+    return inv_V
 
 
 # differentiation matrices
@@ -211,7 +239,6 @@ def gen_grid(
     p: float,
 ) -> np.ndarray:
     """O(N)"""
-    classify(m, n, p)
     nodes, m, n, p = (
         np.asarray(nodes).astype(NP_FLOAT),
         int(m),
@@ -302,17 +329,17 @@ def lu(M: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
     return L, U
 
 
-@njit
-def inv(L: np.ndarray) -> np.ndarray:
-    """O(n^3)"""
-    L = np.asarray(L).astype(np.float64)
-    n = len(L)
-    ###
-    invL = np.zeros_like(L)
-    for i in range(n):
-        invL[i, i] = 1 / L[i, i]
-        for j in range(i):
-            dotsum = np.sum(L[i, j : i + 1] * invL[j : i + 1, j])
-            invL[i, j] = -dotsum / L[i, i]
-    ###
-    return invL
+# @njit
+# def inv(L: np.ndarray) -> np.ndarray:
+#     """O(n^3)"""
+#     L = np.asarray(L).astype(np.float64)
+#     n = len(L)
+#     ###
+#     invL = np.zeros_like(L)
+#     for i in range(n):
+#         invL[i, i] = 1 / L[i, i]
+#         for j in range(i):
+#             dotsum = np.sum(L[i, j : i + 1] * invL[j : i + 1, j])
+#             invL[i, j] = -dotsum / L[i, i]
+#     ###
+#     return invL

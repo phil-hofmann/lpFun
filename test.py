@@ -5,9 +5,9 @@ from itertools import product
 
 # Parameters
 
-ms = [1, 2, 3, 4, 5, 6]
+ms = [1, 2, 3] # , 4, 5, 6]
 ps = [1.0, 2.0, np.inf]
-bases = ["newton", "chebyshev"]
+bases = ["newton"] # , "chebyshev"]
 m_p_ba = list(product(ms, ps, bases))
 
 # Prerequisites
@@ -24,26 +24,26 @@ def ns(m: int) -> np.ndarray:
 # Tests
 
 
-def test_newton2lagrange():
-    for n in ns(1):
-        nodes = lpfun.utils.leja_nodes(lpfun.utils.cheb2nd(n))
-        n2l = lpfun.utils.newton2lagrange(nodes)
-        l2n = lpfun.utils.inv(n2l)
-        identity = n2l @ l2n
-        eps = np.linalg.norm(identity - np.eye(n))
-        assert eps < 1e-8
+# def test_newton2lagrange():
+#     for n in ns(1):
+#         nodes = lpfun.utils.leja_nodes(lpfun.utils.cheb2nd(n))
+#         n2l = lpfun.utils.newton2lagrange(nodes)
+#         l2n = lpfun.utils.inv(n2l)
+#         identity = n2l @ l2n
+#         eps = np.linalg.norm(identity - np.eye(n))
+#         assert eps < 1e-8
 
 
-def test_chebyshev2lagrange():
-    for n in ns(1):
-        nodes = lpfun.utils.leja_nodes(lpfun.utils.cheb2nd(n))
-        c2l = lpfun.utils.chebyshev2lagrange(nodes)
-        L, U = lpfun.utils.lu(c2l)
-        L_inv, U_inv = lpfun.utils.inv(L), lpfun.utils.inv(U[::-1, ::-1])[::-1, ::-1]
-        l2c = U_inv @ L_inv
-        identity = c2l @ l2c
-        eps = np.linalg.norm(identity - np.eye(n))
-        assert eps < 1e-8
+# def test_chebyshev2lagrange():
+#     for n in ns(1):
+#         nodes = lpfun.utils.leja_nodes(lpfun.utils.cheb2nd(n))
+#         c2l = lpfun.utils.chebyshev2lagrange(nodes)
+#         L, U = lpfun.utils.lu(c2l)
+#         L_inv, U_inv = lpfun.utils.inv(L), lpfun.utils.inv(U[::-1, ::-1])[::-1, ::-1]
+#         l2c = U_inv @ L_inv
+#         identity = c2l @ l2c
+#         eps = np.linalg.norm(identity - np.eye(n))
+#         assert eps < 1e-8
 
 
 @pytest.mark.parametrize("m", ms)

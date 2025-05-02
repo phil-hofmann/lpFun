@@ -7,11 +7,13 @@ from lpfun import NP_FLOAT
 from abc import ABC, abstractmethod
 from lpfun.core.set import lp_set, lp_tube, ordinal_embedding
 from lpfun.core.molecules import (
+    transform,
     itransform,
     dtransform,
 )
 from lpfun.core.utils import apply_permutation
 from lpfun.utils import (
+    classify,
     cheb2nd,
     ###
     newton2lagrange,
@@ -22,7 +24,7 @@ from lpfun.utils import (
     chebyshev2derivative,
     chebyshev2point,
     ###
-    inv,
+    # inv,
     is_lower_triangular,
     leja_nodes,
     gen_grid,
@@ -112,6 +114,7 @@ class Transform(AbstractTransform):
         self._n = int(polynomial_degree)
         self._p = float(lp_degree)
         self._basis = str(basis)
+        classify(self._m, self._n, self._p)
 
         if not basis in ["newton", "chebyshev"]:
             self._stop_spinner() if report else None
@@ -152,7 +155,11 @@ class Transform(AbstractTransform):
         self._spinner_label = "Construct grid"
         grid = gen_grid(x, self._A, self._m, self._n, self._p)
         self._lex_order = np.lexsort(grid.T) if lex_order else None  # user experience
-        self._grid = apply_permutation(self._lex_order, grid, invert=False) if lex_order else grid
+        self._grid = (
+            apply_permutation(self._lex_order, grid, invert=False)
+            if lex_order
+            else grid
+        )
 
         # compute matrices
         self._spinner_label = "Construct matrices"
@@ -172,13 +179,13 @@ class Transform(AbstractTransform):
         self._spinner_label = "Row major ordering V"
         if not is_lower_triangular(self._Vx):
             Vx_lt, Vx_ut = lu(self._Vx)
-            self._Vx_lt, self._inv_Vx_lt = rmo(Vx_lt), rmo(inv(Vx_lt))
+            self._Vx_lt, self._inv_Vx_lt = rmo(Vx_lt), rmo(np.linalg.inv(Vx_lt))
             self._Vx_ut, self._inv_Vx_ut = (
                 rmo(Vx_ut[::-1, ::-1])[::-1],
-                rmo(inv(Vx_ut[::-1, ::-1]))[::-1],
+                rmo(np.linalg.inv(Vx_ut[::-1, ::-1]))[::-1],
             )
         else:
-            self._Vx_lt, self._inv_Vx_lt = rmo(self._Vx), rmo(inv(self._Vx))
+            self._Vx_lt, self._inv_Vx_lt = rmo(self._Vx), rmo(np.linalg.inv(self._Vx))
             self._Vx_ut, self._inv_Vx_ut = None, None
 
         # row major ordering D
@@ -283,7 +290,7 @@ class Transform(AbstractTransform):
     def warmup(self) -> None:
         """Warmup the JIT compiler."""
         zeros_N = np.zeros(len(self), dtype=NP_FLOAT)
-        one_zero = np.zeros((1,self._m), dtype=NP_FLOAT)
+        one_zero = np.zeros((1, self._m), dtype=NP_FLOAT)
         self._spinner_label = "Precompile fast Newton transform"
         self.fnt(zeros_N)
         self._spinner_label = "Precompile inverse fast Newton transform"
@@ -304,8 +311,8 @@ class Transform(AbstractTransform):
             )
         ###
         if self._inv_Vx_lt is not None and self._inv_Vx_ut is None:
-            return itransform(
-                self._inv_Vx_lt,
+            return transform(
+                self._Vx_lt,
                 function_values,
                 self._T,
                 self._m,
@@ -313,16 +320,16 @@ class Transform(AbstractTransform):
                 mode="lower",
             )
         elif self._inv_Vx_ut is not None and self._inv_Vx_ut is not None:
-            coefficients = itransform(
-                self._inv_Vx_lt,
+            coefficients = transform(
+                self._Vx_lt,
                 function_values,
                 self._T,
                 self._m,
                 self._p,
                 mode="lower",
             )
-            return itransform(
-                self._inv_Vx_ut,
+            return transform(
+                self._Vx_ut,
                 coefficients,
                 self._T,
                 self._m,
@@ -479,9 +486,11 @@ class Transform(AbstractTransform):
             np.asarray(coefficients).astype(NP_FLOAT),
             np.asarray(points).astype(NP_FLOAT),
         )
-        
+
         if self._basis == "newton":
-            return newton2point(coefficients, self._x, points, self._A, self._m, self._n)
+            return newton2point(
+                coefficients, self._x, points, self._A, self._m, self._n
+            )
         elif self._basis == "chebyshev":
             return chebyshev2point(coefficients, points, self._A, self._m, self._n)
 

@@ -1,22 +1,6 @@
 import numpy as np
 from math import gamma
-from numba import njit, prange
-
-# from lpfun import NP_INT, NP_FLOAT
-
-
-@njit
-def classify(m: int, n: int, p: float) -> bool:
-    m, n, p = int(m), int(n), float(p)
-    ###
-    if m < 1:
-        raise ValueError("The parameter dim should be at least 1.")
-    if (p <= 0.0 or p > 2.0) and (not p == np.inf):
-        raise ValueError(f"The parameter p should be in the range (0, 2] or inf.")
-    if n < 0:
-        raise ValueError("The parameter degree should be non-negative.")
-    ###
-    return True
+from numba import njit
 
 
 @njit

@@ -2,7 +2,7 @@ import numpy as np
 
 from numba import njit
 from lpfun import NP_INT, NP_FLOAT
-from lpfun.core.utils import classify, apply_permutation
+from lpfun.core.utils import apply_permutation
 from lpfun.core.set import permutation_max, permutation
 from lpfun.core.atoms import (
     itransform_lt_1d,
@@ -15,24 +15,76 @@ from lpfun.core.atoms import (
     itransform_ut_3d,
     itransform_lt_md,
     itransform_ut_md,
+    ###
+    transform_lt_1d,
+    transform_ut_1d,
+    transform_lt_max,
+    transform_ut_max,
+    transform_lt_2d,
+    transform_ut_2d,
+    transform_lt_3d,
+    transform_ut_3d,
+    ###
     dtransform_max,
     dtransform_lt_md,
     dtransform_ut_md,
 )
 from typing import Literal
 
-@njit
-def validate(
-    mode: str,
-    T: np.ndarray,
-    p: float,
-    m: int,
-) -> None:
-    if mode not in ("upper", "lower"):
-        raise ValueError('Mode must be either "upper" or "lower".')
 
-    if (T is None) and p != np.inf and m != 1:
-        raise ValueError("Tube projection is required for p != np.inf and m != 1.")
+# @njit # NOTE optional
+def transform(
+    Vx: np.ndarray,
+    f: np.ndarray,
+    T: np.ndarray,
+    m: int,
+    p: float,
+    mode: Literal["lower", "upper"],
+) -> np.ndarray:
+    """
+    Fast Newton Transform
+    ---------------------
+    Vx: np.ndarray
+        Row major ordering
+    f: np.ndarray
+        Input vector
+    T: np.ndarray
+        Tube projection
+    m: int
+        Spatial dimension
+    p: float
+        Parameter of the lp space
+    mode: str
+        Lower or upper triangular
+
+    Returns
+    -------
+    np.ndarray:
+        Transformed vector
+
+    Time Complexity
+    ---------------
+    O(Nmn)
+    """
+    Vx, f, T, m, p, mode = (
+        np.asarray(Vx).astype(NP_FLOAT),
+        np.asarray(f).astype(NP_FLOAT),
+        np.asarray(T).astype(NP_INT),
+        int(m),
+        float(p),
+        str(mode),
+    )
+    lt = mode == "lower"
+
+    if m == 1:
+        return transform_lt_1d(Vx, f) if lt else transform_ut_1d(Vx, f)
+    # elif p == np.inf:
+    #     return transform_lt_max(Vx, f) if lt else transform_ut_max(Vx, f)
+    elif m == 2:
+        return transform_lt_2d(Vx, f, T) if lt else transform_ut_2d(Vx, f, T)
+    elif m == 3:
+        return transform_lt_3d(Vx, f, T) if lt else transform_ut_3d(Vx, f, T)
+    raise ValueError("This method is only implemented for m=1, 2, 3.")
 
 
 @njit
@@ -77,8 +129,6 @@ def itransform(
         float(p),
         str(mode),
     )
-    validate(mode, T, p, m)
-    classify(m, 0, p)
     lt = mode == "lower"
 
     if m == 1:
@@ -138,8 +188,6 @@ def dtransform(
         int(i),
         str(mode),
     )
-    validate(mode, T, p, m)
-    classify(m, 0, p)
     if i < 0 or i >= m:
         raise ValueError(f"Choose a coordinate between i=0 and i={m - 1}.")
     lt = mode == "lower"
