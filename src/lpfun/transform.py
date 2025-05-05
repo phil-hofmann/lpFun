@@ -89,7 +89,7 @@ class Transform(AbstractTransform):
         lp_degree: float = 2.0,  # ... p
         nodes: callable = cheb2nd,  # ... x
         basis: Literal["newton", "chebyshev"] = "newton",
-        precomputation: bool = True,
+        precomputation: bool = False,
         precompilation: bool = True,
         lex_order: bool = True,
         threshold: int = 150_000_000,
