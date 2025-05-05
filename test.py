@@ -8,7 +8,8 @@ from itertools import product
 ms = [1, 2, 3, 4, 5, 6]
 ps = [1.0, 2.0, np.inf]
 bases = ["newton", "chebyshev"]
-m_p_ba = list(product(ms, ps, bases))
+precomputation = [True, False]
+m_p_ba_pr = list(product(ms, ps, bases, precomputation))
 NS = [3, 4, 5, 6, 7]
 
 
@@ -41,14 +42,17 @@ def test_tube_euclidean_degree(m: int):
         assert tube_sum == cardinality
 
 
-@pytest.mark.parametrize("m, p, ba", m_p_ba)
-def test_fnt_ifnt(m: int, p: float, ba: str):
+@pytest.mark.parametrize("m, p, ba, pr", m_p_ba_pr)
+def test_fnt_ifnt(m: int, p: float, ba: str, pr: bool):
+    if m > 3 and pr:
+        pytest.skip()
     for n in NS:
         t = lpfun.Transform(
             m,
             n,
             p,
             basis=ba,
+            precomputation=pr,
             precompilation=False,
             lex_order=False,
             report=False,
@@ -59,14 +63,17 @@ def test_fnt_ifnt(m: int, p: float, ba: str):
         assert eps < 1e-9
 
 
-@pytest.mark.parametrize("m, p, ba", m_p_ba)
-def test_dx(m: int, p: float, ba: str):
+@pytest.mark.parametrize("m, p, ba, pr", m_p_ba_pr)
+def test_dx(m: int, p: float, ba: str, pr: bool):
+    if m > 3 and pr:
+        pytest.skip()
     for n in NS:
         t = lpfun.Transform(
             m,
             n,
             p,
             basis=ba,
+            precomputation=pr,
             precompilation=False,
             lex_order=False,
             report=False,
@@ -93,14 +100,17 @@ def test_dx(m: int, p: float, ba: str):
                 assert eps < 1e-6
 
 
-@pytest.mark.parametrize("m, p, ba", m_p_ba)
-def test_eval(m: int, p: float, ba: str):
+@pytest.mark.parametrize("m, p, ba, pr", m_p_ba_pr)
+def test_eval(m: int, p: float, ba: str, pr: bool):
+    if m > 3 and pr:
+        pytest.skip()
     for n in NS:
         t = lpfun.Transform(
             m,
             n + 1,
             p,
             basis=ba,
+            precomputation=pr,
             precompilation=False,
             lex_order=False,
             report=False,

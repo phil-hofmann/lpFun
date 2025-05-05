@@ -89,6 +89,7 @@ class Transform(AbstractTransform):
         lp_degree: float = 2.0,  # ... p
         nodes: callable = cheb2nd,  # ... x
         basis: Literal["newton", "chebyshev"] = "newton",
+        precomputation: bool = True,
         precompilation: bool = True,
         lex_order: bool = True,
         threshold: int = 150_000_000,
@@ -103,6 +104,7 @@ class Transform(AbstractTransform):
             lp_degree (float): The p-norm of the polynomial space.
             nodes (callable): A callable function that takes an integer and returns a one dimensional numpy array of nodes.
             basis (str): The basis to use for the Vandermonde and differentiation matrices. Either "newton" or "chebyshev".
+            precomputation (bool): Decide whether the inverse Vandermonde matrix should be precomputed.
             precompilation (bool): Precompile all the JIT functions with dummy inputs.
             threshold (int): The threshold for the dimension of the lower space. If the dimension is greater than the threshold, an error is raised.
             report (bool): Print a report after initialization.
@@ -119,6 +121,11 @@ class Transform(AbstractTransform):
         if not basis in ["newton", "chebyshev"]:
             self._stop_spinner() if report else None
             raise ValueError("Invalid choice for basis.")
+
+        if self._m > 3 and precomputation:
+            raise Warning(
+                "Activating the precomputation mode might lead to numerical error, especially in higher spatial dimensions (>3)."
+            )
 
         # multi index set
         self._spinner_label = "Construct multi index set"
@@ -177,11 +184,20 @@ class Transform(AbstractTransform):
 
         # row major ordering V
         self._spinner_label = "Row major ordering V"
-        if not is_lower_triangular(self._Vx):
+        lt = is_lower_triangular(self._Vx)
+        if lt:
+            self._Vx_lt, self._Vx_ut = rmo(self._Vx), None
+            self._inv_Vx_lt, self._inv_Vx_ut = (
+                (rmo(np.linalg.inv(self._Vx)), None) if precomputation else (None, None)
+            )
+        else:
             Vx_lt, Vx_ut = lu(self._Vx)
             self._Vx_lt, self._Vx_ut = rmo(Vx_lt), rmo(Vx_ut[::-1, ::-1])[::-1]
-        else:
-            self._Vx_lt, self._Vx_ut = rmo(self._Vx), None
+            self._inv_Vx_lt, self._inv_Vx_ut = (
+                (rmo(np.linalg.inv(Vx_lt)), rmo(np.linalg.inv(Vx_ut)[::-1, ::-1])[::-1])
+                if precomputation
+                else (None, None)
+            )
 
         # row major ordering D
         self._spinner_label = "Row major ordering D"
@@ -305,7 +321,16 @@ class Transform(AbstractTransform):
                 self._lex_order, function_values, invert=True
             )
         ###
-        if self._Vx_lt is not None and self._Vx_ut is None:
+        if self._inv_Vx_lt is not None and self._inv_Vx_ut is None:
+            return itransform(
+                self._inv_Vx_lt,
+                function_values,
+                self._T,
+                self._m,
+                self._p,
+                mode="lower",
+            )
+        elif self._Vx_lt is not None and self._Vx_ut is None:
             return transform(
                 self._Vx_lt,
                 function_values,
@@ -313,6 +338,23 @@ class Transform(AbstractTransform):
                 self._m,
                 self._p,
                 mode="lower",
+            )
+        elif self._inv_Vx_lt is not None and self._inv_Vx_ut is not None:
+            coefficients = itransform(
+                self._inv_Vx_lt,
+                function_values,
+                self._T,
+                self._m,
+                self._p,
+                mode="lower",
+            )
+            return itransform(
+                self._inv_Vx_ut,
+                coefficients,
+                self._T,
+                self._m,
+                self._p,
+                mode="upper",
             )
         elif self._Vx_ut is not None and self._Vx_ut is not None:
             coefficients = transform(

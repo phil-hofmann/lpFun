@@ -80,12 +80,13 @@ def transform(
     if m == 1:
         return transform_lt_1d(Vx, f) if lt else transform_ut_1d(Vx, f)
     # elif p == np.inf:
-    #     # NOTE instability at spatial dimension 5 in test_eval
+    #     # NOTE - instability at spatial dimension 5 in test_eval
     #     return transform_lt_max(Vx, f) if lt else transform_ut_max(Vx, f)
     elif m == 2:
         return transform_lt_2d(Vx, f, T) if lt else transform_ut_2d(Vx, f, T)
-    elif m == 3:
-        return transform_lt_3d(Vx, f, T) if lt else transform_ut_3d(Vx, f, T)
+    # elif m == 3:
+    #     # NOTE - seems to be quite slow
+    #     return transform_lt_3d(Vx, f, T) if lt else transform_ut_3d(Vx, f, T)
     return transform_lt_md(Vx, f, T) if lt else transform_ut_md(Vx, f, T)
 
 

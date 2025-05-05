@@ -780,7 +780,7 @@ def itransform_lt_3d(
     ### indexing: i, j > k > l
     ### NOTE: loop runs in parallel
     dot_3d = np.zeros_like(x)
-    for i in prange(N_2):
+    for i in range(N_2):
         j = i * (i + 1) // 2
         t_i, v_i = T[i], V_2[i]
         pos_i, vol_i = cs_T[i], cs_V_2[i]
@@ -873,7 +873,7 @@ def itransform_ut_3d(
     ### indexing: i, j > k > l
     ### NOTE: loop runs in parallel
     dot_3d = np.zeros_like(x)
-    for i in prange(N_2):
+    for i in range(N_2):
         j = i * N_2 - i * (i - 1) // 2
         v_i = V_2[i]
         pos_i, vol_i = cs_T[i], cs_V2[i]
