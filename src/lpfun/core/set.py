@@ -2,7 +2,6 @@ import numpy as np
 from typing import Tuple
 from numba import njit
 from itertools import product
-from lpfun import NP_INT, NP_FLOAT
 from lpfun.core.utils import apply_permutation, memory_estimate
 
 """
@@ -18,10 +17,10 @@ def _lp_set(
 ) -> np.ndarray:
     memory = memory_estimate(m, n, p)
     multi_index_set, multi_index, multi_index_p, num_p = (
-        np.zeros((memory, m), dtype=NP_INT),
-        np.zeros(m, dtype=NP_INT),
-        np.zeros(m, dtype=NP_FLOAT),
-        np.arange(0, n + 1).astype(NP_FLOAT) ** p,
+        np.zeros((memory, m), dtype=np.int64),
+        np.zeros(m, dtype=np.int64),
+        np.zeros(m, dtype=np.float64),
+        np.arange(0, n + 1).astype(np.float64) ** p,
     )
     sum_multi_index_p, n_p, i, j = 0.0, n**p, 0, 0
     while True:
@@ -67,7 +66,7 @@ def lp_set(
         float(p),
     )
     if m == 1:
-        return np.array(range(n + 1), dtype=NP_INT).reshape(-1, 1)
+        return np.array(range(n + 1), dtype=np.int64).reshape(-1, 1)
     elif p == np.inf:
         return np.flip(
             np.asarray(list(product(range(n + 1), repeat=m))).astype(np.int64), axis=1
@@ -81,7 +80,7 @@ def lp_set(
 @njit
 def _lp_tube(A: np.ndarray) -> np.ndarray:
     N, A0 = len(A), A[:, 0]
-    T = np.zeros(len(A), dtype=NP_INT)
+    T = np.zeros(len(A), dtype=np.int64)
     i, j = 1, 0
     for k in range(1, N):
         if A0[k] > 0:
@@ -96,15 +95,15 @@ def _lp_tube(A: np.ndarray) -> np.ndarray:
 
 def lp_tube(A: np.ndarray, m: int, n: int, p: float) -> np.ndarray:
     A, m, n, p = (
-        np.asarray(A).astype(NP_INT),
+        np.asarray(A).astype(np.int64),
         int(m),
         int(n),
         float(p),
     )
     if m == 1:
-        return np.array([n + 1], dtype=NP_INT)
+        return np.array([n + 1], dtype=np.int64)
     elif p == np.inf:
-        return np.array([n + 1] * (n + 1) ** (m - 1), dtype=NP_INT)
+        return np.array([n + 1] * (n + 1) ** (m - 1), dtype=np.int64)
     return _lp_tube(A)
 
 
@@ -119,7 +118,7 @@ def permutation_max(
 ) -> np.ndarray:
     """O((n+1)^m)"""
     N = (n + 1) ** m
-    mat = np.zeros(N, dtype=NP_INT)
+    mat = np.zeros(N, dtype=np.int64)
     iter_len = (n + 1) ** i
     step_len = (n + 1) ** (m - i)
     k = 0
@@ -134,7 +133,7 @@ def permutation_max(
 @njit
 def transposition(T: np.ndarray) -> np.ndarray:
     N, n = np.sum(T), np.max(T)
-    permutation_vector = np.zeros(N, dtype=NP_INT)
+    permutation_vector = np.zeros(N, dtype=np.int64)
     current_position = 0
     for j in range(n):
         for i in range(len(T)):
@@ -168,7 +167,7 @@ def permutation(
 @njit
 def entropy(T: np.ndarray) -> np.ndarray:
     cs_T = np.cumsum(T)
-    e_T = np.array([cs_T[-1]], dtype=NP_INT)
+    e_T = np.array([cs_T[-1]], dtype=np.int64)
     if e_T[0] == 1:
         return e_T
     while True:
@@ -213,12 +212,10 @@ def ordinal_embedding(
     T_prime: np.ndarray,
 ) -> np.ndarray:
     """O(||T_prime||_1)"""
-    T = np.asarray(T, dtype=NP_INT)
-    T_prime = np.asarray(T_prime, dtype=NP_INT)
     e_T = entropy(T)
     e_T_prime = entropy(T_prime)
     N = np.sum(T)
-    phi = np.zeros(N, dtype=NP_INT)
+    phi = np.zeros(N, dtype=np.int64)
     k, k_prime = 0, 0
     max_j, max_j_prime = 0, 0
     i, i_prime = np.zeros(m, dtype=np.int64), np.zeros(m, dtype=np.int64)

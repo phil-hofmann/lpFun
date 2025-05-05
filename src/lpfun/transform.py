@@ -3,7 +3,6 @@ import time
 import threading
 import numpy as np
 from typing import Literal
-from lpfun import NP_FLOAT
 from abc import ABC, abstractmethod
 from lpfun.core.set import lp_set, lp_tube, ordinal_embedding
 from lpfun.core.molecules import (
@@ -29,6 +28,7 @@ from lpfun.utils import (
     leja_nodes,
     gen_grid,
     lu,
+    # lu_pivot,
     rmo,
 )
 
@@ -179,14 +179,9 @@ class Transform(AbstractTransform):
         self._spinner_label = "Row major ordering V"
         if not is_lower_triangular(self._Vx):
             Vx_lt, Vx_ut = lu(self._Vx)
-            self._Vx_lt, self._inv_Vx_lt = rmo(Vx_lt), rmo(np.linalg.inv(Vx_lt))
-            self._Vx_ut, self._inv_Vx_ut = (
-                rmo(Vx_ut[::-1, ::-1])[::-1],
-                rmo(np.linalg.inv(Vx_ut[::-1, ::-1]))[::-1],
-            )
+            self._Vx_lt, self._Vx_ut = rmo(Vx_lt), rmo(Vx_ut[::-1, ::-1])[::-1]
         else:
-            self._Vx_lt, self._inv_Vx_lt = rmo(self._Vx), rmo(np.linalg.inv(self._Vx))
-            self._Vx_ut, self._inv_Vx_ut = None, None
+            self._Vx_lt, self._Vx_ut = rmo(self._Vx), None
 
         # row major ordering D
         self._spinner_label = "Row major ordering D"
@@ -289,8 +284,8 @@ class Transform(AbstractTransform):
 
     def warmup(self) -> None:
         """Warmup the JIT compiler."""
-        zeros_N = np.zeros(len(self), dtype=NP_FLOAT)
-        one_zero = np.zeros((1, self._m), dtype=NP_FLOAT)
+        zeros_N = np.zeros(len(self), dtype=np.float64)
+        one_zero = np.zeros((1, self._m), dtype=np.float64)
         self._spinner_label = "Precompile fast Newton transform"
         self.fnt(zeros_N)
         self._spinner_label = "Precompile inverse fast Newton transform"
@@ -304,13 +299,13 @@ class Transform(AbstractTransform):
 
     def fnt(self, function_values: np.ndarray) -> np.ndarray:
         """Fast Newton Transform"""
-        function_values = np.asarray(function_values).astype(NP_FLOAT)
+        function_values = np.asarray(function_values).astype(np.float64)
         if self._lex_order is not None:
             function_values = apply_permutation(
                 self._lex_order, function_values, invert=True
             )
         ###
-        if self._inv_Vx_lt is not None and self._inv_Vx_ut is None:
+        if self._Vx_lt is not None and self._Vx_ut is None:
             return transform(
                 self._Vx_lt,
                 function_values,
@@ -319,7 +314,7 @@ class Transform(AbstractTransform):
                 self._p,
                 mode="lower",
             )
-        elif self._inv_Vx_ut is not None and self._inv_Vx_ut is not None:
+        elif self._Vx_ut is not None and self._Vx_ut is not None:
             coefficients = transform(
                 self._Vx_lt,
                 function_values,
@@ -342,9 +337,9 @@ class Transform(AbstractTransform):
 
     def ifnt(self, coefficients: np.ndarray) -> np.ndarray:
         """Inverse Fast Newton Transform"""
-        coefficients = np.asarray(coefficients).astype(NP_FLOAT)
+        coefficients = np.asarray(coefficients).astype(np.float64)
         ###
-        function_values = np.zeros(len(self), dtype=NP_FLOAT)
+        function_values = np.zeros(len(self), dtype=np.float64)
         if self._Vx_lt is not None and self._Vx_ut is None:
             function_values = itransform(
                 self._Vx_lt,
@@ -385,7 +380,7 @@ class Transform(AbstractTransform):
     ) -> np.ndarray:
         """Fast Differentiation"""
         coefficients, i, k = (
-            np.asarray(coefficients).astype(NP_FLOAT),
+            np.asarray(coefficients).astype(np.float64),
             int(i),
             int(k),
         )
@@ -434,7 +429,7 @@ class Transform(AbstractTransform):
     ) -> np.ndarray:
         """Fast Differentiation (Transpose)"""
         coefficients, i, k = (
-            np.asarray(coefficients).astype(NP_FLOAT),
+            np.asarray(coefficients).astype(np.float64),
             int(i),
             int(k),
         )
@@ -480,11 +475,11 @@ class Transform(AbstractTransform):
             )
         ###
 
-    def eval(self, coefficients: np.ndarray, points: np.ndarray) -> NP_FLOAT:
+    def eval(self, coefficients: np.ndarray, points: np.ndarray) -> float:
         """Point Evaluation"""
         coefficients, points = (
-            np.asarray(coefficients).astype(NP_FLOAT),
-            np.asarray(points).astype(NP_FLOAT),
+            np.asarray(coefficients).astype(np.float64),
+            np.asarray(points).astype(np.float64),
         )
 
         if self._basis == "newton":

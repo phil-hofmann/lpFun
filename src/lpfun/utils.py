@@ -1,9 +1,7 @@
 import itertools
 import numpy as np
-from numba import njit, prange
 from typing import Tuple
-from lpfun import NP_FLOAT, NP_INT
-from lpfun.core.utils import apply_permutation
+from numba import njit, prange
 
 
 """Utility functions"""
@@ -33,10 +31,10 @@ def cheb2nd(n: int) -> np.ndarray:
     if n < 0:
         raise ValueError("The parameter ``n`` should be non-negative.")
     if n == 0:
-        return np.zeros(1, dtype=NP_FLOAT)
+        return np.zeros(1, dtype=np.float64)
     if n == 1:
-        return np.array([-1.0, 1.0], dtype=NP_FLOAT)
-    return np.cos(np.arange(n, dtype=NP_FLOAT) * np.pi / (n - 1))
+        return np.array([-1.0, 1.0], dtype=np.float64)
+    return np.cos(np.arange(n, dtype=np.float64) * np.pi / (n - 1))
 
 
 # vandermonde matrices
@@ -74,32 +72,17 @@ def chebyshev2lagrange(x: np.ndarray) -> np.ndarray:
     return Vx
 
 
-# inverse vandermonde matrices
-
-
-@njit
-def lagrange2newton(x: np.ndarray):
-    x = np.asarray(x)
-    n = len(x)
-    inv_V = np.eye(n)
-
-    for j in range(1, n):
-        for i in range(n - 1, j - 1, -1):
-            inv_V[i, :] = (inv_V[i, :] - inv_V[i - 1, :]) / (x[i] - x[i - j])
-    return inv_V
-
-
 # differentiation matrices
 
 
 @njit
 def newton2derivative(nodes: np.ndarray) -> np.ndarray:
     """O(n^2)"""
-    nodes = np.asarray(nodes).astype(NP_FLOAT)
+    nodes = np.asarray(nodes).astype(np.float64)
     x = nodes[:]
     n = len(x)
     ###
-    Dx = np.zeros((n, n), dtype=NP_FLOAT)
+    Dx = np.zeros((n, n), dtype=np.float64)
     for i in range(1, n):
         for j in range(i):
             if i == j + 1:
@@ -114,7 +97,7 @@ def newton2derivative(nodes: np.ndarray) -> np.ndarray:
 def chebyshev2derivative(nodes: np.ndarray) -> np.ndarray:
     """O(n^2)"""
     ### NOTE -- Matrix is independent of the nodes
-    nodes = np.asarray(nodes).astype(NP_FLOAT)
+    nodes = np.asarray(nodes).astype(np.float64)
     n = len(nodes) - 1
     ###
     Dx = np.zeros((n + 1, n + 1))
@@ -137,14 +120,15 @@ def newton2point(
     A: np.ndarray,
     m: int,
     n: int,
-) -> NP_FLOAT:
+) -> float:
     """O(Nmn)"""
+    ### NOTE -- no type conversion
     len_points = len(points)
-    values = np.zeros(len_points, dtype=NP_FLOAT)
+    values = np.zeros(len_points, dtype=np.float64)
     for l in prange(len_points):
         x = points[l]
         ###
-        basis = np.ones((m, n + 1), dtype=NP_FLOAT)
+        basis = np.ones((m, n + 1), dtype=np.float64)
         for i in range(m):
             for j in range(1, n + 1):
                 basis[i, j] = basis[i, j - 1] * (x[i] - nodes[j - 1])
@@ -169,12 +153,13 @@ def chebyshev2point(
     m: int,
     n: int,
 ) -> float:
+    ### NOTE -- no type conversion
     len_points = len(points)
-    values = np.zeros(len_points, dtype=NP_FLOAT)
+    values = np.zeros(len_points, dtype=np.float64)
     for l in prange(len_points):
         x = points[l]
         ###
-        basis = np.empty((m, n + 1), dtype=NP_FLOAT)
+        basis = np.empty((m, n + 1), dtype=np.float64)
         basis[:, 0] = 1.0
         if n >= 1:
             basis[:, 1] = x
@@ -198,18 +183,18 @@ def chebyshev2point(
 
 def leja_nodes(nodes: np.ndarray) -> np.ndarray:
     """O(n^3)"""
+    nodes = np.asarray(nodes).astype(np.float64)
     order = _leja_order(nodes)
-    ordered_nodes = apply_permutation(order, nodes)
-    return ordered_nodes
+    return nodes[order]
 
 
 @njit
 def _leja_order(nodes: np.ndarray) -> np.ndarray:
     """This function originates from minterpy."""
-    nodes = np.asarray(nodes).astype(NP_FLOAT)
+    ### NOTE -- no type conversion
     n = len(nodes) - 1
-    ord = np.arange(1, n + 1, dtype=NP_INT)
-    lj = np.zeros(n + 1, dtype=NP_INT)
+    ord = np.arange(1, n + 1, dtype=np.int64)
+    lj = np.zeros(n + 1, dtype=np.int64)
     lj[0] = 0
     m = 0
     for k in range(0, n):
@@ -240,7 +225,7 @@ def gen_grid(
 ) -> np.ndarray:
     """O(N)"""
     nodes, m, n, p = (
-        np.asarray(nodes).astype(NP_FLOAT),
+        np.asarray(nodes).astype(np.float64),
         int(m),
         int(n),
         float(p),
@@ -249,10 +234,11 @@ def gen_grid(
         return nodes.reshape(-1, 1)
     elif p == np.inf:
         return np.flip(
-            np.asarray(list(itertools.product(nodes, repeat=m)), dtype=NP_FLOAT), axis=1
+            np.asarray(list(itertools.product(nodes, repeat=m)), dtype=np.float64),
+            axis=1,
         )
     else:
-        A = np.asarray(A).astype(NP_INT)
+        A = np.asarray(A).astype(np.int64)
         return _gen_grid(nodes, A, m)
 
 
@@ -262,11 +248,12 @@ def _gen_grid(
     A: np.ndarray,
     m: int,
 ) -> np.ndarray:
+    ### NOTE -- no type conversion
     N = len(A)
     grid = np.zeros((N, m))
     for i in range(N):
         mi = A[i]
-        grid_point = np.zeros(m, dtype=NP_FLOAT)
+        grid_point = np.zeros(m, dtype=np.float64)
         for j in range(m):
             grid_point[j] = nodes[mi[j]]
         grid[i] = grid_point
@@ -282,7 +269,7 @@ def is_lower_triangular(
     atol=1e-8,
 ) -> bool:
     """O(n^2)"""
-    M = np.asarray(M).astype(NP_FLOAT)
+    M = np.asarray(M).astype(np.float64)
     ###
     n = len(M)
     for i in range(n):
@@ -296,11 +283,11 @@ def is_lower_triangular(
 @njit
 def rmo(L: np.ndarray) -> np.ndarray:
     """O(n^2)"""
-    L = np.asarray(L).astype(NP_FLOAT)
+    L = np.asarray(L).astype(np.float64)
     ###
     n = len(L)
     N = int(n * (n + 1) / 2)
-    result = np.zeros(N, dtype=NP_FLOAT)
+    result = np.zeros(N, dtype=np.float64)
     k = 0
     for i in range(n):
         for j in range(i + 1):
@@ -316,10 +303,10 @@ def rmo(L: np.ndarray) -> np.ndarray:
 @njit
 def lu(M: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
     """O(n^3)"""
-    M = np.asarray(M).astype(NP_FLOAT)
+    M = np.asarray(M).astype(np.float64)
     ###
     n = len(M)
-    L = np.eye(n, dtype=NP_FLOAT)
+    L = np.eye(n, dtype=np.float64)
     U = M[:, :]
     for j in range(n):
         for i in range(j + 1, n):
@@ -329,17 +316,31 @@ def lu(M: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
     return L, U
 
 
-# @njit
-# def inv(L: np.ndarray) -> np.ndarray:
-#     """O(n^3)"""
-#     L = np.asarray(L).astype(np.float64)
-#     n = len(L)
-#     ###
-#     invL = np.zeros_like(L)
-#     for i in range(n):
-#         invL[i, i] = 1 / L[i, i]
-#         for j in range(i):
-#             dotsum = np.sum(L[i, j : i + 1] * invL[j : i + 1, j])
-#             invL[i, j] = -dotsum / L[i, i]
-#     ###
-#     return invL
+# @njit # NOTE pivoting increases numerical stability
+# def lu_pivot(M: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+#     """Stable LU with partial pivoting. Returns P, L, U so that P @ M = L @ U"""
+#     M = np.asarray(M).astype(np.float64)
+#     n = len(M)
+#     L = np.zeros((n, n), dtype=np.float64)
+#     U = M.copy()
+#     P = np.eye(n, dtype=np.float64)
+
+#     for j in range(n):
+#         # Partial pivoting: find pivot row
+#         pivot = j + np.argmax(np.abs(U[j:, j]))
+#         if pivot != j:
+#             # Swap rows in U
+#             U[[j, pivot], :] = U[[pivot, j], :]
+#             # Swap rows in P
+#             P[[j, pivot], :] = P[[pivot, j], :]
+#             # Swap rows in L (columns before j)
+#             if j > 0:
+#                 L[[j, pivot], :j] = L[[pivot, j], :j]
+
+#         # Normal LU step
+#         L[j, j] = 1.0
+#         for i in range(j + 1, n):
+#             L[i, j] = U[i, j] / U[j, j]
+#             U[i, j:] -= L[i, j] * U[j, j:]
+
+#     return P, L, U

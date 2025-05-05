@@ -9,11 +9,6 @@ def apply_permutation(
     x: np.ndarray,
     invert: bool = False,
 ) -> np.ndarray:
-    # P, x, invert = (
-    #     np.asarray(P).astype(NP_INT),
-    #     np.asarray(x).astype(NP_FLOAT),
-    #     bool(invert),
-    # )
     x_p = np.zeros_like(x)
     N = len(P)
     if invert:
