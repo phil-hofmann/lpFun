@@ -4,7 +4,7 @@ import threading
 import numpy as np
 from typing import Literal
 from abc import ABC, abstractmethod
-from lpfun.core.set import lp_set, lp_tube, ordinal_embedding
+from lpfun.core.set import lp_set, lp_tube, ordinal_embedding, entropy
 from lpfun.core.molecules import (
     transform,
     itransform,
@@ -89,7 +89,7 @@ class Transform(AbstractTransform):
         lp_degree: float = 2.0,  # ... p
         nodes: callable = cheb2nd,  # ... x
         basis: Literal["newton", "chebyshev"] = "newton",
-        precomputation: bool = False,
+        precomputation: bool = True,
         precompilation: bool = True,
         lex_order: bool = True,
         threshold: int = 150_000_000,
@@ -122,29 +122,42 @@ class Transform(AbstractTransform):
             self._stop_spinner() if report else None
             raise ValueError("Invalid choice for basis.")
 
-        if self._m > 3 and precomputation:
-            raise Warning(
-                "Activating the precomputation mode might lead to numerical error, especially in higher spatial dimensions (>3)."
-            )
-
         # multi index set
         self._spinner_label = "Construct multi index set"
         self._A = lp_set(self._m, self._n, self._p)
-        self._length = (self._n + 1) ** self._m if self._p is np.inf else len(self._A)
+        self._N_0 = (self._n + 1) ** self._m if self._p is np.inf else len(self._A)
 
         # tube projection
         self._spinner_label = "Construct tube projections"
         self._T = lp_tube(self._A, self._m, self._n, self._p)
+        zero = np.array([0], dtype=np.int64)
+        self._cs_T = np.concatenate((zero, np.cumsum(self._T)))
+        self._N_1 = len(self._T)
+        self._V_2 = (
+            np.array(
+                [
+                    np.sum(self._T[self._cs_T[i] : self._cs_T[i + 1]])
+                    for i in range(self._T[0])
+                ],
+                dtype=np.int64,
+            )
+            if self._m == 3
+            else zero
+        )
+        self._cs_V_2 = (
+            np.concatenate((zero, np.cumsum(self._V_2))) if self._m == 3 else zero
+        )
+        self._e_T = entropy(self._T) if self._m > 3 else zero
 
         # check threshold
         self._spinner_label = "Check threshold"
         if threshold is None:
             warnings.warn("Threshold is set to None. This may lead to memory issues.")
-        elif self._length > threshold:
+        elif self._N_0 > threshold:
             self._stop_spinner() if report else None
             raise ValueError(
                 f"""
-                    Dimension exceeds threshold: {format(self._length, "_")} > {format(threshold, "_")}.
+                    Dimension exceeds threshold: {format(self._N_0, "_")} > {format(threshold, "_")}.
                     If this operation should be executed anyways, please set threshold to None.
                 """
             )
@@ -326,7 +339,13 @@ class Transform(AbstractTransform):
                 self._inv_Vx_lt,
                 function_values,
                 self._T,
+                self._cs_T,
+                self._V_2,
+                self._cs_V_2,
+                self._e_T,
+                self._N_1,
                 self._m,
+                self._n,
                 self._p,
                 mode="lower",
             )
@@ -335,7 +354,13 @@ class Transform(AbstractTransform):
                 self._Vx_lt,
                 function_values,
                 self._T,
+                self._cs_T,
+                self._V_2,
+                self._cs_V_2,
+                self._e_T,
+                self._N_1,
                 self._m,
+                self._n,
                 self._p,
                 mode="lower",
             )
@@ -344,7 +369,13 @@ class Transform(AbstractTransform):
                 self._inv_Vx_lt,
                 function_values,
                 self._T,
+                self._cs_T,
+                self._V_2,
+                self._cs_V_2,
+                self._e_T,
+                self._N_1,
                 self._m,
+                self._n,
                 self._p,
                 mode="lower",
             )
@@ -352,7 +383,13 @@ class Transform(AbstractTransform):
                 self._inv_Vx_ut,
                 coefficients,
                 self._T,
+                self._cs_T,
+                self._V_2,
+                self._cs_V_2,
+                self._e_T,
+                self._N_1,
                 self._m,
+                self._n,
                 self._p,
                 mode="upper",
             )
@@ -361,7 +398,13 @@ class Transform(AbstractTransform):
                 self._Vx_lt,
                 function_values,
                 self._T,
+                self._cs_T,
+                self._V_2,
+                self._cs_V_2,
+                self._e_T,
+                self._N_1,
                 self._m,
+                self._n,
                 self._p,
                 mode="lower",
             )
@@ -369,7 +412,13 @@ class Transform(AbstractTransform):
                 self._Vx_ut,
                 coefficients,
                 self._T,
+                self._cs_T,
+                self._V_2,
+                self._cs_V_2,
+                self._e_T,
+                self._N_1,
                 self._m,
+                self._n,
                 self._p,
                 mode="upper",
             )
@@ -387,7 +436,13 @@ class Transform(AbstractTransform):
                 self._Vx_lt,
                 coefficients,
                 self._T,
+                self._cs_T,
+                self._V_2,
+                self._cs_V_2,
+                self._e_T,
+                self._N_1,
                 self._m,
+                self._n,
                 self._p,
                 mode="lower",
             )
@@ -396,7 +451,13 @@ class Transform(AbstractTransform):
                 self._Vx_ut,
                 coefficients,
                 self._T,
+                self._cs_T,
+                self._V_2,
+                self._cs_V_2,
+                self._e_T,
+                self._N_1,
                 self._m,
+                self._n,
                 self._p,
                 mode="upper",
             )
@@ -404,7 +465,13 @@ class Transform(AbstractTransform):
                 self._Vx_lt,
                 function_values,
                 self._T,
+                self._cs_T,
+                self._V_2,
+                self._cs_V_2,
+                self._e_T,
+                self._N_1,
                 self._m,
+                self._n,
                 self._p,
                 mode="lower",
             )
@@ -438,7 +505,10 @@ class Transform(AbstractTransform):
                 self._Dx_lt[k - 1],
                 coefficients,
                 self._T,
+                self._cs_T,
+                self._N_1,
                 self._m,
+                self._n,
                 self._p,
                 i,
                 mode="upper",
@@ -448,7 +518,10 @@ class Transform(AbstractTransform):
                 self._Dx_ut[k - 1],
                 coefficients,
                 self._T,
+                self._cs_T,
+                self._N_1,
                 self._m,
+                self._n,
                 self._p,
                 i,
                 mode="upper",
@@ -457,7 +530,10 @@ class Transform(AbstractTransform):
                 self._Dx_lt[k - 1],
                 coefficients,
                 self._T,
+                self._cs_T,
+                self._N_1,
                 self._m,
+                self._n,
                 self._p,
                 i,
                 mode="lower",
@@ -535,7 +611,7 @@ class Transform(AbstractTransform):
         return ordinal_embedding(self._m, t.tube, self._T)
 
     def __len__(self) -> int:
-        return self._length
+        return self._N_0
 
     def __eq__(self, value: object) -> bool:
         if not isinstance(value, Transform):

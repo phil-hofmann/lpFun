@@ -10,7 +10,7 @@ ps = [1.0, 2.0, np.inf]
 bases = ["newton", "chebyshev"]
 precomputation = [True, False]
 m_p_ba_pr = list(product(ms, ps, bases, precomputation))
-NS = [3, 4, 5, 6, 7]
+NS = [4, 5, 6, 7, 8]
 
 
 # Tests
@@ -44,8 +44,8 @@ def test_tube_euclidean_degree(m: int):
 
 @pytest.mark.parametrize("m, p, ba, pr", m_p_ba_pr)
 def test_fnt_ifnt(m: int, p: float, ba: str, pr: bool):
-    if m > 3 and pr:
-        pytest.skip()
+    # if m > 4 and pr:
+    #     pytest.skip()
     for n in NS:
         t = lpfun.Transform(
             m,
@@ -65,8 +65,8 @@ def test_fnt_ifnt(m: int, p: float, ba: str, pr: bool):
 
 @pytest.mark.parametrize("m, p, ba, pr", m_p_ba_pr)
 def test_dx(m: int, p: float, ba: str, pr: bool):
-    if m > 3 and pr:
-        pytest.skip()
+    # if m > 4 and pr:
+    #     pytest.skip()
     for n in NS:
         t = lpfun.Transform(
             m,
@@ -80,15 +80,15 @@ def test_dx(m: int, p: float, ba: str, pr: bool):
         )
 
         def f(x):
-            return np.sum(x**3)
+            return np.sum(x ** (n - 1))
 
         def df(k, x):
             if k == 1:
-                return 3.0 * x[i] ** 2
+                return (n - 1) * x[i] ** (n - 2)
             elif k == 2:
-                return 6.0 * x[i]
+                return (n - 1) * (n - 2) * x[i] ** (n - 3)
             elif k == 3:
-                return 6.0
+                return (n - 1) * (n - 2) * (n - 3) * x[i] ** (n - 4)
 
         function_values = np.array([f(x) for x in t.grid])
         coeffs = t.fnt(function_values)
@@ -102,8 +102,8 @@ def test_dx(m: int, p: float, ba: str, pr: bool):
 
 @pytest.mark.parametrize("m, p, ba, pr", m_p_ba_pr)
 def test_eval(m: int, p: float, ba: str, pr: bool):
-    if m > 3 and pr:
-        pytest.skip()
+    # if m > 4 and pr:
+    #     pytest.skip()
     for n in NS:
         t = lpfun.Transform(
             m,
