@@ -563,7 +563,10 @@ class Transform(AbstractTransform):
                 self._DxT_lt[k - 1],
                 coefficients,
                 self._T,
+                self._cs_T,
+                self._N_1,
                 self._m,
+                self._n,
                 self._p,
                 i,
                 mode="lower",
@@ -573,7 +576,10 @@ class Transform(AbstractTransform):
                 self._DxT_ut[k - 1],
                 coefficients,
                 self._T,
+                self._cs_T,
+                self._N_1,
                 self._m,
+                self._n,
                 self._p,
                 i,
                 mode="upper",
@@ -582,15 +588,16 @@ class Transform(AbstractTransform):
                 self._DxT_lt[k - 1],
                 coefficients,
                 self._T,
+                self._cs_T,
+                self._N_1,
                 self._m,
+                self._n,
                 self._p,
                 i,
                 mode="lower",
             )
         else:
-            raise ValueError(
-                "Unexpected error: _DxT_lt must exist, _DxT_ut is optional."
-            )
+            raise ValueError("Unexpected error.")
         ###
 
     def eval(self, coefficients: np.ndarray, points: np.ndarray) -> float:
