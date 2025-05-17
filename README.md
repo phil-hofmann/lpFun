@@ -7,9 +7,11 @@
     A package for fast multivariate interpolation and differentiation in downward closed polynomial spaces.
 </p>
 
-## Authors
+## Team
 
 - [Phil-Alexander Hofmann](https://gitlab.com/philippo_calippo) - [CASUS](https://www.casus.science/) ([HZDR](https://www.hzdr.de/))
+- [Damar Wicaksono](https://gitlab.com/damar-wicaksono) - [CASUS](https://www.casus.science/) ([HZDR](https://www.hzdr.de/))
+- [Michael Hecht](https://gitlab.com/MikeyPice) - [CASUS](https://www.casus.science/) ([HZDR](https://www.hzdr.de/))
 
 ## 📜 License
 
@@ -18,6 +20,7 @@ The project is licensed under the [MIT License](LICENSE.txt).
 ## 💬 Citations
 
 **Please cite the following work when using this framework in any public context**:
+
 _Fast Newton Transform: Interpolation in Downward Closed Polynomial Spaces_ [https://arxiv.org/]
 
 **Related references**:
