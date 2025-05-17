@@ -21,13 +21,14 @@ The project is licensed under the [MIT License](LICENSE.txt).
 
 **Please cite the following work when using this framework in any public context**:
 
-_Fast Newton Transform: Interpolation in Downward Closed Polynomial Spaces_ [https://arxiv.org/]
+_Phil-Alexander Hofmann, Damar Wicaksono, Michael Hecht._ Fast Newton Transform: Interpolation in Downward Closed Polynomial Spaces. arXiv, 2025. [https://arxiv.org/]
 
 **Related references**:
 
-- Multivariate Newton Interpolation in Downward Closed Spaces Reaches the Optimal Geometric Approximation Rates for Bos–Levenberg–Trefethen Functions [https://arxiv.org/pdf/2504.17899]
-- CASUS. [Minterpy](https://github.com/casus/minterpy). 2024. Licensed under the [MIT](https://github.com/casus/minterpy/blob/main/LICENSE) License.
-- philhofmann. [Bachelor thesis](https://gitlab.com/philhofmann/implementation-and-complexity-analysis-of-algorithms-for-multivariate-newton-polynomials-of-p-degree). 2024. Licensed under the [MIT](https://gitlab.com/philhofmann/implementation-and-complexity-analysis-of-algorithms-for-multivariate-newton-polynomials-of-p-degree/-/blob/main/LICENSE.txt?ref_type=heads) License.
+- _Hecht et al._ Multivariate Newton Interpolation in Downward Closed Spaces Reaches the Optimal Geometric Approximation Rates for Bos–Levenberg–Trefethen Functions. arXiv, 2025. [https://arxiv.org/pdf/2504.17899]
+- _Damar Wicaksono et al._ Minterpy: multivariate polynomial interpolation in
+Python. The Journal of Open Source Software, 2025. [Minterpy](https://github.com/minterpy-project) licensed under the [MIT](https://github.com/minterpy-project/minterpy/blob/dev/LICENSE) License.
+- _Phil-Alexander Hofmann._ Implementation and Complexity Analysis of Algorithms for Multivariate Newton Polynomials of p Degree. 2024. [Thesis](https://philhofmann.de) [Framework](https://gitlab.com/philhofmann/implementation-and-complexity-analysis-of-algorithms-for-multivariate-newton-polynomials-of-p-degree) licensed under the [MIT](https://gitlab.com/philhofmann/implementation-and-complexity-analysis-of-algorithms-for-multivariate-newton-polynomials-of-p-degree/-/blob/main/LICENSE.txt?ref_type=heads) License.
 
 ## 💻 Installation
 
