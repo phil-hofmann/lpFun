@@ -6,6 +6,7 @@ authors = ["Phil-Alexander Hofmann"]
 license = "MIT"
 readme = "README.md"
 
+
 [tool.poetry.dependencies]
 python = "3.9.20"
 numba = "0.60.0"

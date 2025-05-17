@@ -44,8 +44,6 @@ def test_tube_euclidean_degree(m: int):
 
 @pytest.mark.parametrize("m, p, ba, pr", m_p_ba_pr)
 def test_fnt_ifnt(m: int, p: float, ba: str, pr: bool):
-    # if m > 4 and pr:
-    #     pytest.skip()
     for n in NS:
         t = lpfun.Transform(
             m,
@@ -65,8 +63,6 @@ def test_fnt_ifnt(m: int, p: float, ba: str, pr: bool):
 
 @pytest.mark.parametrize("m, p, ba, pr", m_p_ba_pr)
 def test_dx(m: int, p: float, ba: str, pr: bool):
-    # if m > 4 and pr:
-    #     pytest.skip()
     for n in NS:
         t = lpfun.Transform(
             m,
@@ -101,9 +97,36 @@ def test_dx(m: int, p: float, ba: str, pr: bool):
 
 
 @pytest.mark.parametrize("m, p, ba, pr", m_p_ba_pr)
+def test_dxT(m: int, p: float, ba: str, pr: bool):
+    for n in NS:
+        t = lpfun.Transform(
+            m,
+            n,
+            p,
+            basis=ba,
+            precomputation=pr,
+            precompilation=False,
+            lex_order=False,
+            report=False,
+        )
+
+        for k in [1, 2, 3]:
+            for i in range(m):
+                x = np.random.randn(len(t))
+                y = np.random.randn(len(t))
+
+                Dx = t.dx(x, i, k)  # D x
+                DTx = t.dxT(y, i, k)  # D^T y
+
+                lhs = np.dot(Dx, y)  # <D x, y>
+                rhs = np.dot(x, DTx)  # <x, D^T y>
+
+                eps = np.abs(lhs - rhs)
+                assert eps < 1e-6
+
+
+@pytest.mark.parametrize("m, p, ba, pr", m_p_ba_pr)
 def test_eval(m: int, p: float, ba: str, pr: bool):
-    # if m > 4 and pr:
-    #     pytest.skip()
     for n in NS:
         t = lpfun.Transform(
             m,

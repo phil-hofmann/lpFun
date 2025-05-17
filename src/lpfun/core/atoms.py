@@ -828,11 +828,11 @@ def transform_lt_md(
     T: np.ndarray,
     cs_T: np.ndarray,
     e_T: np.ndarray,
+    m: int,
 ) -> np.ndarray:
     """O(Nmn)"""
     zero = np.array([0], dtype=np.int64)
     dot, V_0 = np.zeros_like(x), T.copy()
-    m = len(e_T) - 1
     ### 1d
     ### indexing: i > j, k
     ###
@@ -1026,11 +1026,11 @@ def itransform_lt_md(
     T: np.ndarray,
     cs_T: np.ndarray,
     e_T: np.ndarray,
+    m: int,
 ) -> np.ndarray:
     """O(Nmn)"""
     zero = np.array([0], dtype=np.int64)
     dot, V_0 = np.zeros_like(x), T.copy()
-    m = len(e_T) - 1
     ### 1d
     ### indexing: i > j, k
     ###

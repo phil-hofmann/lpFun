@@ -118,7 +118,7 @@ def transform(
             else transform_ut_3d(Vx, f, T, cs_T, V_2, cs_V_2, N_1)
         )
     return (
-        transform_lt_md(Vx, f, T, cs_T, e_T)
+        transform_lt_md(Vx, f, T, cs_T, e_T, m)
         if lt
         else transform_ut_md(Vx, f, T, cs_T, e_T, m, n + 1)
     )
@@ -213,7 +213,7 @@ def itransform(
             else itransform_ut_3d(Vx, c, T, cs_T, V_2, cs_V_2, N_1)
         )
     return (
-        itransform_lt_md(Vx, c, T, cs_T, e_T)
+        itransform_lt_md(Vx, c, T, cs_T, e_T, m)
         if lt
         else itransform_ut_md(Vx, c, T, cs_T, e_T, m, n + 1)
     )

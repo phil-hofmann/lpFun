@@ -80,7 +80,26 @@ class AbstractTransform(ABC):
 
 
 class Transform(AbstractTransform):
-    """Transform class."""
+    """
+    Transform class for polynomial multivariate interpolation and differentiation.
+
+    Attributes
+    ----------
+    spatial_dimension : int
+        The dimension `m` of the spatial domain, representing the number of input variables.
+    polynomial_degree : int
+        The maximum total degree `n` of the polynomial basis used for approximation.
+    lp_degree : float
+        The degree `p` of the ℓ^p norm that defines the polynomial space (default is 2.0, Euclidean degree).
+    tube : numpy.ndarray
+        Array representing directional polynomial degree constraints ("tube").
+    multi_index_set : numpy.ndarray
+        The multi-index set defining the exponents.
+    nodes : numpy.ndarray
+        The one-dimensional interpolation nodes.
+    grid : numpy.ndarray
+        The multidimensional grid points (shape: [num_points, spatial_dimension]).
+    """
 
     def __init__(
         self,
@@ -96,18 +115,66 @@ class Transform(AbstractTransform):
         report: bool = True,
     ):
         """
-        Initialize the Transform object.
+        Initialize the Transform object, which constructs and manages the polynomial transform
+        used for multivariate function interpolation and differentiation on non-tensorial grids.
 
-        Args:
-            spatial_dimension (int): The dimension of the spatial domain.
-            polynomial_degree (int): The degree of the polynomial.
-            lp_degree (float): The p-norm of the polynomial space.
-            nodes (callable): A callable function that takes an integer and returns a one dimensional numpy array of nodes.
-            basis (str): The basis to use for the Vandermonde and differentiation matrices. Either "newton" or "chebyshev".
-            precomputation (bool): Decide whether the inverse Vandermonde matrix should be precomputed.
-            precompilation (bool): Precompile all the JIT functions with dummy inputs.
-            threshold (int): The threshold for the dimension of the lower space. If the dimension is greater than the threshold, an error is raised.
-            report (bool): Print a report after initialization.
+        Parameters
+        ----------
+        spatial_dimension : int
+            The dimension `m` of the spatial domain, representing the number of input variables.
+        polynomial_degree : int
+            The maximum total degree `n` of the polynomial basis used for approximation.
+        lp_degree : float, optional
+            The degree `p` of the ℓ^p norm that defines the polynomial space (default is 2.0, Euclidean degree).
+        nodes : callable, optional
+            A callable that, given an integer `n`, returns an array of `n` nodes in one dimension.
+            Typically, this is a function returning Chebyshev nodes (e.g., `cheb2nd`).
+        basis : {"newton", "chebyshev"}, optional
+            The polynomial basis to use for constructing Vandermonde and differentiation matrices.
+            Options are:
+            - "newton": Newton basis polynomials
+            - "chebyshev": Chebyshev basis polynomials
+            Default is "newton".
+        precomputation : bool, optional
+            If True, precompute the inverse Vandermonde matrix to speed up transforms.
+            Precomputation can be less stable for large problems (default is True).
+        precompilation : bool, optional
+            If True, precompile all just-in-time (JIT) compiled functions with dummy inputs
+            during initialization to reduce runtime overhead during actual calls (default is True).
+        lex_order : bool, optional
+            If True, reassigns lexicographic ordering for nodes.
+            otherwise, returns
+        threshold : int, optional
+            A safety threshold for the dimension of the polynomial space.
+            If the dimension exceeds this number, initialization will raise an error to prevent
+            excessive memory usage or computational cost (default is 150,000,000).
+        report : bool, optional
+            If True, print detailed initialization information and statistics after setup
+            (default is True).
+
+        Raises
+        ------
+        ValueError
+            If the polynomial space dimension exceeds the specified `threshold`.
+
+        Notes
+        -----
+        The Transform class is designed for efficient multivariate polynomial interpolation,
+        evaluation, and differentiation. The choice of basis and nodes directly affects
+        numerical stability and accuracy. Precomputation and precompilation optimize performance
+        at the cost of initial setup time and memory usage.
+
+        Examples
+        --------
+        >>> import numpy as np
+        >>> from lpfun import Transform
+        >>> def f(x, y):
+        ...     return np.sin(x) * np.cos(y)
+        >>> t = Transform(spatial_dimension=2, polynomial_degree=10)
+        >>> values_f = f(t.grid[:, 0], t.grid[:, 1])
+        >>> coeffs_f = t.fnt(values_f)
+        >>> coeffs_dx_f = t.dx(coeffs_f, i=0, k=1)
+        >>> rec_dx_f = t.ifnt(coeffs_dx_f)
         """
 
         self._start_spinner() if report else None
@@ -327,7 +394,30 @@ class Transform(AbstractTransform):
         self.eval(zeros_N, one_zero)
 
     def fnt(self, function_values: np.ndarray) -> np.ndarray:
-        """Fast Newton Transform"""
+        """
+        Compute the Fast Newton Transform (FNT) of given function values.
+
+        Parameters
+        ----------
+        function_values : np.ndarray
+            Function values sampled at the interpolation grid points.
+            Shape must match the number of grid points.
+
+        Returns
+        -------
+        np.ndarray
+            Coefficients of the function in the predefined polynomial basis.
+
+        Examples
+        --------
+        >>> import numpy as np
+        >>> from lpfun import Transform
+        >>> def f(x, y):
+        ...     return np.sin(x) * np.cos(y)
+        >>> t = Transform(spatial_dimension=2, polynomial_degree=10)
+        >>> values_f = f(t.grid[:, 0], t.grid[:, 1])
+        >>> coeffs_f = t.fnt(values_f)
+        """
         function_values = np.asarray(function_values).astype(np.float64)
         if self._lex_order is not None:
             function_values = apply_permutation(
@@ -427,7 +517,30 @@ class Transform(AbstractTransform):
         ###
 
     def ifnt(self, coefficients: np.ndarray) -> np.ndarray:
-        """Inverse Fast Newton Transform"""
+        """
+        Compute the Inverse Fast Newton Transform (IFNT) to reconstruct function values from coefficients.
+
+        Parameters
+        ----------
+        coefficients : np.ndarray
+            Coefficients of the function in the predefined polynomial basis.
+
+        Returns
+        -------
+        np.ndarray
+            Reconstructed function values at the interpolation grid points.
+
+        Examples
+        --------
+        >>> import numpy as np
+        >>> from lpfun import Transform
+        >>> def f(x, y):
+        ...     return np.sin(x) * np.cos(y)
+        >>> t = Transform(spatial_dimension=2, polynomial_degree=10)
+        >>> values_f = f(t.grid[:, 0], t.grid[:, 1])
+        >>> coeffs_f = t.fnt(values_f)
+        >>> rec_f = t.ifnt(coeffs_f)
+        """
         coefficients = np.asarray(coefficients).astype(np.float64)
         ###
         function_values = np.zeros(len(self), dtype=np.float64)
@@ -487,7 +600,7 @@ class Transform(AbstractTransform):
     def dx(
         self, coefficients: np.ndarray, i: int, k: Literal[1, 2, 3] = 1
     ) -> np.ndarray:
-        """Fast Differentiation"""
+        """Fast Differentiation TODO"""
         coefficients, i, k = (
             np.asarray(coefficients).astype(np.float64),
             int(i),
@@ -545,7 +658,7 @@ class Transform(AbstractTransform):
     def dxT(
         self, coefficients: np.ndarray, i: int, k: Literal[1, 2, 3] = 1
     ) -> np.ndarray:
-        """Fast Differentiation (Transpose)"""
+        """Fast Differentiation (Transpose) TODO"""
         coefficients, i, k = (
             np.asarray(coefficients).astype(np.float64),
             int(i),
@@ -601,7 +714,7 @@ class Transform(AbstractTransform):
         ###
 
     def eval(self, coefficients: np.ndarray, points: np.ndarray) -> float:
-        """Point Evaluation"""
+        """Point Evaluation TODO"""
         coefficients, points = (
             np.asarray(coefficients).astype(np.float64),
             np.asarray(points).astype(np.float64),
@@ -615,6 +728,7 @@ class Transform(AbstractTransform):
             return chebyshev2point(coefficients, points, self._A, self._m, self._n)
 
     def embed(self, t: AbstractTransform) -> np.ndarray:
+        """TODO"""
         return ordinal_embedding(self._m, t.tube, self._T)
 
     def __len__(self) -> int:
