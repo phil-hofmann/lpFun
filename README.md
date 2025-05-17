@@ -1,5 +1,3 @@
-# lpFun
-
 <p align="center">
   <img src="social-banner-bg-rounded.png" height="128" width="384"/>
 </p>
@@ -7,7 +5,7 @@
     A package for fast multivariate interpolation and differentiation in downward closed polynomial spaces.
 </p>
 
-## Team
+## 👥 Team
 
 - [Phil-Alexander Hofmann](https://gitlab.com/philippo_calippo) - [CASUS](https://www.casus.science/) ([HZDR](https://www.hzdr.de/))
 - [Damar Wicaksono](https://gitlab.com/damar-wicaksono) - [CASUS](https://www.casus.science/) ([HZDR](https://www.hzdr.de/))
