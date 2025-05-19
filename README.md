@@ -15,8 +15,6 @@
 - [Damar Wicaksono](https://gitlab.com/damar-wicaksono) - [CASUS](https://www.casus.science/) ([HZDR](https://www.hzdr.de/))
 - [Michael Hecht](https://gitlab.com/MikeyPice) - [CASUS](https://www.casus.science/) ([HZDR](https://www.hzdr.de/))
 
-Actively developed by Phil-A. Hofmann, supervised by Michael Hecht, and supported by Damar Wicaksono.
-
 ## 📜 License
 
 The project is licensed under the [MIT License](LICENSE.txt).
