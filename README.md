@@ -1,47 +1,92 @@
-# Revolutionizing Function Approximation and Spectral Methods in Arbitrary Dimensions!
 <p align="center">
-  <img src="social-banner-bg-rounded.png" height="128" width="384"/>
+  <img src="docs/social-banner-bg-rounded.png" height="128" width="384"/>
 </p>
 <p align="center">
-    A package which uses l^p degree polynomials for function approximation and differentiation.
+    A package for fast multivariate interpolation and differentiation in downward closed polynomial spaces.
 </p>
 
-## Authors
+[![arXiv](https://img.shields.io/badge/arXiv-0.0-green.svg)](https://arxiv.org/0.0)
+[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
+[![License](https://img.shields.io/github/license/minterpy-project/minterpy)](https://choosealicense.com/licenses/mit/)
+
+## 👥 Team
 
 - [Phil-Alexander Hofmann](https://gitlab.com/philippo_calippo) - [CASUS](https://www.casus.science/) ([HZDR](https://www.hzdr.de/))
+- [Damar Wicaksono](https://gitlab.com/damar-wicaksono) - [CASUS](https://www.casus.science/) ([HZDR](https://www.hzdr.de/))
+- [Michael Hecht](https://gitlab.com/MikeyPice) - [CASUS](https://www.casus.science/) ([HZDR](https://www.hzdr.de/))
+
+Actively developed by Phil-A. Hofmann, supervised by Michael Hecht, and supported by Damar Wicaksono.
 
 ## 📜 License
 
 The project is licensed under the [MIT License](LICENSE.txt).
 
+**Please cite the following work when using this framework in any public context**:
+
+_Phil-Alexander Hofmann, Damar Wicaksono, Michael Hecht._ Fast Newton Transform: Interpolation in Downward Closed Polynomial Spaces. arXiv, 2025. [https://arxiv.org/0.0].
+
 ## 💬 Citations
 
-- CASUS. [Minterpy](https://github.com/casus/minterpy). 2024. Licensed under the [MIT](https://github.com/casus/minterpy/blob/main/LICENSE) License.
-- philhofmann. [Bachelor thesis](https://gitlab.com/philhofmann/implementation-and-complexity-analysis-of-algorithms-for-multivariate-newton-polynomials-of-p-degree). 2024. Licensed under the [MIT](https://gitlab.com/philhofmann/implementation-and-complexity-analysis-of-algorithms-for-multivariate-newton-polynomials-of-p-degree/-/blob/main/LICENSE.txt?ref_type=heads) License.
+**Related references**:
+
+- _Hecht et al._ Multivariate Newton Interpolation in Downward Closed Spaces Reaches the Optimal Geometric Approximation Rates for Bos–Levenberg–Trefethen Functions. arXiv, 2025. [https://arxiv.org/pdf/2504.17899].
+- _Damar Wicaksono et al._ Minterpy: multivariate polynomial interpolation in
+  Python. The Journal of Open Source Software, 2025. [https://joss.theoj.org/papers/10.21105/joss.07702]. [Minterpy](https://github.com/minterpy-project/minterpy) licensed under the [MIT](https://github.com/minterpy-project/minterpy/blob/dev/LICENSE) License.
+- _Phil-Alexander Hofmann._ Implementation and Complexity Analysis of Algorithms for Multivariate Newton Polynomials of p Degree. 2024. [https://philhofmann.de]. [Framework](https://gitlab.com/philhofmann/implementation-and-complexity-analysis-of-algorithms-for-multivariate-newton-polynomials-of-p-degree) licensed under the [MIT](https://gitlab.com/philhofmann/implementation-and-complexity-analysis-of-algorithms-for-multivariate-newton-polynomials-of-p-degree/-/blob/main/LICENSE.txt?ref_type=heads) License.
 
 ## 💻 Installation
 
-Please follow the steps below
+### 1. Including in Your Project
 
-1. Clone the project:
+If you want to include this package in your project, you can install it directly from the GitHub repository:
+
+1. Create a conda environment with Python 3.9
 
 ```bash
-git clone https://github.com/philippocalippo/lpfun.git
+conda create --name myenv python=3.9.20
 ```
 
-2. Create a virtual environment
+2. Activate environment
+
+```bash
+conda activate myenv
+```
+
+3. Install the package from the GitHub repository
+
+```bash
+pip install git+https://github.com/phil-hofmann/lpfun.git
+```
+
+4. If you want to deactivate the environment
+
+```bash
+conda deactivate
+```
+
+### 2. Setting Up the Repository on Your Local Machine
+
+Please follow the steps below
+
+1. Clone the project
+
+```bash
+git clone https://github.com/phil-hofmann/lpfun.git
+```
+
+2. Create a conda environment
 
 ```bash
 conda env create -f environment.yml
 ```
- 
-3. Activate environment:
+
+3. Activate environment
 
 ```bash
 conda activate lpfun
 ```
 
-4. Install using pip
+4. Install lpfun package using pip
 
 ```bash
 pip install -e .
@@ -50,7 +95,7 @@ pip install -e .
 5. Run the tests to verify the installation
 
 ```bash
-pytest
+pytest -v
 ```
 
 6. If you want to deactivate the environment
@@ -59,144 +104,178 @@ pytest
 conda deactivate
 ```
 
-## 📖 Usage
+## 📖 Tutorial
 
-The `Transform` class can be used to perform forward and backward l^p transformations and derivatives.
+[tutorial.py](docs/tutorial.py)
+
+### 1. Short Version
+
+```python
+import numpy as np
+from lpfun import Transform
+
+# from lpfun.utils import leja_nodes # NOTE optional
+
+
+# Function f to approximate
+def f(x, y):
+    return np.sin(x) * np.cos(y)
+
+
+# Initialise Transform object
+t = Transform(
+    spatial_dimension=2,
+    polynomial_degree=10,
+    # nodes=leja_nodes # NOTE optional
+)
+
+# Compute function values on the grid
+values_f = f(t.grid[:, 0], t.grid[:, 1])
+
+# Perform the fast Newton transform (FNT) to compute the coefficients
+coeffs_f = t.fnt(values_f)
+
+# Compute the approximate first derivative in the first coordinate direction
+coeffs_df = t.dx(coeffs_f, i=0, k=1)
+
+# Evaluate the approximate derivative at random points
+random_points = np.random.rand(10, 2)
+random_df = t.eval(coeffs_df, random_points)
+
+# Perform the inverse Newton transform (IFNT) to evaluate the approximate derivative on the grid
+rec_df = t.ifnt(coeffs_df)
+```
+
+### 2. Long Version
+
+The `Transform` class enables forward and backward transform, as well as the computation of derivatives and their adjoints.
 
 ```python
 import time
 import numpy as np
 from lpfun import Transform
+from lpfun.utils import leja_nodes
 
-# Create a Transform object with spatial_dimension=3, polynomial_degree=4, p=2 (default value), mode="newton" (default value)
-t = Transform(spatial_dimension=3, polynomial_degree=20)
+# Initialise Transform object
+t = Transform(
+    spatial_dimension=3,
+    polynomial_degree=20,
+    nodes=leja_nodes,  # NOTE default nodes are cheb2nd_nodes
+)
 
-# Warmup the JIT compiler
-t.warmup()
-
-# Print the dimension of the polynomial space
+# Dimension of the polynomial space
 print(f"N = {len(t)}")
 
-# Define a function
+
+# Function f to approximate
 def f(x, y, z):
     return np.sin(x) + np.cos(y) + np.exp(z)
 
-# Calculate the exact function values on the unisolvent nodes
-function_values = np.array([f(*x) for x in t.unisolvent_nodes])
 
-# Perform the forward transformation
-start_time = time.time()
-coeffs = t.push(function_values)
-print("t.push:", "{:.2f}".format((time.time() - start_time) * 1000), "ms")
+# Compute function values on the grid
+values_f = f(t.grid[:, 0], t.grid[:, 1], t.grid[:, 2])
 
-# Perform the backward transformation
-start_time = time.time()
-reconstruction = t.pull(coeffs)
-print("t.pull:", "{:.2f}".format((time.time() - start_time) * 1000), "ms")
+# Perform the fast Newton transform (FNT) to compute the coefficients
+start = time.time()
+coeffs_f = t.fnt(values_f)
+print("t.fnt:", "{:.2f}".format((time.time() - start) * 1000), "ms")
+
+# Perform the inverse fast Newton transform (IFNT) to reconstruct values on the grid
+start = time.time()
+rec_f = t.ifnt(coeffs_f)
+print("t.ifnt:", "{:.2f}".format((time.time() - start) * 1000), "ms")
+
+# Measure the maximum norm error for reconstruction
+print(
+    "max |rec_f - values_f| =",
+    "{:.2e}".format(np.max(np.abs(rec_f - values_f))),
+)
+
+# Evaluate approximate f at random points
+rand_points = np.random.rand(10, 3)
+f_rand = f(rand_points[:, 0], rand_points[:, 1], rand_points[:, 2])
+start = time.time()
+rec_f_rand = t.eval(coeffs_f, rand_points)
+print("t.eval (random points):", "{:.2f}".format((time.time() - start) * 1000), "ms")
 
 # Print the maximum norm error
 print(
-    "max |reconstruction-function_values| =",
-    "{:.2e}".format(np.max(reconstruction - function_values)),
+    "|f_random - rec_f_random| =", "{:.2e}".format(np.max(np.abs(f_rand - rec_f_rand)))
 )
 
-# Evaluate at a single point
-x = np.array([0.1, 0.2, 0.3], dtype=np.float64)
-fx = f(*x)
-start_time = time.time()
-reconstruction_fx = t.eval(coeffs, x)
-print("t.eval:", "{:.2f}".format((time.time() - start_time) * 1000), "ms")
 
-# Print the absolute error
-print("|reconstruction_fx-fx| =", "{:.2e}".format(np.abs(fx - reconstruction_fx)))
+# Compute the exact derivative
+def df_dz(x, y, z):
+    return np.exp(z)
 
-# Define the derivative
-def dx_f(x, y, z):
-    return np.zeros_like(x) + np.zeros_like(y) + np.exp(z)
 
-# Calculate the exact derivative dx_3 on the unisolvent nodes
-dx_function_values = np.array([dx_f(*x) for x in t.unisolvent_nodes])
+# Compute exact derivative values on the grid
+values_df = df_dz(t.grid[:, 0], t.grid[:, 1], t.grid[:, 2])
 
-# Compute the derivative dx_3
-start_time = time.time()
-dx_coeffs = t.dx(coeffs, 2)
-print(f"t.dx:", "{:.2f}".format((time.time() - start_time) * 1000), "ms")
+# Compute approximate derivative coefficients
+start = time.time()
+coeffs_df = t.dx(coeffs_f, i=2, k=1)
+print("t.dx:", "{:.2f}".format((time.time() - start) * 1000), "ms")
 
-# Perform the backward transformation
-dx_reconstruction = t.pull(dx_coeffs)
+# Perform inverse transform on derivative coefficients to reconstruct values on grid
+rec_df = t.ifnt(coeffs_df)
+
+# Print maximum norm error
+print(
+    "max |rec_df - values_df| =",
+    "{:.2e}".format(np.max(np.abs(rec_df - values_df))),
+)
+
+# Evaluate approximate df at random points
+df_rand = df_dz(rand_points[:, 0], rand_points[:, 1], rand_points[:, 2])
+start = time.time()
+rec_df_rand = t.eval(coeffs_df, rand_points)
+print("t.eval (random points):", "{:.2f}".format((time.time() - start) * 1000), "ms")
 
 # Print the maximum norm error
 print(
-    "max |dx_reconstruction-dx_function_values| =",
-    "{:.2e}".format(np.max(np.abs(dx_reconstruction - dx_function_values))),
+    "max |df_rand-rec_df_rand| =",
+    "{:.2e}".format(np.max(np.abs(df_rand - rec_df_rand))),
 )
+
+# Embed the approximate derivative into a bigger polynomial space space
+t_prime = Transform(
+    spatial_dimension=3,
+    polynomial_degree=30,
+    nodes=leja_nodes, # NOTE default nodes are cheb2nd_nodes
+    report=False,
+)
+phi = t.embed(t_prime)
+coeffs_df_prime = np.zeros(len(t_prime))
+coeffs_df_prime[phi] = coeffs_df.copy()
 ```
 
-When you run this code, you should see an output similar to
+When you run this code, you should see outputs similar to:
 
 ```
+---------------------+---------------------
+                   Report
+---------------------+---------------------
+Spatial Dimension    | 3
+Polynomial Degree    | 20
+lp Degree            | 2.0
+Condition V          | 1.44e+06
+Amount of Coeffs     | 4_662
+Construction         | 2_303.00 ms
+Precompilation       | 16_603.96 ms
+---------------------+---------------------
+
 N = 4662
-t.push: 9.09 ms
-t.pull: 8.67 ms
-max |reconstruction-function_values| = 2.53e-14
-t.eval: 0.62 ms
-|reconstruction_fx-fx| = 9.33e-15
-t.dx: 1.58 ms
-max |dx_reconstruction-dx_function_values| = 5.54e-12
+t.fnt: 0.59 ms
+t.ifnt: 0.52 ms
+max |rec_f - values_f| = 7.11e-15
+t.eval (random points): 0.19 ms
+|f_random - rec_f_random| = 8.44e-15
+t.dx: 0.50 ms
+max |rec_df - values_df| = 1.03e-12
+t.eval (random points): 0.19 ms
+max |df_rand-rec_df_rand| = 5.15e-14
 ```
-
-In Lagrangian basis it is no possible to perform such l^p differentiation directly for the non-tensorial case as demonstrated above. Nevertheless, this feature is implemented for the special case where p = infinity (or spatial_dimension = 1).
-
-```python
-import time
-import numpy as np
-from lpfun import Transform
-
-# Create a Transform object with dimension=3, polynomial_degree=4, p=np.infty, mode="lagrange"
-t = Transform(spatial_dimension=3, polynomial_degree=20, p=np.infty, mode="lagrange")
-
-# Warmup the JIT compiler
-t.warmup()
-
-# Print the dimension of the polynomial space
-print(f"N = {len(t)}")
-
-# Define a function
-def f(x, y, z):
-    return np.sin(x) + np.cos(y) + np.exp(z)
-
-# Calculate the exact function values on the unisolvent nodes
-function_values = np.array([f(*x) for x in t.unisolvent_nodes])
-
-# Define the derivative
-def dx_f(x, y, z):
-    return np.zeros_like(x) + np.zeros_like(y) + np.exp(z)
-
-# Calculate the exact derivative dx_3 on the unisolvent nodes
-dx_function_values = np.array([dx_f(*x) for x in t.unisolvent_nodes])
-
-# Compute the derivative dx_3
-start_time = time.time()
-dx_reconstruction = t.dx(function_values, 2)
-print(f"t.dx:", "{:.2f}".format((time.time() - start_time) * 1000), "ms")
-
-# Print the maximum norm error
-print(
-    "max |dx_reconstruction-dx_function_values| =",
-    "{:.2e}".format(np.max(np.abs(dx_reconstruction - dx_function_values))),
-)
-```
-
-When you run this code, you should see an output similar to
-
-```
-N = 9261
-t.dx: 0.17 ms
-max |dx_reconstruction-dx_function_values| = 3.65e-13
-```
-
-The little Lagrangian example from above is also showcasing that N is much bigger for p being infinity instead of two!
-Obviously 0.17ms is still much less than the Newton mode offers. This is an artifact of NumPys BLAS Library which is highly optimized and wont appear for higher dimensional or polynomial degree applications.
 
 ## Acknowledgments
 
@@ -205,5 +284,6 @@ I would like to acknowledge:
 - [Prof. Dr. Michael Hecht](https://www.casus.science/de-de/team-members/michael-hecht/) - [CASUS](https://www.casus.science/) ([HZDR](https://www.hzdr.de/)),
 - [Dr. Damar Wicaksono](https://www.casus.science/de-de/team-members/dr-damar-wicaksono/) - [CASUS](https://www.casus.science/) ([HZDR](https://www.hzdr.de/)),
 - [Prof. Dr. Peter Stadler](https://www.uni-leipzig.de/personenprofil/mitarbeiter/prof-dr-peter-florian-stadler) - [University of Leipzig](https://www.uni-leipzig.de/),
+- [Prof. Dr. Oliver Sander](https://tu-dresden.de/mn/math/numerik/sander) - [Techincal University of Dresden](https://tu-dresden.de/),
 
 and the support and resources provided by the [Center for Advanced Systems Understanding](https://www.casus.science/) ([Helmholtz-Zentrum Dreden-Rossendorf](https://www.hzdr.de/)) where the development of this project took place.

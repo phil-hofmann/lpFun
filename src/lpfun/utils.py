@@ -1,288 +1,217 @@
 import itertools
-from typing import Tuple
 import numpy as np
-from numba import njit
-from lpfun import NP_FLOAT, NP_ARRAY, NP_INT
-from lpfun.iterators import MultiIndexSet
+from typing import Tuple
+from numba import njit, prange
+
 
 """Utility functions"""
 
 
 @njit
-def classify(m: int, n: int, p: float, allow_infty=False) -> NP_ARRAY:
+def classify(m: int, n: int, p: float) -> bool:
+    m, n, p = int(m), int(n), float(p)
+    ###
     if m < 1:
         raise ValueError("The parameter dim should be at least 1.")
-    if (not allow_infty) and (p <= 0.0 or p > 2.0):
-        raise ValueError(" The parameter p should be in the range (0, 2].")
-    if allow_infty and (p <= 0.0 or p > 2.0) and (not p == np.infty):
-        raise ValueError(
-            " The parameter p should be in the range (0, 2] or p = np.infty."
-        )
+    if (p <= 0.0 or p > 2.0) and (not p == np.inf):
+        raise ValueError(f"The parameter p should be in the range (0, 2] or inf.")
     if n < 0:
         raise ValueError("The parameter degree should be non-negative.")
+    ###
+    return True
 
 
-@njit
-def n2l(nodes: NP_ARRAY) -> NP_ARRAY:
-    """O(n^2)"""
-    x = np.asarray(nodes).astype(NP_FLOAT)
-    n = len(nodes)
-    lag_coeffs = np.zeros((n, n))
-    for i in range(n):
-        evals = _n_eval(x, x[i])
-        lag_coeffs[i, :n] = evals
-    return lag_coeffs
+# nodes
 
 
-@njit
-def _n_eval(nodes: NP_ARRAY, x: NP_FLOAT) -> NP_FLOAT:
+def cheb2nd_nodes(n: int) -> np.ndarray:
     """O(n)"""
-    nodes = np.asarray(nodes).astype(NP_FLOAT)
-    n = len(nodes)
-    monomials = np.ones(n, dtype=NP_FLOAT)
-    # caution -- loop not parallelizable
-    for i in range(1, n):
-        monomials[i] *= monomials[i - 1] * (x - nodes[i - 1])
-    return monomials
-
-
-@njit
-def n_eval_at_point(
-    coefficients: NP_ARRAY, nodes: NP_ARRAY, x: NP_ARRAY, m: int, p: float
-) -> NP_FLOAT:
-    """O(m*k_m,n,p)"""
-    coefficients = np.asarray(coefficients).astype(NP_FLOAT)
-    x = np.asarray(x).astype(NP_FLOAT)
-    n = len(nodes) - 1
-    monomials = [_n_eval(nodes, x[i]) for i in range(m)]  # O(m*n)
-    result = 0.0
-    mis = MultiIndexSet(m, n, p)
-    while mis.next():  #  O(k_mnp)
-        mi = mis.multi_index
-        result += coefficients[mis.i] * np.prod(
-            np.array([monomials[i][mi[i]] for i in range(m)], dtype=NP_FLOAT)
-        )  # O(m)
-    return result
-
-
-@njit
-def l2n(nodes: NP_ARRAY) -> NP_ARRAY:
-    """O(n^3)"""
-    n = len(nodes)
-    x = np.asarray(nodes)
-    newton_coeffs = np.zeros((n, n))
-    for i in range(n):
-        y = np.zeros(n)
-        y[i] = 1
-        coeffs = _dds(x, y)
-        newton_coeffs[i, :n] = coeffs
-    return newton_coeffs.T
-
-
-@njit
-def _dds(x, y) -> NP_ARRAY:
-    """O(n^2)"""
-    x = np.asarray(x).astype(NP_FLOAT)
-    y = np.asarray(y).astype(NP_FLOAT)
-    n = len(x)
-    dd = np.zeros(n, dtype=NP_FLOAT)
-    dd[0] = y[0]
-    for i in range(1, n):
-        for j in range(n - 1, i - 1, -1):
-            y[j] = (y[j] - y[j - 1]) / (x[j] - x[j - i])
-        dd[i] = y[i]
-    return dd
-
-
-@njit
-def n_dx(nodes: NP_ARRAY) -> NP_ARRAY:
-    """O(n^2)"""
-    n = nodes.shape[0]
-    dx = np.zeros((n, n), dtype=NP_FLOAT)
-    for i in range(1, n):
-        for j in range(i):
-            if i == j + 1:
-                dx[i, j] = i
-            else:
-                dx[i, j] = (nodes[j] - nodes[i - 1]) * dx[i - 1, j] + dx[i - 1, j - 1]
-    return dx.T
-
-
-@njit
-def l_dx(nodes: NP_ARRAY) -> NP_ARRAY:
-    """O(n^2)"""
-    n = len(nodes)
-    w = _baryentric(nodes)
-    dx = np.zeros((n, n))
-    for i in range(n):
-        for j in range(n):
-            if i == j:
-                dx[i][i] = np.sum(
-                    np.array(
-                        [1 / (nodes[i] - nodes[_]) for _ in range(n) if _ != i],
-                        dtype=NP_FLOAT,
-                    )
-                )
-            else:
-                dx[i][j] = (w[j] / w[i]) * 1 / (nodes[i] - nodes[j])
-    return dx
-
-
-@njit
-def _baryentric(nodes: NP_ARRAY) -> NP_ARRAY:
-    return np.array(
-        [
-            1
-            / np.prod(
-                np.array(
-                    [(nodes[__] - nodes[_]) for _ in range(len(nodes)) if _ != __],
-                    dtype=NP_FLOAT,
-                )
-            )
-            for __ in range(len(nodes))
-        ],
-        dtype=NP_FLOAT,
-    )
-
-
-@njit
-def rmo(A: NP_ARRAY, mode: str = "lower") -> NP_ARRAY:
-    if mode == "upper":
-        return _rmo_upper(A)
-    elif mode == "lower":
-        return _rmo_lower(A)
-    else:
-        raise ValueError("The parameter mode should be either 'upper' or 'lower'.")
-
-
-@njit
-def _rmo_upper(A: NP_ARRAY) -> NP_ARRAY:
-    """O(n^2)"""
-    A = np.asarray(A).astype(NP_FLOAT)
-    n = A.shape[0]
-    N = int(n * (n + 1) / 2)
-    result = np.zeros(N, dtype=NP_FLOAT)
-    k = 0
-    for i in range(n):
-        for j in range(n - i):
-            result[k] = A[i, i + j]
-            k += 1
-    return result
-
-
-@njit
-def _rmo_lower(A: NP_ARRAY) -> NP_ARRAY:
-    """O(n^2)"""
-    A = np.asarray(A).astype(NP_FLOAT)
-    n = A.shape[0]
-    N = int(n * (n + 1) / 2)
-    result = np.zeros(N, dtype=NP_FLOAT)
-    k = 0
-    for i in range(n):
-        for j in range(i + 1):
-            result[k] = A[i, j]
-            k += 1
-    return result
-
-
-def unisolvent_nodes(nodes: NP_ARRAY, m: int, n: int, p: float) -> NP_ARRAY:
-    classify(m, n, p, allow_infty=True)
-    if p == np.infty:
-        return np.flip(list(itertools.product(nodes, repeat=m)), axis=1)
-    else:
-        return _unisolvent_nodes(nodes, m, n, p)
-
-
-@njit
-def _unisolvent_nodes(nodes: NP_ARRAY, m: int, n: int, p: float) -> NP_ARRAY:
-    """O(|A_{m, n, p}| + ... + |A_{1, n, p}|)"""
-    nodes = np.asarray(nodes).astype(NP_FLOAT)
-    memory_allocation = _memory_allocation(m, n, p)
-    unisolvent_nodes = np.zeros((memory_allocation, m))
-    mis = MultiIndexSet(m, n, p)
-    while mis.next():
-        mi = mis.multi_index
-        unisolvent_nodes[mis.i] = [nodes[mi[_]] for _ in range(m)]
-    return unisolvent_nodes[: mis.i + 1]
-
-
-@njit
-def _memory_allocation(m: int, n: int, p: float) -> int:
-    if p <= 1.0:
-        singular = 1 + m * n
-        if m < n:
-            return int(singular * (1 - p) + _binomial(n + m, m) * p)
-        else:
-            return int(singular * (1 - p) + _binomial(n + m, n) * p)
-    elif p <= 2.0:
-        fac1 = (p * np.e / m) ** (1 / p)
-        fac2 = np.sqrt(p / (2 * np.pi * m))
-        return int(np.ceil((fac1 * (n + 2) * np.math.gamma(1 + 1 / p)) ** m * fac2))
-    else:
-        return int((n + 1) ** m)
-
-
-@njit
-def _binomial(n: int, m: int) -> int:
-    """O(min(m, n-m))"""
-    if m < 0 or m > n:
-        return 0
-    result = 1
-    for i in range(min(m, n - m)):
-        result = result * (n - i) // (i + 1)
-    return result
-
-
-@njit
-def unisolvent_nodes_1d(n: int, nodes: callable) -> NP_ARRAY:
-    nodes_n = nodes(n)
-    return nodes_n[leja_order(nodes_n)]
-
-
-@njit
-def cheb(n: int) -> NP_ARRAY:
-    """O(n)"""
+    n = int(n)
+    ###
     if n < 0:
         raise ValueError("The parameter ``n`` should be non-negative.")
     if n == 0:
-        return np.zeros(1, dtype=NP_FLOAT)
+        return np.zeros(1, dtype=np.float64)
     if n == 1:
-        return np.array([-1.0, 1.0], dtype=NP_FLOAT)
-    return np.cos(np.arange(n, dtype=NP_FLOAT) * np.pi / (n - 1))
+        return np.array([-1.0, 1.0], dtype=np.float64)
+    return np.cos(np.arange(n, dtype=np.float64) * np.pi / (n - 1))
+
+
+def leja_nodes(n: int, m: int = 1000) -> np.ndarray:
+    """O(n^3)"""
+    if n < 0:
+        raise ValueError("The parameter ``n`` should be non-negative.")
+    if n == 0:
+        return np.zeros(1, dtype=np.float64)
+    if n == 1:
+        return np.array([-1.0, 1.0], dtype=np.float64)
+    if n > m:
+        raise (
+            f"The amount of nodes {n} must be smaller or equal than the sample size {m}."
+        )
+    sample_nodes = cheb2nd_nodes(m)
+    leja_order = get_leja_order(sample_nodes, limit=n)
+    return sample_nodes[leja_order]
+
+
+# vandermonde matrices
 
 
 @njit
-def tiling(m: int, n: int, p: NP_FLOAT) -> NP_ARRAY:
-    classify(m, n, p)
-    return _tiling(m, n, p)
-
-
-@njit
-def _tiling(m: int, n: int, p: float) -> NP_ARRAY:
-    """O(k_m,n,p)"""
-    mis = MultiIndexSet(m, n, p)
-    memory_allocation = _memory_allocation(m - 1, n, p)
-    tiling = np.zeros(memory_allocation, dtype=NP_INT)
-
-    while mis.next():
-        if mis.k > 0:
-            tiling[mis.l] = mis.k
-    return tiling[: mis.l]
-
-
-@njit
-def leja_order(nodes: NP_ARRAY) -> NP_ARRAY:
-    """This function originates from minterpy."""
+def newton2lagrange(x: np.ndarray) -> np.ndarray:
     """O(n^2)"""
-    nodes = np.asarray(nodes).astype(NP_FLOAT)
+    x = np.asarray(x).astype(np.float64)
+    n = len(x)
+    ###
+    Vx = np.zeros((n, n))
+    for i in range(n):
+        monomials = np.ones(n, dtype=np.float64)
+        for j in range(1, n):
+            monomials[j] *= monomials[j - 1] * (x[i] - x[j - 1])
+        Vx[i, :n] = monomials
+    ###
+    return Vx
+
+
+@njit
+def chebyshev2lagrange(x: np.ndarray) -> np.ndarray:
+    """O(n^2)"""
+    x = np.asarray(x).astype(np.float64)
+    n = len(x)
+    ###
+    Vx = np.zeros((n, n), dtype=np.float64)
+    for i in range(n):
+        Vx[i, 0] = 1.0
+        if n > 0:
+            Vx[i, 1] = x[i]
+        for j in range(2, n + 1):
+            Vx[i, j] = 2 * x[i] * Vx[i, j - 1] - Vx[i, j - 2]
+    return Vx
+
+
+# differentiation matrices
+
+
+@njit
+def newton2derivative(nodes: np.ndarray) -> np.ndarray:
+    """O(n^2)"""
+    nodes = np.asarray(nodes).astype(np.float64)
+    x = nodes[:]
+    n = len(x)
+    ###
+    Dx = np.zeros((n, n), dtype=np.float64)
+    for i in range(1, n):
+        for j in range(i):
+            if i == j + 1:
+                Dx[i, j] = i
+            else:
+                Dx[i, j] = (x[j] - x[i - 1]) * Dx[i - 1, j] + Dx[i - 1, j - 1]
+    ###
+    return Dx.T
+
+
+@njit
+def chebyshev2derivative(nodes: np.ndarray) -> np.ndarray:
+    """O(n^2)"""
+    ### NOTE -- Matrix is independent of the nodes
+    nodes = np.asarray(nodes).astype(np.float64)
     n = len(nodes) - 1
-    ord = np.arange(1, n + 1, dtype=NP_INT)
-    lj = np.zeros(n + 1, dtype=NP_INT)
+    ###
+    Dx = np.zeros((n + 1, n + 1))
+    for k in range(1, n + 1):
+        for j in range(k - 1, -1, -2):
+            Dx[j, k] = 2 * k
+        Dx[0, k] *= 0.5
+    ###
+    return Dx
+
+
+# point evaluation
+
+
+@njit(parallel=True)
+def newton2point(
+    coefficients: np.ndarray,
+    nodes: np.ndarray,
+    points: np.ndarray,
+    A: np.ndarray,
+    m: int,
+    n: int,
+) -> float:
+    """O(Nmn)"""
+    ### NOTE -- no type conversion
+    len_points = len(points)
+    values = np.zeros(len_points, dtype=np.float64)
+    for l in prange(len_points):
+        x = points[l]
+        ###
+        basis = np.ones((m, n + 1), dtype=np.float64)
+        for i in range(m):
+            for j in range(1, n + 1):
+                basis[i, j] = basis[i, j - 1] * (x[i] - nodes[j - 1])
+        ###
+        value = 0.0
+        for i in prange(len(A)):
+            mi = A[i]
+            prod = 1.0
+            for j in range(m):
+                prod *= basis[j, mi[j]]
+            value += coefficients[i] * prod
+        ###
+        values[l] = value
+    return values
+
+
+@njit(parallel=True)
+def chebyshev2point(
+    coefficients: np.ndarray,
+    points: np.ndarray,
+    A: np.ndarray,
+    m: int,
+    n: int,
+) -> float:
+    ### NOTE -- no type conversion
+    len_points = len(points)
+    values = np.zeros(len_points, dtype=np.float64)
+    for l in prange(len_points):
+        x = points[l]
+        ###
+        basis = np.empty((m, n + 1), dtype=np.float64)
+        basis[:, 0] = 1.0
+        if n >= 1:
+            basis[:, 1] = x
+        for j in range(1, n):
+            basis[:, j + 1] = 2 * x * basis[:, j] - basis[:, j - 1]
+        ###
+        value = 0.0
+        for i in prange(len(A)):
+            mi = A[i]
+            prod = 1.0
+            for j in range(m):
+                prod *= basis[j, mi[j]]
+            value += coefficients[i] * prod
+        ###
+        values[l] = value
+    return values
+
+
+# Leja order
+
+
+@njit
+def get_leja_order(nodes: np.ndarray, limit: int = -1) -> np.ndarray:
+    """O(n^3)"""
+    """This function originates from minterpy."""
+    ### NOTE -- no type conversion
+    n = len(nodes)
+    limit = n if limit == -1 else limit
+    ord = np.arange(1, n, dtype=np.int64)
+    lj = np.zeros(limit, dtype=np.int64)
     lj[0] = 0
     m = 0
-    for k in range(0, n):
+    for k in range(0, limit - 1):
         jj = 0
-        for i in range(0, n - k):
+        for i in range(0, n - k - 1):
             p = 1
             for j in range(k + 1):
                 p = p * (nodes[lj[j]] - nodes[ord[i]])
@@ -296,99 +225,134 @@ def leja_order(nodes: NP_ARRAY) -> NP_ARRAY:
     return lj
 
 
-@njit
-def permutation_maximal(m: int, n: int, i: int) -> NP_ARRAY:
+# grid
+
+
+def get_grid(
+    nodes: np.ndarray,
+    A: np.ndarray,
+    m: int,
+    n: int,
+    p: float,
+) -> np.ndarray:
     """O(N)"""
-    N = (n + 1) ** m
-    mat = np.zeros(N, dtype=NP_INT)
-    iter_len = (n + 1) ** i
-    step_len = (n + 1) ** (m - i)
+    nodes, m, n, p = (
+        np.asarray(nodes).astype(np.float64),
+        int(m),
+        int(n),
+        float(p),
+    )
+    if m == 1:
+        return nodes.reshape(-1, 1)
+    elif p == np.inf:
+        return np.flip(
+            np.asarray(list(itertools.product(nodes, repeat=m)), dtype=np.float64),
+            axis=1,
+        )
+    else:
+        A = np.asarray(A).astype(np.int64)
+        return _get_grid(nodes, A, m)
+
+
+@njit
+def _get_grid(
+    nodes: np.ndarray,
+    A: np.ndarray,
+    m: int,
+) -> np.ndarray:
+    ### NOTE -- no type conversion
+    N = len(A)
+    grid = np.zeros((N, m))
+    for i in range(N):
+        mi = A[i]
+        grid_point = np.zeros(m, dtype=np.float64)
+        for j in range(m):
+            grid_point[j] = nodes[mi[j]]
+        grid[i] = grid_point
+    return grid
+
+
+# row major ordering
+
+
+@njit
+def is_lower_triangular(
+    M: np.ndarray,
+    atol=1e-8,
+) -> bool:
+    """O(n^2)"""
+    M = np.asarray(M).astype(np.float64)
+    ###
+    n = len(M)
+    for i in range(n):
+        for j in range(i + 1, n):
+            if not np.abs(M[i, j]) < atol:
+                return False
+    ###
+    return True
+
+
+@njit
+def get_rmo(L: np.ndarray) -> np.ndarray:
+    """O(n^2)"""
+    L = np.asarray(L).astype(np.float64)
+    ###
+    n = len(L)
+    N = int(n * (n + 1) / 2)
+    result = np.zeros(N, dtype=np.float64)
     k = 0
-    for j in range(step_len):
-        for i in range(iter_len):
-            val = i * step_len + j
-            mat[k] = val
-            k += 1
-    return mat
-
-
-@njit
-def permutation(T: NP_ARRAY, i: int) -> NP_ARRAY:
-    """O(???)"""
-    n = np.max(T)
-    if i == 0:
-        return np.arange(n)
-    else:
-        Pi = transposition(T)
-        if i == 1:
-            return Pi
-        P = np.copy(Pi)
-        for _ in range(i - 1):
-            P = apply_permutation(P, Pi, invert=True)
-        return P
-
-
-@njit
-def transposition(T) -> NP_ARRAY:
-    """O(???)"""
-    N, n = np.sum(T), np.max(T)
-    permutation_vector = np.zeros(N, dtype=NP_INT)
-    current_position = 0
-    for j in range(n):
-        for i in range(len(T)):
-            if j < T[i]:
-                permutation_vector[current_position] = sum(T[:i]) + j
-                current_position += 1
-    return permutation_vector
-
-
-@njit
-def apply_permutation(P: NP_ARRAY, x: NP_ARRAY, invert: bool = False) -> NP_ARRAY:
-    """O(n)"""
-    x_p = np.zeros_like(x)
-    if invert:
-        for i, j in enumerate(P):
-            x_p[i] = x[j]
-    else:
-        for i, j in enumerate(P):
-            x_p[j] = x[i]
-    return x_p
-
-
-@njit
-def rmo_transpose(rmo: NP_ARRAY) -> NP_ARRAY:
-    N = rmo.size
-    n = int((np.sqrt(1 + 8 * N) - 1) / 2)
-    transposed_rmo = np.zeros(N, dtype=NP_FLOAT)
     for i in range(n):
         for j in range(i + 1):
-            lower_idx = i * (i + 1) // 2 + j
-            upper_idx = j * n - j * (j - 1) // 2 + i - j
-            transposed_rmo[upper_idx] = rmo[lower_idx]
-    return transposed_rmo
-
-
-@njit
-def concatenate_arrays(chunk_dot) -> NP_ARRAY:
-    total_length = sum([len(arr) for arr in chunk_dot])
-    result = np.empty(total_length, dtype=chunk_dot[0].dtype)
-    start = 0
-    for arr in chunk_dot:
-        end = start + arr.size
-        result[start:end] = arr
-        start = end
+            result[k] = L[i, j]
+            k += 1
+    ###
     return result
 
 
+# matrix operations
+
+
 @njit
-def reduceat(array, split_indices) -> NP_ARRAY:
-    """O(???)"""
-    sums = np.zeros(len(split_indices) - 1, dtype=array.dtype)
-    for i in range(len(split_indices) - 1):
-        start = split_indices[i]
-        end = split_indices[i + 1]
-        if start >= len(array):
-            break
-        end = min(end, len(array))
-        sums[i] = np.sum(array[start:end])
-    return sums[:i]
+def get_lu(M: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+    """O(n^3)"""
+    M = np.asarray(M).astype(np.float64)
+    ###
+    n = len(M)
+    L = np.eye(n, dtype=np.float64)
+    U = M[:, :]
+    for j in range(n):
+        for i in range(j + 1, n):
+            L[i, j] = U[i, j] / U[j, j]
+            U[i, j:] -= L[i, j] * U[j, j:]
+    ###
+    return L, U
+
+
+# @njit # NOTE pivoting increases numerical stability
+# def get_lu_pivot(M: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+#     """Stable LU with partial pivoting. Returns P, L, U so that P @ M = L @ U"""
+#     M = np.asarray(M).astype(np.float64)
+#     n = len(M)
+#     L = np.zeros((n, n), dtype=np.float64)
+#     U = M.copy()
+#     P = np.eye(n, dtype=np.float64)
+
+#     for j in range(n):
+#         # Partial pivoting: find pivot row
+#         pivot = j + np.argmax(np.abs(U[j:, j]))
+#         if pivot != j:
+#             # Swap rows in U
+#             U[[j, pivot], :] = U[[pivot, j], :]
+#             # Swap rows in P
+#             P[[j, pivot], :] = P[[pivot, j], :]
+#             # Swap rows in L (columns before j)
+#             if j > 0:
+#                 L[[j, pivot], :j] = L[[pivot, j], :j]
+
+#         # Normal LU step
+#         L[j, j] = 1.0
+#         for i in range(j + 1, n):
+#             L[i, j] = U[i, j] / U[j, j]
+#             U[i, j:] -= L[i, j] * U[j, j:]
+
+#     return P, L, U

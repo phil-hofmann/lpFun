@@ -1,506 +1,1248 @@
 import numpy as np
 from numba import njit, prange
-from lpfun import NP_FLOAT, NP_INT, NP_ARRAY, PARALLEL
-from lpfun.utils import concatenate_arrays, reduceat
-from lpfun.iterators import CompatibleIntegerList as CIL
+from lpfun import PARALLEL
+from lpfun.core.set import ordinal_embedding, entropy
 
 """
-This module contains the Numba JIT-compiled functions for the transformation of a vector x by a matrix A.
-
-The functions are divided into the following categories:
-- 1D transformations
-- Maximal transformations
-- 2D transformations
-- Transformations
-
-The functions are used in the Transform methods in the molecules.py module.
+- This module contains numba jit-compiled functions for the transformation of a vector by a matrix.
+- The functions are divided into the following categories: 1d, maximal, 2d, 3d and md transformations.
+- The functions are used in the transform methods in the molecules.py module.
 """
 
-# 1D Transformations
-
-
-@njit(parallel=PARALLEL)
-def lt_transform(A: NP_ARRAY, x: NP_ARRAY) -> NP_ARRAY:
-    """O(n^2)"""
-    return _lt_transform_parallel(A, x) if PARALLEL else _lt_transform_sequential(A, x)
+# cs_T, N_0, N_1, V_2, V_1 ?
 
 
 @njit
-def _lt_transform_sequential(A: NP_ARRAY, x: NP_ARRAY):
-    """O(n^2)"""
-    x = np.asarray(x).astype(NP_FLOAT)
-    dot, j, n = np.zeros_like(x), 0, x.shape[0]
-    for i in range(n):  # O(n)
-        j_next = j + i + 1
-        dot[i] = np.sum(A[j:j_next] * x[: i + 1])  # O(2i)
-        j = j_next
-    return dot
-
-
-@njit(parallel=True)
-def _lt_transform_parallel(A: NP_ARRAY, x: NP_ARRAY):
-    """O(n^2)"""
-    x = np.asarray(x).astype(NP_FLOAT)
-    dot, n = np.zeros_like(x), x.shape[0]
-    for i in prange(n):  # O(n)
-        j = (i * (i + 1)) // 2
-        dot[i] = np.sum(A[j : j + i + 1] * x[: i + 1])  # O(2i)
-    return dot
-
-
-@njit(parallel=PARALLEL)
-def ut_transform(A: NP_ARRAY, x: NP_ARRAY) -> NP_ARRAY:
-    """O(n^2)"""
-    return _ut_transform_parallel(A, x) if PARALLEL else _ut_transform_sequential(A, x)
-
-
-@njit
-def _ut_transform_sequential(A: NP_ARRAY, x: NP_ARRAY):
-    """O(n^2)"""
-    x = np.asarray(x).astype(NP_FLOAT)
-    dot, j, n = np.zeros_like(x), 0, x.shape[0]
-    for i in range(n):  # O(n)
-        i_prime = n - i - 1
-        j_next = j + i_prime + 1
-        dot[i] = np.sum(A[j:j_next] * x[i:n])  # O(2i)
-        j = j_next
-    return dot
-
-
-@njit(parallel=True)
-def _ut_transform_parallel(A: NP_ARRAY, x: NP_ARRAY):
-    """O(n^2)"""
-    x = np.asarray(x).astype(NP_FLOAT)
-    dot, n = np.zeros_like(x), x.shape[0]
-    for i in prange(n):  # O(n)
-        i_prime = n - i - 1
-        j = (i_prime * (i_prime + 1)) // 2
-        j_next = j + i_prime + 1
-        dot[i] = np.sum(A[j:j_next] * x[i:n])  # O(2i)
-    return dot
-
-
-# Maximal Transformations
-
-
-@njit(parallel=PARALLEL)
-def n_transform_maximal(A: NP_ARRAY, x: NP_ARRAY) -> NP_ARRAY:
-    """O(N*n*m)"""
-    return (
-        _n_transform_maximal_parallel(A, x)
-        if PARALLEL
-        else _n_transform_maximal_sequential(A, x)
-    )
-
-
-@njit
-def _n_transform_maximal_sequential(A: NP_ARRAY, x: NP_ARRAY):
-    """O(N*n*m)"""
-    N, n = x.shape[0], int((np.sqrt(1 + 8 * A.shape[0]) - 1) / 2)
-    m = int(np.log(N) / np.log(n))
-    dot, slot, remainder = np.copy(x), 1, N
-    for _ in range(m):  # O(m)
-        slot *= n  # = n^(l+1)
-        remainder //= n  # = n^(m-l-1)
-        splits = slot // n  # = n^l
-        pos = 0
-        for _ in range(remainder):  # O(remainder)
-            next_pos = pos + slot
-            chunk = dot[pos:next_pos]
-            chunk_splits = np.array_split(chunk, n)
-            chunk_dot, j = np.zeros((n, splits), dtype=NP_FLOAT), 0
-            for i in range(n):  # O(n)
-                j_next = j + i + 1
-                chunk_splits_i = chunk_splits[0 : i + 1]
-                for k, a in enumerate(A[j:j_next]):  # O(i)
-                    chunk_dot[i] += a * chunk_splits_i[k]  # O(2splits)
-                j = j_next
-            dot[pos:next_pos] = chunk_dot.reshape(-1)
-            pos = next_pos
-    return dot
-
-
-@njit(parallel=True)
-def _n_transform_maximal_parallel(A: NP_ARRAY, x: NP_ARRAY):
-    """O(N*n*m)"""
-    N, n = x.shape[0], int((np.sqrt(1 + 8 * A.shape[0]) - 1) / 2)
-    m = int(np.log(N) / np.log(n))
-    dot, slot, remainder = np.copy(x), 1, N
-    # caution -- loop not parallelizable
-    for _ in range(m):  # O(m)
-        slot *= n  # = n^(l+1)
-        remainder //= n  # = n^(m-l-1)
-        splits = slot // n  # = n^l
-        for f in prange(remainder):  # O(remainder)
-            pos = f * slot
-            next_pos = pos + slot
-            chunk = dot[pos:next_pos]
-            chunk_splits = np.array_split(chunk, n)
-            chunk_dot = np.zeros((n, splits), dtype=NP_FLOAT)
-            # caution -- possible overhead
-            for i in range(n):  # O(n)
-                j = (i * (i + 1)) // 2
-                chunk_splits_i = chunk_splits[: i + 1]
-                # caution -- possible overhead
-                for k, a in enumerate(A[j : j + i + 1]):  # O(i)
-                    chunk_dot[i] += a * chunk_splits_i[k]  # O(2splits)
-            dot[pos:next_pos] = chunk_dot.reshape(-1)
-            pos = next_pos
-    return dot
-
-
-@njit(parallel=PARALLEL)
-def ut_diag_transform_maximal(A: NP_ARRAY, x: NP_ARRAY):
-    """O(N*n)"""
-    return (
-        _ut_diag_transform_maximal_parallel(A, x)
-        if PARALLEL
-        else _ut_diag_transform_maximal_sequential(A, x)
-    )
-
-
-@njit
-def _ut_diag_transform_maximal_sequential(A: NP_ARRAY, x: NP_ARRAY):
-    """O(N*n)"""
-    N, n = x.shape[0], int((np.sqrt(1 + 8 * A.shape[0]) - 1) / 2)
-    pos, splits, result = 0, N // n, np.copy(x)
-    for _ in range(splits):  # O(n^m)
-        next_pos = pos + n
-        chunk = result[pos:next_pos]
-        chunk_dot, j, s, k = np.zeros(n, dtype=NP_FLOAT), 0, 0, n
-        for i in range(n):  # O(n)
-            j_next = j + k
-            chunk_dot[i] = np.sum(A[j:j_next] * chunk[s:n])  # O(2*i)
-            j, k, s = j_next, k - 1, s + 1
-        result[pos:next_pos] = chunk_dot
-        pos = next_pos
-    return result
-
-
-@njit(parallel=True)
-def _ut_diag_transform_maximal_parallel(A: NP_ARRAY, x: NP_ARRAY):
-    """O(N*n)"""
-    # TODO
-    raise NotImplementedError("Not implemented yet.")
-
-
-@njit(parallel=PARALLEL)
-def lt_diag_transform_maximal(A: NP_ARRAY, x: NP_ARRAY):
-    """O(N*n)"""
-    return (
-        _lt_diag_transform_maximal_parallel(A, x)
-        if PARALLEL
-        else _lt_diag_transform_maximal_sequential(A, x)
-    )
-
-
-@njit
-def _lt_diag_transform_maximal_sequential(A: NP_ARRAY, x: NP_ARRAY):
-    """O(N*n)"""
-    N, n = x.shape[0], int((np.sqrt(1 + 8 * A.shape[0]) - 1) / 2)
-    pos, splits, result = 0, N // n, np.copy(x)
-    for _ in range(splits):  # O(n^m)
-        next_pos = pos + n
-        chunk = result[pos:next_pos]
-        chunk_dot, j = np.zeros(n, dtype=NP_FLOAT), 0
-        for i in range(n):  # O(n)
-            j_next = j + i + 1
-            chunk_dot[i] = np.sum(A[j:j_next] * chunk[: i + 1])  # O(2*i)
-            j = j_next
-        result[pos:next_pos] = chunk_dot
-        pos = next_pos
-    return result
-
-
-@njit(parallel=True)
-def _lt_diag_transform_maximal_parallel(A: NP_ARRAY, x: NP_ARRAY):
-    """O(N*n)"""
-    # TODO
-    raise NotImplementedError("Not implemented yet.")
-
-
-@njit(parallel=PARALLEL)
-def diag_transform_maximal(A: NP_ARRAY, x: NP_ARRAY) -> NP_ARRAY:
-    """O(N*n)"""
-    return (
-        _diag_transform_maximal_parallel(A, x)
-        if PARALLEL
-        else _diag_transform_maximal_sequential(A, x)
-    )
-
-
-@njit
-def _diag_transform_maximal_sequential(A: NP_ARRAY, x: NP_ARRAY) -> NP_ARRAY:
-    """O(N*n)"""
-    N, n = x.shape[0], A.shape[0]
-    pos, splits, result = 0, N // n, np.copy(x)
-    for _ in range(splits):  # O((n+1)^m)
-        next_pos = pos + n
-        chunk = result[pos:next_pos]
-        chunk_dot = A @ chunk  # O(2*n^2)
-        result[pos:next_pos] = chunk_dot
-        pos = next_pos
-    return result
-
-
-@njit
-def _diag_transform_maximal_parallel(A: NP_ARRAY, x: NP_ARRAY) -> NP_ARRAY:
-    """O(N*n)"""
-    # TODO
-    raise NotImplementedError("Not implemented yet.")
-
-
-# 2D Transformations
-
-
-@njit(parallel=PARALLEL)
-def n_transform_2d(A: NP_ARRAY, x: NP_ARRAY, T: NP_ARRAY) -> NP_ARRAY:
-    """O(sum(T^2)*2)"""
-    return (
-        _n_transform_2d_parallel(A, x, T)
-        if PARALLEL
-        else _n_transform_2d_sequential(A, x, T)
-    )
-
-
-@njit
-def _n_transform_2d_sequential(A: NP_ARRAY, x: NP_ARRAY, T: NP_ARRAY):
-    """O(sum(T^2))"""
-    dot_1d = np.zeros_like(x)
-    dot_2d = np.zeros_like(x)
-    l, pos = 0, 0
-    for i, slot in enumerate(T):  # O(T) = O(n) (in 2d)
-        next_pos = pos + slot
-        chunk = x[pos : pos + slot]
-        chunk_dot, k = np.zeros(slot, dtype=NP_FLOAT), 0
-        for j in range(slot):  # O(T_i)
-            k_next = k + j + 1
-            chunk_dot[j] = np.sum(A[k:k_next] * chunk[: j + 1])  # O(2j)
-            k = k_next
-        dot_1d[pos:next_pos] = chunk_dot
-        inner_pos = 0
-        for j in range(i + 1):  # O(i)
-            dot_2d[pos:next_pos] += (
-                A[l] * dot_1d[inner_pos : inner_pos + slot]
-            )  # O(2T_i)
-            inner_pos += T[j]
-            l += 1
-        pos = next_pos
-    return dot_2d
-
-
-@njit(parallel=True)
-def _n_transform_2d_parallel(A: NP_ARRAY, x: NP_ARRAY, T: NP_ARRAY):
-    """O(sum(T^2))"""
-    length = T.shape[0]
-    dot_1d = np.zeros_like(x)
-    for i in prange(length):  # O(T)
-        slot, pos = T[i], np.sum(T[:i])
-        next_pos = pos + slot
-        chunk = x[pos : pos + slot]
-        chunk_dot = np.zeros(slot, dtype=NP_FLOAT)
-        # caution -- possible overhead
-        for j in range(slot):  # O(T_i)
-            k = (j * (j + 1)) // 2
-            chunk_dot[j] = np.sum(A[k : k + j + 1] * chunk[0 : j + 1])  # O(2*j)
-        dot_1d[pos:next_pos] = chunk_dot
-    dot_2d = np.zeros_like(x)
-    for i in prange(length):  # O(T)
-        slot, pos = T[i], np.sum(T[:i])
-        next_pos = pos + slot
-        # caution -- possible overhead
-        for j in range(i + 1):  # O(i)
-            inner_pos = np.sum(T[:j])
-            dot_2d[pos:next_pos] += (
-                A[(i * (i + 1)) // 2 + j] * dot_1d[inner_pos : inner_pos + slot]
-            )  # O(2T_i)
-        pos = next_pos
-    return dot_2d
-
-
-# Transformations
-
-
-@njit(parallel=PARALLEL)
-def n_transform_md(A: NP_ARRAY, x: NP_ARRAY, T: NP_ARRAY) -> NP_ARRAY:
-    """O(sum(T^2)*m)"""
-    return (
-        _n_transform_md_parallel(A, x, T)
-        if PARALLEL
-        else _n_transform_md_sequential(A, x, T)
-    )
-
-
-@njit
-def _n_transform_md_sequential(A: NP_ARRAY, x: NP_ARRAY, T: NP_ARRAY):
-    """O(sum(T^2)*m)"""
-    N = x.shape[0]
-    (
-        dot,
-        cumsum_T,
-        T0,
-        T1,
-    ) = (
-        np.copy(x),
-        np.concatenate((np.array([0]), np.cumsum(T))),
-        np.ones(N, dtype=NP_INT),
-        np.copy(T),
-    )
-    # caution -- loop not parallelizable
-    l = 0
-    while True:
-        if len(T0) == 1:
+def reduceat(
+    array: np.ndarray,
+    split_indices: np.ndarray,
+) -> np.ndarray:
+    """O(len(array))"""
+    sums = np.zeros(len(split_indices) - 1, dtype=array.dtype)
+    for i in range(len(split_indices) - 1):
+        start = split_indices[i]
+        end = split_indices[i + 1]
+        if start >= len(array):
             break
-        pos = 0
-        cumsum_T0 = np.concatenate((np.array([0]), np.cumsum(T0)))
-        for _, slot in enumerate(T1):
-            next_pos = pos + slot
-            chunk = dot[pos:next_pos]
-            chunk_T0 = T0[
-                np.searchsorted(cumsum_T0, pos) : np.searchsorted(cumsum_T0, next_pos)
-            ]
-            len_chunk_T0 = len(chunk_T0)
-            cumsum_chunk_T0 = np.concatenate((np.array([0]), np.cumsum(chunk_T0)))
-            chunk_T = T[
-                np.searchsorted(cumsum_T, pos) : np.searchsorted(cumsum_T, next_pos)
-            ]
-            cumsum_chunk_T = np.concatenate((np.array([0]), np.cumsum(chunk_T)))
-            if l > 0:  # Case mD
-                chunk_T0_Ts = [
-                    chunk_T[
-                        np.searchsorted(
-                            cumsum_chunk_T, cumsum_chunk_T0[i]
-                        ) : np.searchsorted(cumsum_chunk_T, cumsum_chunk_T0[i + 1])
-                    ]
-                    for i in range(len_chunk_T0)
+        end = min(end, len(array))
+        sums[i] = np.sum(array[start:end])
+    return sums[:i]
+
+
+# 1d
+
+
+@njit
+def transform_lt_1d(
+    L: np.ndarray,
+    x: np.ndarray,
+    n: int,
+) -> np.ndarray:
+    """O(n^2)"""
+    ### indexing: j, k
+    ###
+    dot, j = np.zeros_like(x), 0
+    for k in range(n):
+        j_next = j + k + 1
+        dot[k] = (x[k] - np.sum(L[j : j_next - 1] * dot[:k])) / L[j_next - 1]
+        j = j_next
+    ###
+    return dot
+
+
+@njit
+def transform_ut_1d(
+    U: np.ndarray,
+    x: np.ndarray,
+    n: int,
+) -> np.ndarray:
+    """O(n^2)"""
+    ### indexing: j, k
+    ###
+    dot, j = np.zeros_like(x), n * (n + 1) // 2
+    for k in range(n):
+        k_prime = n - k - 1
+        j_next = j - k - 1
+        dot[k_prime] = (x[k_prime] - np.sum(U[j_next:j] * dot[k_prime:])) / U[j_next]
+        j = j_next
+    ###
+    return dot
+
+
+@njit(parallel=PARALLEL)
+def itransform_lt_1d(
+    L: np.ndarray,
+    x: np.ndarray,
+    n: int,
+) -> np.ndarray:
+    """O(n^2)"""
+    ### indexing: j, k
+    ###
+    dot = np.zeros_like(x)
+    for k in prange(n):
+        j = k * (k + 1) // 2
+        j_next = j + k + 1
+        dot[k] = np.sum(L[j:j_next] * x[: k + 1])
+    ###
+    return dot
+
+
+@njit(parallel=PARALLEL)
+def itransform_ut_1d(
+    U: np.ndarray,
+    x: np.ndarray,
+    n: int,
+) -> np.ndarray:
+    """O(n^2)"""
+    ### indexing: j, k
+    ###
+    dot = np.zeros_like(x)
+    for k in prange(n):
+        j, k_prime = k * (2 * n - k + 1) // 2, n - k - 1
+        j_next = j + k_prime + 1
+        dot[k] = np.sum(U[j:j_next] * x[k:])
+    ###
+    return dot
+
+
+# maximal
+
+
+@njit(parallel=PARALLEL)  # NOTE: deactivated
+def transform_lt_max(
+    L: np.ndarray,
+    x: np.ndarray,
+) -> np.ndarray:
+    """O(Nmn)"""
+    N, n = (
+        len(x),
+        int((np.sqrt(1 + 8 * len(L)) - 1) / 2),
+    )
+    m = int(np.log(N) / np.log(n))
+    ### indexing: s, r, h > i > j, k > l
+    ###
+    dot = x.copy()
+    for h in range(m):
+        s, r_next = n**h, n ** (m - h - 1)
+        s_next = s * n
+        ###
+        for i in prange(r_next):
+            pos_i = i * s_next
+            next_pos_i = pos_i + s_next
+            block = dot[pos_i:next_pos_i]
+            ###
+            dot_block, pos_k, j = np.zeros((s_next), dtype=np.float64), 0, 0
+            for k in range(n):
+                next_pos_k = pos_k + s
+                j_next = j + k + 1
+                ###
+                dot_row, pos_l = np.zeros(s, dtype=np.float64), 0
+                for l in range(j, j_next - 1):
+                    next_pos_l = pos_l + s
+                    dot_row += L[l] * dot_block[pos_l:next_pos_l]
+                    pos_l = next_pos_l
+                next_pos_l = pos_l + s
+                dot_block[pos_k:next_pos_k] = (block[pos_l:next_pos_l] - dot_row) / L[
+                    j_next - 1
                 ]
-                # BEGIN DOT_LP #
-                chunk_dot, j = [
-                    np.zeros((size), dtype=NP_FLOAT) for size in chunk_T0
-                ], 0
-                for i in range(len(chunk_T0_Ts)):  # O(n)
-                    j_next = j + i + 1
-                    follower = chunk_T0_Ts[i]
-                    chunk_pos = 0
-                    for k, a in enumerate(A[j:j_next]):
-                        leader = chunk_T0_Ts[k]
-                        next_chunk_pos = chunk_pos + np.sum(leader)
-                        sub = np.copy(chunk[chunk_pos:next_chunk_pos])
-                        sub_rc = _rightchoices(sub, leader, follower, l + 1)
-                        chunk_dot[i] += a * sub_rc
-                        chunk_pos = next_chunk_pos
-                    j = j_next
-                dot[pos:next_pos] = concatenate_arrays(chunk_dot)
-                # END DOT_LP #
-            else:  # Case 1D
-                chunk_dot_1D, k = np.zeros(slot, dtype=NP_FLOAT), 0
-                for j in range(slot):  # O(T_i)
-                    k_next = k + j + 1
-                    chunk_dot_1D[j] = np.sum(A[k:k_next] * chunk[: j + 1])  # O(2*j)
-                    k = k_next
-                dot[pos:next_pos] = chunk_dot_1D
-            pos = next_pos
-        T0 = np.copy(T1)
-        T1 = reduceat(T1, cumsum_T)
-        l += 1
+                ###
+                pos_k, j = next_pos_k, j_next
+            ###
+            dot[pos_i:next_pos_i] = dot_block
+        ###
+    ###
     return dot
 
 
-@njit
-def _rightchoices(x: NP_ARRAY, leader: NP_ARRAY, follower: NP_ARRAY, depth: int):
-    """O(???)"""
-    cil_l = CIL()
-    cil_l.init(leader, depth)
-    cil_f = CIL()
-    cil_f.init(follower, depth)
-    y = np.zeros(np.sum(follower), dtype=NP_FLOAT)
-    pos_l, pos_f, go = 0, 0, True
-    while go:
-        indices = cil_l.indices
-        next_pos_l = pos_l + cil_l.element
-        if cil_f.eval(indices):
-            next_pos_f = pos_f + cil_f.element
-            y[pos_f:next_pos_f] = x[pos_l : pos_l + cil_f.element]
-            pos_f = next_pos_f
-        else:
-            pass
-        if next_pos_f == len(y):
-            break
-        pos_l = next_pos_l
-        go = cil_l.next()
-    return y
-
-
-@njit(parallel=True)
-def _n_transform_md_parallel(A: NP_ARRAY, x: NP_ARRAY, T: NP_ARRAY):
-    """O(sum(T^2)*m)"""
-    # TODO
-    raise NotImplementedError("Not implemented yet.")
+@njit(parallel=PARALLEL)  # NOTE: deactivated
+def transform_ut_max(
+    U: np.ndarray,
+    x: np.ndarray,
+) -> np.ndarray:
+    """O(Nmn)"""
+    N, n = (
+        len(x),
+        int((np.sqrt(1 + 8 * len(U)) - 1) / 2),
+    )
+    m = int(np.log(N) / np.log(n))
+    ### indexing: s, r, h > i > j, k > l
+    ###
+    dot = x.copy()
+    for h in range(m):
+        s, r_next = n**h, n ** (m - h - 1)
+        s_next = s * n
+        ###
+        for i in prange(r_next):
+            pos_i = i * s_next
+            next_pos_i = pos_i + s_next
+            block = dot[pos_i:next_pos_i]
+            ###
+            dot_block, pos_k, j = (
+                np.zeros((s_next), dtype=np.float64),
+                s_next,
+                n * (n + 1) // 2,
+            )
+            for k in range(n):
+                next_pos_k, j_next = pos_k - s, j - k - 1
+                ###
+                dot_row, pos_l = np.zeros(s, dtype=np.float64), s_next
+                for l in range(j - 1, j_next, -1):
+                    next_pos_l = pos_l - s
+                    dot_row += U[l] * dot_block[next_pos_l:pos_l]
+                    pos_l = next_pos_l
+                next_pos_l = pos_l - s
+                dot_block[next_pos_k:pos_k] = (block[next_pos_l:pos_l] - dot_row) / U[
+                    j_next
+                ]
+                ###
+                pos_k, j = next_pos_k, j_next
+            ###
+            dot[pos_i:next_pos_i] = dot_block
+        ###
+    ###
+    return dot
 
 
 @njit(parallel=PARALLEL)
-def ut_diag_transform(A: NP_ARRAY, x: NP_ARRAY, T: NP_ARRAY):
-    """O(sum(T^2))"""
-    return (
-        _ut_diag_transform_parallel(A, x, T)
-        if PARALLEL
-        else _ut_diag_transform_sequential(A, x, T)
-    )
-
-
-@njit
-def _ut_diag_transform_sequential(A: NP_ARRAY, x: NP_ARRAY, T: NP_ARRAY):
-    """O(sum(T^2))"""
-    n, pos, result = np.max(T), 0, np.zeros_like(x)
-    for slot in T:  # O(len(T))
-        next_pos = pos + slot
-        chunk = x[pos:next_pos]
-        chunk_dot, j, s, k = np.zeros(slot, dtype=NP_FLOAT), 0, 0, n
-        for i in range(slot):  # O(slot)
-            j_next, j_inner = j + k, j + slot - s
-            chunk_dot[i] = np.sum(A[j:j_inner] * chunk[s:slot])  # O(2*slot)
-            j, k, s = j_next, k - 1, s + 1
-        result[pos:next_pos] = chunk_dot
-        pos = next_pos
-    return result
-
-
-@njit
-def _ut_diag_transform_parallel(A: NP_ARRAY, x: NP_ARRAY, T: NP_ARRAY):
-    """O(sum(T^2))"""
-    # TODO
-    raise NotImplementedError("Not implemented yet.")
+def itransform_lt_max(
+    L: np.ndarray,
+    x: np.ndarray,
+    m: int,
+    n: int,
+) -> np.ndarray:
+    ### indexing: s, r, h > i > j, k > l
+    ###
+    dot = x.copy()
+    for h in range(m):
+        s, r_next = n**h, n ** (m - h - 1)
+        s_next = s * n
+        ###
+        for i in prange(r_next):
+            pos_i = i * s_next
+            next_pos_i = pos_i + s_next
+            block = dot[pos_i:next_pos_i]
+            ###
+            dot_block, pos_k = np.zeros((s_next), dtype=np.float64), 0
+            for k in range(n):
+                pos_k, j = k * s, k * (k + 1) // 2
+                next_pos_k, j_next = pos_k + s, j + k + 1
+                ###
+                pos_l = 0
+                for l in range(j, j_next):
+                    next_pos_l = pos_l + s
+                    dot_block[pos_k:next_pos_k] += L[l] * block[pos_l:next_pos_l]
+                    pos_l = next_pos_l
+                ###
+            ###
+            dot[pos_i:next_pos_i] = dot_block
+        ###
+    ###
+    return dot
 
 
 @njit(parallel=PARALLEL)
-def lt_diag_transform(A: NP_ARRAY, x: NP_ARRAY, T: NP_ARRAY):
-    """O(sum(T^2))"""
-    return (
-        _lt_diag_transform_parallel(A, x, T)
-        if PARALLEL
-        else _lt_diag_transform_sequential(A, x, T)
+def itransform_ut_max(
+    U: np.ndarray,
+    x: np.ndarray,
+    m: int,
+    n: int,
+) -> np.ndarray:
+    ### indexing: s, r, h > i > j, k > l
+    ###
+    dot = x.copy()
+    for h in range(m):
+        s, r_next = n**h, n ** (m - h - 1)
+        s_next = s * n
+        ###
+        for i in prange(r_next):
+            pos_i = i * s_next
+            next_pos_i = pos_i + s_next
+            block = dot[pos_i:next_pos_i]
+            ###
+            dot_block, pos_k, j = np.zeros((s_next), dtype=np.float64), 0, 0
+            for k in range(n):
+                k_prime = n - k - 1
+                next_pos_k, j_next = pos_k + s, j + k_prime + 1
+                ###
+                pos_l = pos_k
+                for l in range(j, j_next):
+                    next_pos_l = pos_l + s
+                    dot_block[pos_k:next_pos_k] += U[l] * block[pos_l:next_pos_l]
+                    pos_l = next_pos_l
+                ###
+                pos_k, j = next_pos_k, j_next
+            ###
+            dot[pos_i:next_pos_i] = dot_block
+        ###
+    ###
+    return dot
+
+
+@njit(parallel=PARALLEL)
+def dtransform_max(
+    L: np.ndarray,
+    x: np.ndarray,
+    m: int,
+    n: int,
+) -> np.ndarray:
+    ### indexing: s > i > j, k
+    ###
+    dot = x.copy()
+    s = n ** (m - 1)
+    for i in prange(s):
+        pos = i * n
+        next_pos = pos + n
+        block = dot[pos:next_pos]
+        ###
+        dot_block = np.zeros(n, dtype=np.float64)
+        for k in prange(n):
+            j = k * (k + 1) // 2
+            j_next = j + k + 1
+            dot_block[k] = np.sum(L[j:j_next] * block[: k + 1])
+        ###
+        dot[pos:next_pos] = dot_block
+    ###
+    return dot
+
+
+# 2d
+
+
+@njit(parallel=PARALLEL)
+def transform_lt_2d(
+    L: np.ndarray,
+    x: np.ndarray,
+    T: np.ndarray,
+    cs_T: np.ndarray,
+    N_1: int,
+) -> np.ndarray:
+    """O(2Nn)"""
+    ### 1d
+    ### indexing: i > j, k
+    ###
+    dot_1d = np.zeros_like(x)
+    for i in prange(N_1):
+        t_i, pos_i, next_pos_i = T[i], cs_T[i], cs_T[i + 1]
+        block = x[pos_i:next_pos_i]
+        ###
+        dot_block, j = np.zeros(t_i, dtype=np.float64), 0
+        for k in range(t_i):
+            j_next = j + k
+            dot_block[k] = (block[k] - np.sum(L[j:j_next] * dot_block[:k])) / L[j_next]
+            j = j_next + 1
+        ###
+        dot_1d[pos_i:next_pos_i] = dot_block
+    ###
+    ### 2d
+    ### indexing: j, i > k
+    ###
+    dot_2d, pos_i, j = np.zeros_like(x), 0, 0
+    for i in range(N_1):
+        t_i, pos_i, next_pos_i = T[i], cs_T[i], cs_T[i + 1]
+        ###
+        dot_block = np.zeros(t_i, dtype=np.float64)
+        for k in range(i):
+            pos_k = cs_T[k]
+            dot_block += L[j] * dot_2d[pos_k : pos_k + t_i]
+            j = j + 1
+        ###
+        dot_2d[pos_i:next_pos_i] = (dot_1d[pos_i:next_pos_i] - dot_block) / L[j]
+        j = j + 1
+    ###
+    return dot_2d
+
+
+@njit(parallel=PARALLEL)
+def transform_ut_2d(
+    U: np.ndarray,
+    x: np.ndarray,
+    T: np.ndarray,
+    cs_T: np.ndarray,
+    N_1: int,
+) -> np.ndarray:
+    """O(2Nn)"""
+    ### 1d
+    ### indexing: i > j, k
+    ###
+    dot_1d = np.zeros_like(x)
+    for i in prange(N_1):
+        t_i, pos_i, next_pos_i = T[i], cs_T[i], cs_T[i + 1]
+        block, delta = x[pos_i:next_pos_i], N_1 - t_i
+        ###
+        dot_block, j = (
+            np.zeros(t_i, dtype=np.float64),
+            t_i * N_1 - t_i * (t_i - 1) // 2 - delta,
+        )
+        for k in range(t_i):
+            k_prime = t_i - k - 1
+            j_next = j - k - 1
+            dot_block[k_prime] = (
+                block[k_prime] - np.sum(U[j_next:j] * dot_block[k_prime:])
+            ) / U[j_next]
+            j = j_next - delta
+        ###
+        dot_1d[pos_i:next_pos_i] = dot_block
+    ###
+    ### 2d
+    ### indexing: j, i > k
+    ###
+    dot_2d, j = np.zeros_like(x), N_1 * (N_1 + 1) // 2
+    for i in range(N_1):
+        i_prime = N_1 - i - 1
+        t_i, pos_i, next_pos_i = T[i_prime], cs_T[i_prime], cs_T[i_prime + 1]
+        ###
+        dot_block = np.zeros(t_i, dtype=np.float64)
+        for k in range(i):
+            j, k_prime = j - 1, N_1 - k - 1
+            t_k, pos_k, next_pos_k = T[k_prime], cs_T[k_prime], cs_T[k_prime + 1]
+            dot_block[:t_k] += U[j] * dot_2d[pos_k:next_pos_k]
+        ###
+        j = j - 1
+        dot_2d[pos_i:next_pos_i] = (dot_1d[pos_i:next_pos_i] - dot_block) / U[j]
+    ###
+    return dot_2d
+
+
+@njit(parallel=PARALLEL)
+def itransform_lt_2d(
+    L: np.ndarray,
+    x: np.ndarray,
+    T: np.ndarray,
+    cs_T: np.ndarray,
+    N_1: int,
+) -> np.ndarray:
+    """O(2Nn)"""
+    ### 1d
+    ### indexing: i > j, k
+    ###
+    dot_1d = np.zeros_like(x)
+    for i in prange(N_1):
+        t_i, pos_i, next_pos_i = T[i], cs_T[i], cs_T[i + 1]
+        block = x[pos_i:next_pos_i]
+        ###
+        dot_block = np.zeros(t_i, dtype=np.float64)
+        for k in prange(t_i):
+            j = k * (k + 1) // 2
+            j_next = j + k + 1
+            dot_block[k] = np.sum(L[j:j_next] * block[: k + 1])
+        ###
+        dot_1d[pos_i:next_pos_i] = dot_block
+    ###
+    ### 2d
+    ### indexing: i > j, k
+    ###
+    dot_2d = np.zeros_like(x)
+    for i in prange(N_1):
+        t_i, pos_i, next_pos_i = T[i], cs_T[i], cs_T[i + 1]
+        ###
+        dot_block = np.zeros(t_i, dtype=np.float64)
+        for k in prange(i + 1):
+            j, pos_k = i * (i + 1) // 2 + k, cs_T[k]
+            dot_block += L[j] * dot_1d[pos_k : pos_k + t_i]
+        ###
+        dot_2d[pos_i:next_pos_i] = dot_block
+    ###
+    return dot_2d
+
+
+@njit(parallel=PARALLEL)
+def itransform_ut_2d(
+    U: np.ndarray,
+    x: np.ndarray,
+    T: np.ndarray,
+    cs_T: np.ndarray,
+    N_1: int,
+) -> np.ndarray:
+    """O(2Nn)"""
+    ### 1d
+    ### indexing: i > j, k
+    ###
+    dot_1d = np.zeros_like(x)
+    for i in prange(N_1):
+        t_i, pos_i, next_pos_i = T[i], cs_T[i], cs_T[i + 1]
+        block = x[pos_i:next_pos_i]
+        ###
+        dot_block = np.zeros(t_i, dtype=np.float64)
+        for k in prange(t_i):
+            j = k * N_1 - k * (k - 1) // 2
+            j_next = j + t_i - k
+            dot_block[k] = np.sum(U[j:j_next] * block[k:])
+        ###
+        dot_1d[pos_i:next_pos_i] = dot_block
+    ###
+    ### 2d
+    ### indexing: i > j, k
+    ###
+    dot_2d = np.zeros_like(x)
+    for i in prange(N_1):
+        t_i, pos_i, next_pos_i = T[i], cs_T[i], cs_T[i + 1]
+        ###
+        dot_block = np.zeros(t_i, dtype=np.float64)
+        for k in prange(N_1 - i):
+            j = i * N_1 - i * (i - 1) // 2 + k
+            t_k, pos_k, next_pos_k = T[i + k], cs_T[i + k], cs_T[i + k + 1]
+            dot_block[:t_k] += U[j] * dot_1d[pos_k:next_pos_k]
+        ###
+        dot_2d[pos_i:next_pos_i] = dot_block
+    ###
+    return dot_2d
+
+
+# 3d
+
+
+@njit(parallel=PARALLEL)
+def transform_lt_3d(
+    L: np.ndarray,
+    x: np.ndarray,
+    T: np.ndarray,
+    cs_T: np.ndarray,
+    V_2: np.ndarray,
+    cs_V_2: np.ndarray,
+    N_1: int,
+) -> np.ndarray:
+    """O(3Nn)"""
+    N_2 = T[0]
+    ### 1d
+    ### indexing: i > j, k
+    ###
+    dot_1d = np.zeros_like(x)
+    for i in prange(N_1):
+        t_i, pos_i, next_pos_i = T[i], cs_T[i], cs_T[i + 1]
+        block = x[pos_i:next_pos_i]
+        ###
+        dot_block, j = np.zeros(t_i, dtype=np.float64), 0
+        for k in range(t_i):
+            j_next = j + k
+            dot_block[k] = (block[k] - np.sum(L[j:j_next] * dot_block[:k])) / L[j_next]
+            j = j_next + 1
+        ###
+        dot_1d[pos_i:next_pos_i] = dot_block
+    ###
+    ### 2d
+    ### indexing: i > j, k > l
+    ###
+    dot_2d = np.zeros_like(x)
+    for i in prange(N_2):
+        t_i, pos_i, next_pos_i = T[i], cs_T[i], cs_T[i + 1]
+        ###
+        j = 0
+        for k in prange(t_i):
+            pk = pos_i + k
+            t_k, pos_k, next_pos_k = T[pk], cs_T[pk], cs_T[pk + 1]
+            ###
+            dot_block = np.zeros(t_k, dtype=np.float64)
+            for l in range(k):
+                pos_l = cs_T[pos_i + l]
+                dot_block += L[j] * dot_2d[pos_l : pos_l + t_k]
+                j = j + 1
+            ###
+            dot_2d[pos_k:next_pos_k] = (dot_1d[pos_k:next_pos_k] - dot_block) / L[j]
+            j = j + 1
+        ###
+    ###
+    ### 3d
+    ### indexing: j, i > k > l
+    ###
+    dot_3d, j = np.zeros_like(x), 0
+    for i in range(N_2):
+        t_i, pos_i, next_pos_i = T[i], cs_T[i], cs_T[i + 1]
+        v_i, vol_i, next_vol_i = V_2[i], cs_V_2[i], cs_V_2[i + 1]
+        ###
+        dot_block = np.zeros(v_i, dtype=np.float64)
+        for k in range(i):
+            t_k, pos_k, next_pos_k = T[k], cs_T[k], cs_T[k + 1]
+            vol_k, next_vol_k = cs_V_2[k], cs_V_2[k + 1]
+            block = dot_3d[vol_k:next_vol_k]
+            ###
+            pos_l_1, pos_l_2, sub = 0, 0, np.zeros(v_i, dtype=np.float64)
+            for l in range(t_i):
+                t_l_1, t_l_2 = T[pos_i + l], T[pos_k + l]
+                next_pos_l_1, next_pos_l_2 = pos_l_1 + t_l_1, pos_l_2 + t_l_2
+                sub[pos_l_1:next_pos_l_1] = block[pos_l_2 : pos_l_2 + t_l_1]
+                pos_l_1, pos_l_2 = next_pos_l_1, next_pos_l_2
+            dot_block += L[j] * sub
+            ###
+            j = j + 1
+        ###
+        dot_3d[vol_i:next_vol_i] = (dot_2d[vol_i:next_vol_i] - dot_block) / L[j]
+        j = j + 1
+    ###
+    return dot_3d
+
+
+@njit(parallel=PARALLEL)
+def transform_ut_3d(
+    U: np.ndarray,
+    x: np.ndarray,
+    T: np.ndarray,
+    cs_T: np.ndarray,
+    V_2: np.ndarray,
+    cs_V_2: np.ndarray,
+    N_1: int,
+) -> np.ndarray:
+    """O(3Nn)"""
+    N_2 = T[0]
+    ### 1d
+    ### indexing: i > j, k
+    ###
+    dot_1d = np.zeros_like(x)
+    for i in prange(N_1):
+        t_i, pos_i, next_pos_i = T[i], cs_T[i], cs_T[i + 1]
+        delta = N_2 - t_i
+        block = x[pos_i:next_pos_i]
+        ###
+        dot_block, j = (
+            np.zeros(t_i, dtype=np.float64),
+            t_i * N_2 - t_i * (t_i - 1) // 2 - delta,
+        )
+        for k in range(t_i):
+            k_prime = t_i - k - 1
+            j_next = j - k - 1
+            dot_block[k_prime] = (
+                block[k_prime] - np.sum(U[j_next:j] * dot_block[k_prime:])
+            ) / U[j_next]
+            j = j_next - delta
+        ###
+        dot_1d[pos_i:next_pos_i] = dot_block
+    ###
+    ### 2d
+    ### indexing: i > j, k > l
+    ###
+    dot_2d = np.zeros_like(x)
+    for i in prange(N_2):
+        t_i, pos_i, next_pos_i = T[i], cs_T[i], cs_T[i + 1]
+        delta = N_2 - t_i
+        ###
+        j = t_i * N_2 - t_i * (t_i - 1) // 2 - delta
+        for k in prange(t_i):
+            k_prime = t_i - k - 1
+            pk = pos_i + k_prime
+            t_k, pos_k, next_pos_k = T[pk], cs_T[pk], cs_T[pk + 1]
+            ###
+            dot_block = np.zeros(t_k, dtype=np.float64)
+            for l in range(k):
+                j -= 1
+                l_prime = t_i - l - 1
+                pl = pos_i + l_prime
+                t_l, pos_l, next_pos_l = T[pl], cs_T[pl], cs_T[pl + 1]
+                dot_block[:t_l] += U[j] * dot_2d[pos_l:next_pos_l]
+            j = j - 1
+            ###
+            dot_2d[pos_k:next_pos_k] = (dot_1d[pos_k:next_pos_k] - dot_block) / U[j]
+            j = j - delta
+        ###
+    ###
+    ### 3d
+    ### indexing: j, i > k > l
+    ###
+    dot_3d, j = np.zeros_like(x), N_2 * (N_2 + 1) // 2
+    for i in range(N_2):
+        i_prime = N_2 - i - 1
+        pos_i, next_pos_i = cs_T[i_prime], cs_T[i_prime + 1]
+        v_i, vol_i, next_vol_i = V_2[i_prime], cs_V_2[i_prime], cs_V_2[i_prime + 1]
+        ###
+        dot_block = np.zeros(v_i, dtype=np.float64)
+        for k in range(i):
+            j = j - 1
+            k_prime = N_2 - k - 1
+            t_k, pos_k = T[k_prime], cs_T[k_prime]
+            vol_k, next_vol_k = cs_V_2[k_prime], cs_V_2[k_prime + 1]
+            block = dot_3d[vol_k:next_vol_k]
+            ###
+            pos_l_1, pos_l_2, ext = 0, 0, np.zeros(v_i, dtype=np.float64)
+            for l in range(t_k):
+                t_l_1, t_l_2 = T[pos_i + l], T[pos_k + l]
+                next_pos_l_1, next_pos_l_2 = pos_l_1 + t_l_1, pos_l_2 + t_l_2
+                ext[pos_l_1 : pos_l_1 + t_l_2] = block[pos_l_2:next_pos_l_2]
+                pos_l_1, pos_l_2 = next_pos_l_1, next_pos_l_2
+            dot_block += U[j] * ext
+            ###
+        j = j - 1
+        dot_3d[vol_i:next_vol_i] = (dot_2d[vol_i:next_vol_i] - dot_block) / U[j]
+        ###
+    ###
+    return dot_3d
+
+
+@njit(parallel=PARALLEL)
+def itransform_lt_3d(
+    L: np.ndarray,
+    x: np.ndarray,
+    T: np.ndarray,
+    cs_T: np.ndarray,
+    V_2: np.ndarray,
+    cs_V_2: np.ndarray,
+    N_1: int,
+) -> np.ndarray:
+    """O(3Nn)"""
+    N_2 = T[0]
+    ### 1d
+    ### indexing: i > j, k
+    ###
+    dot_1d = np.zeros_like(x)
+    for i in prange(N_1):
+        t_i, pos_i, next_pos_i = T[i], cs_T[i], cs_T[i + 1]
+        block = x[pos_i:next_pos_i]
+        ###
+        dot_block = np.zeros(t_i, dtype=np.float64)
+        for k in prange(t_i):
+            j = k * (k + 1) // 2
+            j_next = j + k + 1
+            dot_block[k] = np.sum(L[j:j_next] * block[: k + 1])
+        ###
+        dot_1d[pos_i:next_pos_i] = dot_block
+    ###
+    ### 2d
+    ### indexing: i > j, k > l
+    ###
+    dot_2d = np.zeros_like(x)
+    for i in prange(N_2):
+        t_i, pos_i, vol_i, next_pos_i = T[i], cs_T[i], cs_V_2[i], cs_T[i + 1]
+        ###
+        for k in prange(t_i):
+            j = k * (k + 1) // 2
+            pk = pos_i + k
+            t_k, pos_k, next_pos_k = T[pk], cs_T[pk], cs_T[pk + 1]
+            ###
+            for l in prange(k + 1):
+                pos_l = cs_T[pos_i + l]
+                dot_2d[pos_k:next_pos_k] += L[j + l] * dot_1d[pos_l : pos_l + t_k]
+            ###
+        ###
+    ###
+    ### 3d
+    ### indexing: i, j > k > l
+    ###
+    dot_3d = np.zeros_like(x)
+    for i in prange(N_2):
+        j = i * (i + 1) // 2
+        t_i, pos_i, next_pos_i = T[i], cs_T[i], cs_T[i + 1]
+        v_i, vol_i, next_vol_i = V_2[i], cs_V_2[i], cs_V_2[i + 1]
+        sub_t_i = T[pos_i:next_pos_i]
+        ###
+        dot_block = np.zeros(v_i, dtype=np.float64)
+        for k in prange(i + 1):
+            t_k, pos_k, next_pos_k = T[k], cs_T[k], cs_T[k + 1]
+            vol_k, next_vol_k = cs_V_2[k], cs_V_2[k + 1]
+            sub_t_k = T[pos_k:next_pos_k]
+            block = dot_2d[vol_k:next_vol_k]
+            ###
+            pos_l_1, _pos2, sub = 0, 0, np.zeros(v_i, dtype=np.float64)
+            for l in range(t_i):
+                t_l_1, t_l_2 = sub_t_i[l], sub_t_k[l]
+                next_pos_l_1, next_pos_l_2 = pos_l_1 + t_l_1, _pos2 + t_l_2
+                sub[pos_l_1:next_pos_l_1] = block[_pos2 : _pos2 + t_l_1]
+                pos_l_1, _pos2 = next_pos_l_1, next_pos_l_2
+            ###
+            dot_block += L[j + k] * sub
+        ###
+        dot_3d[vol_i:next_vol_i] = dot_block
+    ###
+    return dot_3d
+
+
+@njit(parallel=PARALLEL)
+def itransform_ut_3d(
+    U: np.ndarray,
+    x: np.ndarray,
+    T: np.ndarray,
+    cs_T: np.ndarray,
+    V_2: np.ndarray,
+    cs_V_2: np.ndarray,
+    N_1: int,
+) -> np.ndarray:
+    """O(3Nn)"""
+    N_2 = T[0]
+    ### 1d
+    ### indexing: i > j, k
+    ###
+    dot_1d = np.zeros_like(x)
+    for i in prange(N_1):
+        t_i, pos_i, next_pos_i = T[i], cs_T[i], cs_T[i + 1]
+        block = x[pos_i:next_pos_i]
+        ###
+        dot_block = np.zeros(t_i, dtype=np.float64)
+        for k in prange(t_i):
+            j = k * N_2 - k * (k - 1) // 2
+            j_next = j + t_i - k
+            dot_block[k] = np.sum(U[j:j_next] * block[k:])
+        ###
+        dot_1d[pos_i:next_pos_i] = dot_block
+    ###
+    ### 2d
+    ### indexing: i > j, k > l
+    ###
+    dot_2d = np.zeros_like(x)
+    for i in prange(N_2):
+        t_i, pos_i, next_pos_i = T[i], cs_T[i], cs_T[i + 1]
+        t_i, pos_i, vol_i, next_pos_i = T[i], cs_T[i], cs_V_2[i], cs_T[i + 1]
+        ###
+        for k in prange(t_i):
+            pk = pos_i + k
+            t_k, pos_k = T[pk], cs_T[pk]
+            ###
+            j = k * N_2 - k * (k - 1) // 2
+            for l in prange(t_i - k):
+                pkl = pos_i + k + l
+                t_l, pos_l, next_pos_l = T[pkl], cs_T[pkl], cs_T[pkl + 1]
+                dot_2d[pos_k : pos_k + t_l] += U[j + l] * dot_1d[pos_l:next_pos_l]
+            ###
+        ###
+    ###
+    ### 3d
+    ### indexing: i, j > k > l
+    ###
+    dot_3d = np.zeros_like(x)
+    for i in prange(N_2):
+        j = i * N_2 - i * (i - 1) // 2
+        pos_i, next_pos_i = cs_T[i], cs_T[i + 1]
+        v_i, vol_i, next_vol_i = V_2[i], cs_V_2[i], cs_V_2[i + 1]
+        ###
+        for k in prange(N_2 - i):
+            ik = i + k
+            t_k, pos_k = T[ik], cs_T[ik]
+            vol_k, next_vol_k = cs_V_2[ik], cs_V_2[ik + 1]
+            block = dot_2d[vol_k:next_vol_k]
+            ###
+            pos_l_1, pos_l_2, sub = 0, 0, np.zeros(v_i, dtype=np.float64)
+            for l in range(t_k):
+                t_l_1, t_l_2 = T[pos_i + l], T[pos_k + l]
+                next_pos_l_1, next_pos_l_2 = pos_l_1 + t_l_1, pos_l_2 + t_l_2
+                sub[pos_l_1 : pos_l_1 + t_l_2] = block[pos_l_2:next_pos_l_2]
+                pos_l_1, pos_l_2 = next_pos_l_1, next_pos_l_2
+            dot_3d[vol_i:next_vol_i] += U[j + k] * sub
+            ###
+        ###
+    ###
+    return dot_3d
+
+
+# md
+
+
+@njit(parallel=PARALLEL)
+def transform_lt_md(
+    L: np.ndarray,
+    x: np.ndarray,
+    T: np.ndarray,
+    cs_T: np.ndarray,
+    e_T: np.ndarray,
+    m: int,
+) -> np.ndarray:
+    """O(Nmn)"""
+    zero = np.array([0], dtype=np.int64)
+    dot, V_0 = np.zeros_like(x), T.copy()
+    ### 1d
+    ### indexing: i > j, k
+    ###
+    for i in prange(e_T[1]):
+        t_i, pos_i, next_pos_i = T[i], cs_T[i], cs_T[i + 1]
+        block = x[pos_i:next_pos_i]
+        ###
+        dot_block = np.zeros(t_i, dtype=np.float64)
+        for k in prange(t_i):
+            j = k * (k + 1) // 2
+            j_next = j + k
+            dot_block[k] = (block[k] - np.sum(L[j:j_next] * dot_block[:k])) / L[j_next]
+        ###
+        dot[pos_i:next_pos_i] = dot_block
+    ###
+    ### md
+    ### indexing: h > i > j, k > l
+    ###
+    V_1 = reduceat(V_0, cs_T)
+    for h in range(1, m):
+        cs_V_0, cs_V_1 = (
+            np.concatenate((zero, np.cumsum(V_0))),  # NOTE: else, unexpected behaviour
+            np.concatenate((zero, np.cumsum(V_1))),
+        )
+        ### outer loop
+        ###
+        for i in prange(e_T[h + 1]):
+            pos, next_pos = cs_V_1[i], cs_V_1[i + 1]
+            block = dot[pos:next_pos]
+            interval = np.array([pos, next_pos])
+            pos_T, next_pos_T = np.searchsorted(cs_T, interval)
+            pos_V_0, next_pos_V_0 = np.searchsorted(cs_V_0, interval)
+            block_T, block_V_0 = (
+                T[pos_T:next_pos_T],
+                V_0[pos_V_0:next_pos_V_0],
+            )
+            cs_block_T, cs_block_V_0 = (
+                np.concatenate((zero, np.cumsum(block_T))),
+                np.concatenate((zero, np.cumsum(block_V_0))),
+            )
+            ids_block_T = np.searchsorted(cs_block_T, cs_block_V_0)
+            len_block_V_0 = len(block_V_0)
+            ### start inner loop
+            ###
+            dot_block, j = np.zeros(cs_block_V_0[-1], dtype=np.float64), 0
+            for k in range(len_block_V_0):
+                follower, pos_follower, next_pos_follower = (
+                    block_T[ids_block_T[k] : ids_block_T[k + 1]],
+                    cs_block_V_0[k],
+                    cs_block_V_0[k + 1],
+                )
+                ###
+                for l in range(k + 1):
+                    leader, pos_leader, next_pos_leader = (
+                        block_T[ids_block_T[l] : ids_block_T[l + 1]],
+                        cs_block_V_0[l],
+                        cs_block_V_0[l + 1],
+                    )
+                    phi = ordinal_embedding(h, follower, leader)
+                    if l < k:
+                        vec = dot_block[pos_leader:next_pos_leader]
+                        dot_block[pos_follower:next_pos_follower] += L[j] * vec[phi]
+                    else:
+                        vec = block[pos_leader:next_pos_leader]
+                        dot_block[pos_follower:next_pos_follower] = (
+                            vec[phi] - dot_block[pos_follower:next_pos_follower]
+                        ) / L[j]
+                    j = j + 1
+                ###
+            dot[pos:next_pos] = dot_block
+            ### end inner loop
+        ### end outer loop
+        V_0 = V_1
+        V_1 = reduceat(V_1, cs_T)
+    ###
+    return dot
+
+
+@njit(parallel=PARALLEL)
+def transform_ut_md(
+    U: np.ndarray,
+    x: np.ndarray,
+    T: np.ndarray,
+    cs_T: np.ndarray,
+    e_T: np.ndarray,
+    m: int,
+    n: int,
+) -> np.ndarray:
+    """O(Nmn)"""
+    zero = np.array([0], dtype=np.int64)
+    dot, V_0 = np.zeros_like(x), T.copy()
+    ### 1d
+    ### indexing: i > j, k
+    ###
+    for i in prange(e_T[1]):
+        t_i, pos_i, next_pos_i = T[i], cs_T[i], cs_T[i + 1]
+        delta, block = n - t_i, x[pos_i:next_pos_i]
+        ###
+        dot_block, j = (
+            np.zeros(t_i, dtype=np.float64),
+            t_i * n - t_i * (t_i - 1) // 2 - delta,
+        )
+        for k in range(t_i):
+            k_prime = t_i - k - 1
+            j_next = j - k - 1
+            dot_block[k_prime] = (
+                block[k_prime] - np.sum(U[j_next:j] * dot_block[k_prime:])
+            ) / U[j_next]
+            j = j_next - delta
+        ###
+        dot[pos_i:next_pos_i] = dot_block
+    ###
+    ### md
+    ### indexing: h > i > j, k > l
+    ###
+    V_1 = reduceat(V_0, cs_T)
+    for h in range(1, m):
+        cs_V_0, cs_V_1 = (
+            np.concatenate((zero, np.cumsum(V_0))),  # NOTE: else unexpected behaviour
+            np.concatenate((zero, np.cumsum(V_1))),
+        )
+        ### start outer loop
+        ###
+        for i in prange(e_T[h + 1]):
+            t_i, pos, next_pos = T[i], cs_V_1[i], cs_V_1[i + 1]
+            block = dot[pos:next_pos]
+            interval = np.array([pos, next_pos])
+            pos_T, next_pos_T = np.searchsorted(cs_T, interval)
+            pos_V_0, next_pos_V_0 = np.searchsorted(cs_V_0, interval)
+            block_T, block_V_0 = (
+                T[pos_T:next_pos_T],
+                V_0[pos_V_0:next_pos_V_0],
+            )
+            cs_block_T, cs_block_V_0 = (
+                np.concatenate((zero, np.cumsum(block_T))),
+                np.concatenate((zero, np.cumsum(block_V_0))),
+            )
+            ids_block_T = np.searchsorted(cs_block_T, cs_block_V_0)
+            len_block_V_0 = len(block_V_0)
+            delta = n - len_block_V_0
+            ### start inner loop
+            ###
+            dot_block, j = (
+                np.zeros(cs_block_V_0[-1], dtype=np.float64),
+                t_i * n - t_i * (t_i - 1) // 2 - delta,
+            )
+            for k in range(len_block_V_0):
+                k_prime = len_block_V_0 - k - 1
+                follower, pos_follower, next_pos_follower = (
+                    block_T[ids_block_T[k_prime] : ids_block_T[k_prime + 1]],
+                    cs_block_V_0[k_prime],
+                    cs_block_V_0[k_prime + 1],
+                )
+                sum_follower = next_pos_follower - pos_follower
+                ###
+                for l in range(k + 1):
+                    l_prime = len_block_V_0 - l - 1
+                    j = j - 1
+                    leader, pos_leader, next_pos_leader = (
+                        block_T[ids_block_T[l_prime] : ids_block_T[l_prime + 1]],
+                        cs_block_V_0[l_prime],
+                        cs_block_V_0[l_prime + 1],
+                    )
+                    phi = ordinal_embedding(h, leader, follower)
+                    ext = np.zeros(sum_follower, dtype=np.float64)
+                    if l < k:
+                        vec = dot_block[pos_leader:next_pos_leader]
+                        ext[phi] = vec
+                        dot_block[pos_follower:next_pos_follower] += U[j] * ext
+                    else:
+                        vec = block[pos_leader:next_pos_leader]
+                        ext[phi] = vec
+                        dot_block[pos_follower:next_pos_follower] = (
+                            ext - dot_block[pos_follower:next_pos_follower]
+                        ) / U[j]
+                ###
+                j = j - delta
+            dot[pos:next_pos] = dot_block
+            ### end inner loop
+        ### end outer loop
+        V_0 = V_1
+        V_1 = reduceat(V_1, cs_T)
+    ###
+    return dot
+
+
+@njit(parallel=PARALLEL)
+def itransform_lt_md(
+    L: np.ndarray,
+    x: np.ndarray,
+    T: np.ndarray,
+    cs_T: np.ndarray,
+    e_T: np.ndarray,
+    m: int,
+) -> np.ndarray:
+    """O(Nmn)"""
+    zero = np.array([0], dtype=np.int64)
+    dot, V_0 = np.zeros_like(x), T.copy()
+    ### 1d
+    ### indexing: i > j, k
+    ###
+    for i in prange(e_T[1]):
+        t_i, pos_i, next_pos_i = T[i], cs_T[i], cs_T[i + 1]
+        block = x[pos_i:next_pos_i]
+        ###
+        dot_block = np.zeros(t_i, dtype=np.float64)
+        for k in prange(t_i):
+            j = k * (k + 1) // 2
+            j_next = j + k + 1
+            dot_block[k] = np.sum(L[j:j_next] * block[: k + 1])
+        ###
+        dot[pos_i:next_pos_i] = dot_block
+    ###
+    ### md
+    ### indexing: h > i > j, k > l
+    ###
+    V_1 = reduceat(V_0, cs_T)
+    for h in range(1, m):
+        cs_V_0, cs_V_1 = (
+            np.concatenate((zero, np.cumsum(V_0))),  # NOTE: else, unexpected behaviour
+            np.concatenate((zero, np.cumsum(V_1))),
+        )
+        ### outer loop
+        ###
+        for i in prange(e_T[h + 1]):
+            pos, next_pos = cs_V_1[i], cs_V_1[i + 1]
+            block = dot[pos:next_pos]
+            interval = np.array([pos, next_pos])
+            pos_T, next_pos_T = np.searchsorted(cs_T, interval)
+            pos_V_0, next_pos_V_0 = np.searchsorted(cs_V_0, interval)
+            block_T, block_V_0 = (
+                T[pos_T:next_pos_T],
+                V_0[pos_V_0:next_pos_V_0],
+            )
+            cs_block_T, cs_block_V_0 = (
+                np.concatenate((zero, np.cumsum(block_T))),
+                np.concatenate((zero, np.cumsum(block_V_0))),
+            )
+            ids_block_T = np.searchsorted(cs_block_T, cs_block_V_0)
+            len_block_V_0 = len(block_V_0)
+            ### start inner loop
+            ###
+            dot_block = np.zeros(cs_block_V_0[-1], dtype=np.float64)
+            for k in prange(len_block_V_0):
+                j = k * (k + 1) // 2
+                follower, pos_follower, next_pos_follower = (
+                    block_T[ids_block_T[k] : ids_block_T[k + 1]],
+                    cs_block_V_0[k],
+                    cs_block_V_0[k + 1],
+                )
+                ###
+                for l in prange(k + 1):
+                    leader, pos_leader, next_pos_leader = (
+                        block_T[ids_block_T[l] : ids_block_T[l + 1]],
+                        cs_block_V_0[l],
+                        cs_block_V_0[l + 1],
+                    )
+                    vec = block[pos_leader:next_pos_leader]
+                    phi = ordinal_embedding(h, follower, leader)
+                    dot_block[pos_follower:next_pos_follower] += L[j + l] * vec[phi]
+                ###
+            dot[pos:next_pos] = dot_block
+            ### end inner loop
+        ### end outer loop
+        V_0 = V_1
+        V_1 = reduceat(V_1, cs_T)
+    ###
+    return dot
+
+
+@njit(parallel=PARALLEL)
+def itransform_ut_md(
+    U: np.ndarray,
+    x: np.ndarray,
+    T: np.ndarray,
+    cs_T: np.ndarray,
+    e_T: np.ndarray,
+    m: int,
+    n: int,
+) -> np.ndarray:
+    """O(Nmn)"""
+    zero = np.array([0], dtype=np.int64)
+    dot, V_0 = np.zeros_like(x), T.copy()
+    ### 1d
+    ### indexing: i > j, k
+    ###
+    for i in prange(e_T[1]):
+        t_i, pos_i, next_pos_i = T[i], cs_T[i], cs_T[i + 1]
+        block = x[pos_i:next_pos_i]
+        ###
+        dot_block = np.zeros(t_i, dtype=np.float64)
+        for k in prange(t_i):
+            j = k * n - k * (k - 1) // 2
+            j_next = j + t_i - k
+            dot_block[k] = np.sum(U[j:j_next] * block[k:])
+        ###
+        dot[pos_i:next_pos_i] = dot_block
+    ###
+    ### md
+    ### indexing: h > i > j, k > l
+    ###
+    V_1 = reduceat(V_0, cs_T)
+    for h in range(1, m):
+        cs_V_0, cs_V_1 = (
+            np.concatenate((zero, np.cumsum(V_0))),  # NOTE: else unexpected behaviour
+            np.concatenate((zero, np.cumsum(V_1))),
+        )
+        ### start outer loop
+        ###
+        for i in prange(e_T[h + 1]):
+            pos, next_pos = cs_V_1[i], cs_V_1[i + 1]
+            block = dot[pos:next_pos]
+            interval = np.array([pos, next_pos])
+            pos_T, next_pos_T = np.searchsorted(cs_T, interval)
+            pos_V_0, next_pos_V_0 = np.searchsorted(cs_V_0, interval)
+            block_T, block_V_0 = (
+                T[pos_T:next_pos_T],
+                V_0[pos_V_0:next_pos_V_0],
+            )
+            cs_block_T, cs_block_V_0 = (
+                np.concatenate((zero, np.cumsum(block_T))),
+                np.concatenate((zero, np.cumsum(block_V_0))),
+            )
+            ids_block_T = np.searchsorted(cs_block_T, cs_block_V_0)
+            len_block_V_0 = len(block_V_0)
+            ### start inner loop
+            ###
+            dot_block = np.zeros(cs_block_V_0[-1], dtype=np.float64)
+            for k in prange(len_block_V_0):
+                j = k * n - k * (k - 1) // 2
+                follower, pos_follower, next_pos_follower = (
+                    block_T[ids_block_T[k] : ids_block_T[k + 1]],
+                    cs_block_V_0[k],
+                    cs_block_V_0[k + 1],
+                )
+                sum_follower = next_pos_follower - pos_follower
+                ###
+                for l in prange(len_block_V_0 - k):
+                    leader, pos_leader, next_pos_leader = (
+                        block_T[ids_block_T[k + l] : ids_block_T[k + l + 1]],
+                        cs_block_V_0[k + l],
+                        cs_block_V_0[k + l + 1],
+                    )
+                    vec = block[pos_leader:next_pos_leader]
+                    phi = ordinal_embedding(h, leader, follower)
+                    ext = np.zeros(sum_follower, dtype=np.float64)
+                    ext[phi] = vec
+                    dot_block[pos_follower:next_pos_follower] += U[j + l] * ext
+                ###
+            dot[pos:next_pos] = dot_block
+            ### end inner loop
+        ### end outer loop
+        V_0 = V_1
+        V_1 = reduceat(V_1, cs_T)
+    ###
+    return dot
+
+
+@njit(parallel=PARALLEL)  # TODO: create test
+def dtransform_lt_md(
+    L: np.ndarray,
+    x: np.ndarray,
+    T: np.ndarray,
+):
+    """O(Nn)"""
+    N1, cs_T = (
+        len(T),
+        np.concatenate((np.array([0]), np.cumsum(T))),
     )
-
-
-@njit
-def _lt_diag_transform_sequential(A: NP_ARRAY, x: NP_ARRAY, T: NP_ARRAY):
-    """O(sum(T^2))"""
-    pos, result = 0, np.zeros_like(x)
-    for slot in T:  # O(len(T))
-        next_pos = pos + slot
+    ###
+    dot = np.zeros_like(x)
+    for i in prange(N1):
+        t, pos, next_pos = T[i], cs_T[i], cs_T[i + 1]
         chunk = x[pos:next_pos]
-        chunk_dot, j = np.zeros(slot, dtype=NP_FLOAT), 0
-        for i in range(slot):  # O(slot)
-            j_next = j + i + 1
-            chunk_dot[i] = np.sum(A[j:j_next] * chunk[: i + 1])  # O(2*slot)
+        ###
+        chunk_dot, j = np.zeros(t, dtype=np.float64), 0
+        for k in range(t):
+            j_next = j + k + 1
+            chunk_dot[k] = np.sum(L[j:j_next] * chunk[: k + 1])
             j = j_next
-        result[pos:next_pos] = chunk_dot
+        dot[pos:next_pos] = chunk_dot
+        ###
         pos = next_pos
-    return result
+    ###
+    return dot
 
 
-@njit
-def _lt_diag_transform_parallel(A: NP_ARRAY, x: NP_ARRAY, T: NP_ARRAY):
-    """O(sum(T^2))"""
-    # TODO
-    raise NotImplementedError("Not implemented yet.")
+@njit(parallel=PARALLEL)
+def dtransform_ut_md(
+    U: np.ndarray,
+    x: np.ndarray,
+    T: np.ndarray,
+    cs_T: np.ndarray,
+    N_1: int,
+    n: int,
+):
+    """O(Nn)"""
+    ###
+    dot = np.zeros_like(x)
+    for i in prange(N_1):
+        t, pos, next_pos = T[i], cs_T[i], cs_T[i + 1]
+        block = x[pos:next_pos]
+        ###
+        dot_block = np.zeros(t, dtype=np.float64)
+        for k in prange(t):
+            j = k * n - k * (k - 1) // 2
+            j_next = j + t - k
+            dot_block[k] = np.sum(U[j:j_next] * block[k:])
+        dot[pos:next_pos] = dot_block
+        ###
+        pos = next_pos
+    ###
+    return dot

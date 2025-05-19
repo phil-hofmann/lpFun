@@ -1,196 +1,309 @@
 import numpy as np
+
 from numba import njit
-from lpfun import NP_INT, NP_FLOAT, NP_ARRAY, PARALLEL
-from lpfun.utils import (
-    classify,
-    permutation_maximal,
-    permutation,
-    apply_permutation,
-    rmo_transpose,
-)
+from lpfun.core.utils import apply_permutation
+from lpfun.core.set import permutation_max, permutation
 from lpfun.core.atoms import (
-    lt_transform,
-    ut_transform,
-    n_transform_maximal,
-    n_transform_2d,
-    n_transform_md,
-    ut_diag_transform_maximal,
-    lt_diag_transform_maximal,
-    ut_diag_transform,
-    lt_diag_transform,
-    diag_transform_maximal,
+    transform_lt_1d,
+    transform_ut_1d,
+    transform_lt_max,
+    transform_ut_max,
+    transform_lt_2d,
+    transform_ut_2d,
+    transform_lt_3d,
+    transform_ut_3d,
+    transform_lt_md,
+    transform_ut_md,
+    ###
+    itransform_lt_1d,
+    itransform_ut_1d,
+    itransform_lt_max,
+    itransform_ut_max,
+    itransform_lt_2d,
+    itransform_ut_2d,
+    itransform_lt_3d,
+    itransform_ut_3d,
+    itransform_lt_md,
+    itransform_ut_md,
+    ###
+    dtransform_max,
+    dtransform_lt_md,
+    dtransform_ut_md,
 )
+from typing import Literal
 
 
-@njit(parallel=PARALLEL)
-def n_transform(A: NP_ARRAY, x: NP_ARRAY, T: NP_ARRAY, m: int, p: float) -> NP_ARRAY:
+# @njit # NOTE optional
+def transform(
+    Vx: np.ndarray,
+    f: np.ndarray,
+    T: np.ndarray,
+    cs_T: np.ndarray,
+    V_2: np.ndarray,
+    cs_V_2: np.ndarray,
+    e_T: np.ndarray,
+    N_1: int,
+    m: int,
+    n: int,
+    p: float,
+    mode: Literal["lower", "upper"],
+) -> np.ndarray:
     """
-    Fast Newton Transformation
-    -----------------------------------------------------
-    A: NP_ARRAY
-        Row major ordering matrix
-    x: NP_ARRAY
+    Fast Newton Transform
+    ---------------------
+    Vx: np.ndarray
+        Row major ordering
+    f: np.ndarray
         Input vector
-    T: NP_ARRAY
-        Tiling of the transformation
+    T: np.ndarray
+        Tube projection
+    cs_T: np.ndarray
+        Cumulative sums of tube projection
+    V_2: np.ndarray
+        Second volume projection
+    cs_V_2: np.ndarray
+        Cumulative sums of the second volume projection
+    e_T: np.ndarray
+        Entropy vector
+    N_1: int
+        Size of multi index set
     m: int
-        Dimension of the transformation
+        Spatial dimension
+    n: int
+        Polynomial degree
     p: float
         Parameter of the lp space
+    mode: str
+        Lower or upper triangular
 
     Returns
     -------
-    NP_ARRAY:
+    np.ndarray:
         Transformed vector
 
     Time Complexity
     ---------------
-    O(sum(T^2)*m)
+    O(Nmn)
     """
-    A = np.asarray(A).astype(NP_FLOAT)
-    x = np.asarray(x).astype(NP_FLOAT)
-    T = np.asarray(T).astype(NP_INT)
-    m, p = int(m), float(p)
-    if (not p == np.infty) and (T is None) and (not m == 1):
-        raise ValueError("Tiling is required for p != np.infty.")
-    classify(m, 0, p, allow_infty=True)
+    Vx, f, T, cs_T, V_2, cs_V_2, e_T, N_1, m, n, p, mode = (
+        np.asarray(Vx).astype(np.float64),
+        np.asarray(f).astype(np.float64),
+        np.asarray(T).astype(np.int64),
+        np.asarray(cs_T).astype(np.int64),
+        np.asarray(V_2).astype(np.int64),
+        np.asarray(cs_V_2).astype(np.int64),
+        np.asarray(e_T).astype(np.int64),
+        int(N_1),
+        int(m),
+        int(n),
+        float(p),
+        str(mode),
+    )
+    lt = mode == "lower"
+
     if m == 1:
-        return lt_transform(A, x)
-    elif p == np.infty:
-        return n_transform_maximal(A, x)
+        return transform_lt_1d(Vx, f, n + 1) if lt else transform_ut_1d(Vx, f, n + 1)
+    # elif p == np.inf:
+    #     return transform_lt_max(Vx, f) if lt else transform_ut_max(Vx, f)
     elif m == 2:
-        return n_transform_2d(A, x, T)
-    else:
-        return n_transform_md(A, x, T)
+        return (
+            transform_lt_2d(Vx, f, T, cs_T, N_1)
+            if lt
+            else transform_ut_2d(Vx, f, T, cs_T, N_1)
+        )
+    elif m == 3:
+        return (
+            transform_lt_3d(Vx, f, T, cs_T, V_2, cs_V_2, N_1)
+            if lt
+            else transform_ut_3d(Vx, f, T, cs_T, V_2, cs_V_2, N_1)
+        )
+    return (
+        transform_lt_md(Vx, f, T, cs_T, e_T, m)
+        if lt
+        else transform_ut_md(Vx, f, T, cs_T, e_T, m, n + 1)
+    )
 
 
-@njit(parallel=PARALLEL)
-def n_dx_transform(
-    A: NP_ARRAY,
-    x: NP_ARRAY,
-    T: NP_ARRAY,
+@njit
+def itransform(
+    Vx: np.ndarray,
+    c: np.ndarray,
+    T: np.ndarray,
+    cs_T: np.ndarray,
+    V_2: np.ndarray,
+    cs_V_2: np.ndarray,
+    e_T: np.ndarray,
+    N_1: int,
+    m: int,
+    n: int,
+    p: float,
+    mode: Literal["lower", "upper"],
+) -> np.ndarray:
+    """
+    Inverse Fast Newton Transform
+    ---------------------
+    Vx: np.ndarray
+        Row major ordering
+    c: np.ndarray
+        Input vector
+    T: np.ndarray
+        Tube projection
+    cs_T: np.ndarray
+        Cumulative sums of tube projection
+    V_2: np.ndarray
+        Second volume projection
+    cs_V_2: np.ndarray
+        Cumulative sums of the second volume projection
+    e_T: np.ndarray
+        Entropy vector
+    N_1: int
+        Size of multi index set
+    m: int
+        Spatial dimension
+    n: int
+        Polynomial degree
+    p: float
+        Parameter of the lp space
+    mode: str
+        Lower or upper triangular
+
+    Returns
+    -------
+    np.ndarray:
+        Inverse transformed vector
+
+    Time Complexity
+    ---------------
+    O(Nmn)
+    """
+    Vx, c, T, cs_T, V_2, cs_V_2, e_T, N_1, m, n, p, mode = (
+        np.asarray(Vx).astype(np.float64),
+        np.asarray(c).astype(np.float64),
+        np.asarray(T).astype(np.int64),
+        np.asarray(cs_T).astype(np.int64),
+        np.asarray(V_2).astype(np.int64),
+        np.asarray(cs_V_2).astype(np.int64),
+        np.asarray(e_T).astype(np.int64),
+        int(N_1),
+        int(m),
+        int(n),
+        float(p),
+        str(mode),
+    )
+    lt = mode == "lower"
+
+    if m == 1:
+        return itransform_lt_1d(Vx, c, n + 1) if lt else itransform_ut_1d(Vx, c, n + 1)
+    elif p == np.inf:
+        return (
+            itransform_lt_max(Vx, c, m, n + 1)
+            if lt
+            else itransform_ut_max(Vx, c, m, n + 1)
+        )
+    elif m == 2:
+        return (
+            itransform_lt_2d(Vx, c, T, cs_T, N_1)
+            if lt
+            else itransform_ut_2d(Vx, c, T, cs_T, N_1)
+        )
+    elif m == 3:
+        return (
+            itransform_lt_3d(Vx, c, T, cs_T, V_2, cs_V_2, N_1)
+            if lt
+            else itransform_ut_3d(Vx, c, T, cs_T, V_2, cs_V_2, N_1)
+        )
+    return (
+        itransform_lt_md(Vx, c, T, cs_T, e_T, m)
+        if lt
+        else itransform_ut_md(Vx, c, T, cs_T, e_T, m, n + 1)
+    )
+
+
+@njit
+def dtransform(
+    Dx: np.ndarray,
+    c: np.ndarray,
+    T: np.ndarray,
+    cs_T: np.ndarray,
+    N_1: int,
     m: int,
     n: int,
     p: float,
     i: int,
-    transpose: bool,
-) -> NP_ARRAY:
+    mode: Literal["lower", "upper"],
+) -> np.ndarray:
     """
-    Fast Spectral Differentiation
-    --------------------------------------------------
-    A: NP_ARRAY
-        Row major ordering matrix
-    x: NP_ARRAY
+    Fast Diagonal Newton Transformation
+    -----------------------------
+    Dx: np.ndarray
+       Row major ordering (lower triangular)
+    c: np.ndarray
         Input vector
-    T: NP_ARRAY
-        Tiling of the transformation
+    T: np.ndarray
+        Tube projection
+    cs_T: np.ndarray
+        Cumulative sums of tube projection
+    N_1: int
+        Size of multi index set
     m: int
-        Dimension of the transformation
+        Spatial dimension
+    n: int
+        Polynomial degree
     p: float
         Parameter of the lp space
     i: int
-        Coordinate of differentiation
-    transpose: bool
-        Whether to transpose the matrix
+        Coordinate permutation
+    mode: str
+        Lower or upper triangular
 
     Returns
     -------
-    NP_ARRAY:
+    np.ndarray:
         Transformed vector
 
     Time Complexity
     ---------------
-    O(sum(T^2))
+    O(Nn)
     """
-    A = np.asarray(A).astype(NP_FLOAT)
-    x = np.asarray(x).astype(NP_FLOAT)
-    T = np.asarray(T).astype(NP_INT)
-    m, n, p = int(m), int(n), float(p)
-    if (not p == np.infty) and (T is None) and (not m == 1):
-        raise ValueError("Tiling is required for p != np.infty.")
-    classify(m, 0, p, allow_infty=True)
+    Dx, c, T, cs_T, m, n, p, i, mode = (
+        np.asarray(Dx).astype(np.float64),
+        np.asarray(c).astype(np.float64),
+        np.asarray(T).astype(np.int64),
+        np.asarray(cs_T).astype(np.int64),
+        int(m),
+        int(n),
+        float(p),
+        int(i),
+        str(mode),
+    )
+    if i < 0 or i >= m:
+        raise ValueError(f"Choose a coordinate between i=0 and i={m - 1}.")
+    lt = mode == "lower"
+
     if m == 1:
-        if transpose:
-            At = rmo_transpose(A)
-            return lt_transform(At, x)
-        else:
-            return ut_transform(A, x)
-    elif p == np.infty:
-        P = permutation_maximal(m, n, i)
+        return itransform_lt_1d(Dx, c, n + 1) if lt else itransform_ut_1d(Dx, c, n + 1)
+    elif p == np.inf:
+        Perm = None
         if not i == 0:
-            x = apply_permutation(P, x)
-        if transpose:
-            At = rmo_transpose(A)
-            x = lt_diag_transform_maximal(At, x)
-        else:
-            x = ut_diag_transform_maximal(A, x)
+            Perm = permutation_max(m, n, i)
+            c = apply_permutation(Perm, c)
+        c = (
+            dtransform_max(Dx, c, m, n + 1)
+            if lt
+            else dtransform_max(Dx[::-1], c[::-1], m, n + 1)[::-1]
+        )
         if not i == 0:
-            x = apply_permutation(P, x, invert=True)
-        return x
+            c = apply_permutation(Perm, c, invert=True)
     else:
-        P = permutation(T, i)
+        Perm = None
         if not i == 0:
-            x = apply_permutation(P, x, invert=True)
-        if transpose:
-            At = rmo_transpose(A)
-            x = lt_diag_transform(A, x, T)
-        else:
-            x = ut_diag_transform(A, x, T)
+            Perm = permutation(T, i)
+            c = apply_permutation(Perm, c, invert=True)
+        c = (
+            dtransform_lt_md(Dx, c, T)
+            if lt
+            else dtransform_ut_md(Dx, c, T, cs_T, N_1, n + 1)
+        )
         if not i == 0:
-            x = apply_permutation(P, x)
-        return x
-
-
-@njit(parallel=PARALLEL)
-def l_dx_transform(
-    A: NP_ARRAY,
-    x: NP_ARRAY,
-    m: int,
-    n: int,
-    i: int,
-    transpose: bool,
-) -> NP_ARRAY:
-    """
-    Fast Spectral Differentiation
-    --------------------------------------------------
-    A: NP_ARRAY
-        Matrix
-    x: NP_ARRAY
-        Input vector
-    m: int
-        Dimension of the transformation
-    i: int
-        Coordinate of differentiation
-    transpose: bool
-        Whether to transpose the matrix
-
-    Returns
-    -------
-    NP_ARRAY:
-        Transformed vector
-
-    Time Complexity
-    ---------------
-    O(N*n)
-    """
-    A = np.asarray(A).astype(NP_FLOAT)
-    x = np.asarray(x).astype(NP_FLOAT)
-    m, n = int(m), int(n)
-    classify(m, 0, np.infty, allow_infty=True)
-    if m == 1:
-        if transpose:
-            At = A.T
-            return At @ x
-        else:
-            return A @ x
-    P = permutation_maximal(m, n, i)
-    if not i == 0:
-        x = apply_permutation(P, x)
-    if transpose:
-        At = A.T
-        x = diag_transform_maximal(At, x)
-    else:
-        x = diag_transform_maximal(A, x)
-    if not i == 0:
-        x = apply_permutation(P, x, invert=True)
-    return x
+            c = apply_permutation(Perm, c)
+    return c
