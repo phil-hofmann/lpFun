@@ -5,6 +5,7 @@
     A package for fast multivariate interpolation and differentiation in downward closed polynomial spaces.
 </p>
 
+[![Cite this repo](https://img.shields.io/badge/Cite-this%20repository-blue)](https://github.com/phil-hofmann/lpFun/blob/main/CITATION.cff)
 [![arXiv](https://img.shields.io/badge/arXiv-0.0-green.svg)](https://arxiv.org/0.0)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 [![License](https://img.shields.io/github/license/minterpy-project/minterpy)](https://choosealicense.com/licenses/mit/)
@@ -15,22 +16,30 @@
 - [Damar Wicaksono](https://gitlab.com/damar-wicaksono) - [CASUS](https://www.casus.science/) ([HZDR](https://www.hzdr.de/))
 - [Michael Hecht](https://gitlab.com/MikeyPice) - [CASUS](https://www.casus.science/) ([HZDR](https://www.hzdr.de/))
 
-## 📜 License
+## 💬 Citation
 
-The project is licensed under the [MIT License](LICENSE.txt).
+> 📚 [Download BibTeX](./lpFun.bib) (The project is licensed under the [MIT License](LICENSE.txt).)
 
-**Please cite the following work when using this framework in any public context**:
+If you use lpFun in any public context (publications, presentations, or derivative software), **please cite both**:
 
-_Phil-Alexander Hofmann, Damar Wicaksono, Michael Hecht._ Fast Newton Transform: Interpolation in Downward Closed Polynomial Spaces. arXiv, 2025. [https://arxiv.org/0.0].
+- **Accompanying paper**:
+    > Phil-Alexander Hofmann, Damar Wicaksono, Michael Hecht.
+    > _Fast Newton Transform: Interpolation in Downward Closed Polynomial Spaces_.  
+    > arXiv, 2025. https://arxiv.org/abs/0.0
 
-## 💬 Citations
+- **Software**:
+    > Phil-Alexander Hofmann. _lpFun_. 2025.  
+    > https://github.com/phil-hofmann/lpFun
+
+<br/>
 
 **Related references**:
-
-- _Hecht et al._ Multivariate Newton Interpolation in Downward Closed Spaces Reaches the Optimal Geometric Approximation Rates for Bos–Levenberg–Trefethen Functions. arXiv, 2025. [https://arxiv.org/pdf/2504.17899].
+- _Hecht et al._ Multivariate Newton Interpolation in Downward Closed Spaces Reaches the Optimal Geometric Approximation Rates for Bos–Levenberg–Trefethen Functions. arXiv, 2025. https://arxiv.org/pdf/2504.17899
 - _Damar Wicaksono et al._ Minterpy: multivariate polynomial interpolation in
-  Python. The Journal of Open Source Software, 2025. [https://joss.theoj.org/papers/10.21105/joss.07702]. [Minterpy](https://github.com/minterpy-project/minterpy) licensed under the [MIT](https://github.com/minterpy-project/minterpy/blob/dev/LICENSE) License.
-- _Phil-Alexander Hofmann._ Implementation and Complexity Analysis of Algorithms for Multivariate Newton Polynomials of p Degree. 2024. [https://philhofmann.de]. [Framework](https://gitlab.com/philhofmann/implementation-and-complexity-analysis-of-algorithms-for-multivariate-newton-polynomials-of-p-degree) licensed under the [MIT](https://gitlab.com/philhofmann/implementation-and-complexity-analysis-of-algorithms-for-multivariate-newton-polynomials-of-p-degree/-/blob/main/LICENSE.txt?ref_type=heads) License.
+  Python. The Journal of Open Source Software, 2025. https://joss.theoj.org/papers/10.21105/joss.07702 
+- _Phil-Alexander Hofmann._ Implementation and Complexity Analysis of Algorithms for Multivariate Newton Polynomials of p Degree. 2024. https://philhofmann.de/ 
+- Damar Wicaksono et al. _Minterpy_. 2025. https://github.com/minterpy-project/minterpy
+- Phil-Alexander Hofmann. _Prototype of lpFun_. 2024. https://gitlab.com/philhofmann/implementation-and-complexity-analysis-of-algorithms-for-multivariate-newton-polynomials-of-p-degree
 
 ## 💻 Installation
 
