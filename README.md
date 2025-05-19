@@ -1,9 +1,13 @@
 <p align="center">
-  <img src="social-banner-bg-rounded.png" height="128" width="384"/>
+  <img src="docs/social-banner-bg-rounded.png" height="128" width="384"/>
 </p>
 <p align="center">
     A package for fast multivariate interpolation and differentiation in downward closed polynomial spaces.
 </p>
+
+[![arXiv](https://img.shields.io/badge/arXiv-0.0-green.svg)](https://arxiv.org/0.0)
+[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
+[![License](https://img.shields.io/github/license/minterpy-project/minterpy)](https://choosealicense.com/licenses/mit/)
 
 ## 👥 Team
 
@@ -11,26 +15,28 @@
 - [Damar Wicaksono](https://gitlab.com/damar-wicaksono) - [CASUS](https://www.casus.science/) ([HZDR](https://www.hzdr.de/))
 - [Michael Hecht](https://gitlab.com/MikeyPice) - [CASUS](https://www.casus.science/) ([HZDR](https://www.hzdr.de/))
 
+Actively developed by Phil-A. Hofmann, supervised by Michael Hecht, and supported by Damar Wicaksono.
+
 ## 📜 License
 
 The project is licensed under the [MIT License](LICENSE.txt).
 
-## 💬 Citations
-
 **Please cite the following work when using this framework in any public context**:
 
-_Phil-Alexander Hofmann, Damar Wicaksono, Michael Hecht._ Fast Newton Transform: Interpolation in Downward Closed Polynomial Spaces. arXiv, 2025. [https://arxiv.org/].
+_Phil-Alexander Hofmann, Damar Wicaksono, Michael Hecht._ Fast Newton Transform: Interpolation in Downward Closed Polynomial Spaces. arXiv, 2025. [https://arxiv.org/0.0].
+
+## 💬 Citations
 
 **Related references**:
 
 - _Hecht et al._ Multivariate Newton Interpolation in Downward Closed Spaces Reaches the Optimal Geometric Approximation Rates for Bos–Levenberg–Trefethen Functions. arXiv, 2025. [https://arxiv.org/pdf/2504.17899].
 - _Damar Wicaksono et al._ Minterpy: multivariate polynomial interpolation in
-Python. The Journal of Open Source Software, 2025. [https://joss.theoj.org/papers/10.21105/joss.07702]. [Minterpy](https://github.com/minterpy-project/minterpy) licensed under the [MIT](https://github.com/minterpy-project/minterpy/blob/dev/LICENSE) License.
+  Python. The Journal of Open Source Software, 2025. [https://joss.theoj.org/papers/10.21105/joss.07702]. [Minterpy](https://github.com/minterpy-project/minterpy) licensed under the [MIT](https://github.com/minterpy-project/minterpy/blob/dev/LICENSE) License.
 - _Phil-Alexander Hofmann._ Implementation and Complexity Analysis of Algorithms for Multivariate Newton Polynomials of p Degree. 2024. [https://philhofmann.de]. [Framework](https://gitlab.com/philhofmann/implementation-and-complexity-analysis-of-algorithms-for-multivariate-newton-polynomials-of-p-degree) licensed under the [MIT](https://gitlab.com/philhofmann/implementation-and-complexity-analysis-of-algorithms-for-multivariate-newton-polynomials-of-p-degree/-/blob/main/LICENSE.txt?ref_type=heads) License.
 
 ## 💻 Installation
 
-### Including in Your Project
+### 1. Including in Your Project
 
 If you want to include this package in your project, you can install it directly from the GitHub repository:
 
@@ -58,7 +64,7 @@ pip install git+https://github.com/phil-hofmann/lpfun.git
 conda deactivate
 ```
 
-### Setting Up the Repository on Your Local Machine
+### 2. Setting Up the Repository on Your Local Machine
 
 Please follow the steps below
 
@@ -98,18 +104,30 @@ pytest -v
 conda deactivate
 ```
 
-## 📖 Tutorial : Short Version
+## 📖 Tutorial
+
+[tutorial.py](docs/tutorial.py)
+
+### 1. Short Version
 
 ```python
 import numpy as np
 from lpfun import Transform
 
+# from lpfun.utils import leja_nodes # NOTE optional
+
+
 # Function f to approximate
 def f(x, y):
     return np.sin(x) * np.cos(y)
 
+
 # Initialise Transform object
-t = Transform(spatial_dimension=2, polynomial_degree=10)
+t = Transform(
+    spatial_dimension=2,
+    polynomial_degree=10,
+    # nodes=leja_nodes # NOTE optional
+)
 
 # Compute function values on the grid
 values_f = f(t.grid[:, 0], t.grid[:, 1])
@@ -128,7 +146,7 @@ random_df = t.eval(coeffs_df, random_points)
 rec_df = t.ifnt(coeffs_df)
 ```
 
-## 📖 Tutorial
+### 2. Long Version
 
 The `Transform` class enables forward and backward transform, as well as the computation of derivatives and their adjoints.
 
@@ -136,9 +154,14 @@ The `Transform` class enables forward and backward transform, as well as the com
 import time
 import numpy as np
 from lpfun import Transform
+from lpfun.utils import leja_nodes
 
 # Initialise Transform object
-t = Transform(spatial_dimension=3, polynomial_degree=20)
+t = Transform(
+    spatial_dimension=3,
+    polynomial_degree=20,
+    nodes=leja_nodes,  # NOTE default nodes are cheb2nd_nodes
+)
 
 # Dimension of the polynomial space
 print(f"N = {len(t)}")
@@ -216,8 +239,13 @@ print(
 )
 
 # Embed the approximate derivative into a bigger polynomial space space
-t_prime = Transform(spatial_dimension=3, polynomial_degree=30, report=False)
-phi = t_prime.embed(t)
+t_prime = Transform(
+    spatial_dimension=3,
+    polynomial_degree=30,
+    nodes=leja_nodes, # NOTE default nodes are cheb2nd_nodes
+    report=False,
+)
+phi = t.embed(t_prime)
 coeffs_df_prime = np.zeros(len(t_prime))
 coeffs_df_prime[phi] = coeffs_df.copy()
 ```
@@ -231,22 +259,22 @@ When you run this code, you should see outputs similar to:
 Spatial Dimension    | 3
 Polynomial Degree    | 20
 lp Degree            | 2.0
-Condition V          | 1.33e+06
+Condition V          | 1.44e+06
 Amount of Coeffs     | 4_662
-Construction         | 2_113.15 ms
-Precompilation       | 17_745.04 ms
+Construction         | 2_303.00 ms
+Precompilation       | 16_603.96 ms
 ---------------------+---------------------
 
 N = 4662
-t.fnt: 0.60 ms
-t.ifnt: 0.64 ms
-max |rec_f - values_f| = 8.44e-15
-t.eval (random points): 0.23 ms
-|f_random - rec_f_random| = 9.77e-15
-t.dx: 0.54 ms
-max |rec_df - values_df| = 1.72e-12
-t.eval (random points): 0.18 ms
-max |df_rand-rec_df_rand| = 1.22e-13
+t.fnt: 0.59 ms
+t.ifnt: 0.52 ms
+max |rec_f - values_f| = 7.11e-15
+t.eval (random points): 0.19 ms
+|f_random - rec_f_random| = 8.44e-15
+t.dx: 0.50 ms
+max |rec_df - values_df| = 1.03e-12
+t.eval (random points): 0.19 ms
+max |df_rand-rec_df_rand| = 5.15e-14
 ```
 
 ## Acknowledgments

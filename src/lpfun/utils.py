@@ -24,7 +24,7 @@ def classify(m: int, n: int, p: float) -> bool:
 # nodes
 
 
-def cheb2nd(n: int) -> np.ndarray:
+def cheb2nd_nodes(n: int) -> np.ndarray:
     """O(n)"""
     n = int(n)
     ###
@@ -35,6 +35,23 @@ def cheb2nd(n: int) -> np.ndarray:
     if n == 1:
         return np.array([-1.0, 1.0], dtype=np.float64)
     return np.cos(np.arange(n, dtype=np.float64) * np.pi / (n - 1))
+
+
+def leja_nodes(n: int, m: int = 1000) -> np.ndarray:
+    """O(n^3)"""
+    if n < 0:
+        raise ValueError("The parameter ``n`` should be non-negative.")
+    if n == 0:
+        return np.zeros(1, dtype=np.float64)
+    if n == 1:
+        return np.array([-1.0, 1.0], dtype=np.float64)
+    if n > m:
+        raise (
+            f"The amount of nodes {n} must be smaller or equal than the sample size {m}."
+        )
+    sample_nodes = cheb2nd_nodes(m)
+    leja_order = get_leja_order(sample_nodes, limit=n)
+    return sample_nodes[leja_order]
 
 
 # vandermonde matrices
@@ -178,28 +195,23 @@ def chebyshev2point(
     return values
 
 
-# Leja ordered nodes
-
-
-def leja_nodes(nodes: np.ndarray) -> np.ndarray:
-    """O(n^3)"""
-    nodes = np.asarray(nodes).astype(np.float64)
-    order = _leja_order(nodes)
-    return nodes[order]
+# Leja order
 
 
 @njit
-def _leja_order(nodes: np.ndarray) -> np.ndarray:
+def get_leja_order(nodes: np.ndarray, limit: int = -1) -> np.ndarray:
+    """O(n^3)"""
     """This function originates from minterpy."""
     ### NOTE -- no type conversion
-    n = len(nodes) - 1
-    ord = np.arange(1, n + 1, dtype=np.int64)
-    lj = np.zeros(n + 1, dtype=np.int64)
+    n = len(nodes)
+    limit = n if limit == -1 else limit
+    ord = np.arange(1, n, dtype=np.int64)
+    lj = np.zeros(limit, dtype=np.int64)
     lj[0] = 0
     m = 0
-    for k in range(0, n):
+    for k in range(0, limit - 1):
         jj = 0
-        for i in range(0, n - k):
+        for i in range(0, n - k - 1):
             p = 1
             for j in range(k + 1):
                 p = p * (nodes[lj[j]] - nodes[ord[i]])
@@ -216,7 +228,7 @@ def _leja_order(nodes: np.ndarray) -> np.ndarray:
 # grid
 
 
-def gen_grid(
+def get_grid(
     nodes: np.ndarray,
     A: np.ndarray,
     m: int,
@@ -239,11 +251,11 @@ def gen_grid(
         )
     else:
         A = np.asarray(A).astype(np.int64)
-        return _gen_grid(nodes, A, m)
+        return _get_grid(nodes, A, m)
 
 
 @njit
-def _gen_grid(
+def _get_grid(
     nodes: np.ndarray,
     A: np.ndarray,
     m: int,
@@ -281,7 +293,7 @@ def is_lower_triangular(
 
 
 @njit
-def rmo(L: np.ndarray) -> np.ndarray:
+def get_rmo(L: np.ndarray) -> np.ndarray:
     """O(n^2)"""
     L = np.asarray(L).astype(np.float64)
     ###
@@ -301,7 +313,7 @@ def rmo(L: np.ndarray) -> np.ndarray:
 
 
 @njit
-def lu(M: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+def get_lu(M: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
     """O(n^3)"""
     M = np.asarray(M).astype(np.float64)
     ###
@@ -317,7 +329,7 @@ def lu(M: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
 
 
 # @njit # NOTE pivoting increases numerical stability
-# def lu_pivot(M: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+# def get_lu_pivot(M: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
 #     """Stable LU with partial pivoting. Returns P, L, U so that P @ M = L @ U"""
 #     M = np.asarray(M).astype(np.float64)
 #     n = len(M)

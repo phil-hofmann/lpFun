@@ -2,7 +2,7 @@ import sys
 import time
 import threading
 import numpy as np
-from typing import Literal
+from typing import Literal, Callable
 from abc import ABC, abstractmethod
 from lpfun.core.set import lp_set, lp_tube, ordinal_embedding, entropy
 from lpfun.core.molecules import (
@@ -13,7 +13,9 @@ from lpfun.core.molecules import (
 from lpfun.core.utils import apply_permutation
 from lpfun.utils import (
     classify,
-    cheb2nd,
+    ###
+    cheb2nd_nodes,
+    leja_nodes,  # NOTE alternative for adaptivity
     ###
     newton2lagrange,
     newton2derivative,
@@ -23,13 +25,12 @@ from lpfun.utils import (
     chebyshev2derivative,
     chebyshev2point,
     ###
-    # inv,
     is_lower_triangular,
-    leja_nodes,
-    gen_grid,
-    lu,
-    # lu_pivot,
-    rmo,
+    get_leja_order,
+    get_grid,
+    get_lu,
+    get_rmo,
+    # get_lu_pivot, # TODO
 )
 
 import numpy as np
@@ -78,6 +79,18 @@ class AbstractTransform(ABC):
         """Returns the grid array"""
         pass
 
+    @property
+    @abstractmethod
+    def colex_order(self) -> np.ndarray:
+        """Returns the co-lexicographic order array"""
+        pass
+
+    @property
+    @abstractmethod
+    def leja_order(self) -> np.ndarray:
+        """Returns the leja order array"""
+        pass
+
 
 class Transform(AbstractTransform):
     """
@@ -95,22 +108,24 @@ class Transform(AbstractTransform):
         Array representing directional polynomial degree constraints ("tube").
     multi_index_set : numpy.ndarray
         The multi-index set defining the exponents.
-    nodes : numpy.ndarray
+    nodes : np.ndarray
         The one-dimensional interpolation nodes.
     grid : numpy.ndarray
         The multidimensional grid points (shape: [num_points, spatial_dimension]).
+    colex_order: TODO
+    leja_order: TODO
     """
 
     def __init__(
         self,
-        spatial_dimension: int,  # ... m
-        polynomial_degree: int,  # ... n
-        lp_degree: float = 2.0,  # ... p
-        nodes: callable = cheb2nd,  # ... x
+        spatial_dimension: int,
+        polynomial_degree: int,
+        lp_degree: float = 2.0,
+        nodes: Callable[[int], np.ndarray] = cheb2nd_nodes,
         basis: Literal["newton", "chebyshev"] = "newton",
         precomputation: bool = True,
         precompilation: bool = True,
-        lex_order: bool = True,
+        colex_order: bool = True,
         threshold: int = 150_000_000,
         report: bool = True,
     ):
@@ -128,7 +143,7 @@ class Transform(AbstractTransform):
             The degree `p` of the ℓ^p norm that defines the polynomial space (default is 2.0, Euclidean degree).
         nodes : callable, optional
             A callable that, given an integer `n`, returns an array of `n` nodes in one dimension.
-            Typically, this is a function returning Chebyshev nodes (e.g., `cheb2nd`).
+            Typically, this is a function returning Chebyshev nodes `cheb2nd_nodes` or Leja nodes `leja_nodes`.
         basis : {"newton", "chebyshev"}, optional
             The polynomial basis to use for constructing Vandermonde and differentiation matrices.
             Options are:
@@ -141,8 +156,8 @@ class Transform(AbstractTransform):
         precompilation : bool, optional
             If True, precompile all just-in-time (JIT) compiled functions with dummy inputs
             during initialization to reduce runtime overhead during actual calls (default is True).
-        lex_order : bool, optional
-            If True, reassigns lexicographic ordering for nodes.
+        colex_order : bool, optional
+            If True, reassigns co-lexicographic ordering for nodes.
             otherwise, returns
         threshold : int, optional
             A safety threshold for the dimension of the polynomial space.
@@ -235,16 +250,18 @@ class Transform(AbstractTransform):
         if len(np.unique(x)) != self._n + 1:
             self._stop_spinner() if report else None
             raise ValueError("The provided nodes are not pairwise distinct.")
-        x = leja_nodes(x)
-        self._x = x
+        self._leja_order = get_leja_order(x)
+        self._x = x[self._leja_order]
 
         # grid
         self._spinner_label = "Construct grid"
-        grid = gen_grid(x, self._A, self._m, self._n, self._p)
-        self._lex_order = np.lexsort(grid.T) if lex_order else None  # user experience
+        grid = get_grid(x, self._A, self._m, self._n, self._p)
+        self._colex_order = (
+            np.lexsort(grid.T) if colex_order else None
+        )  # user experience
         self._grid = (
-            apply_permutation(self._lex_order, grid, invert=False)
-            if lex_order
+            apply_permutation(self._colex_order, grid, invert=False)
+            if colex_order
             else grid
         )
 
@@ -266,15 +283,20 @@ class Transform(AbstractTransform):
         self._spinner_label = "Row major ordering V"
         lt = is_lower_triangular(self._Vx)
         if lt:
-            self._Vx_lt, self._Vx_ut = rmo(self._Vx), None
+            self._Vx_lt, self._Vx_ut = get_rmo(self._Vx), None
             self._inv_Vx_lt, self._inv_Vx_ut = (
-                (rmo(np.linalg.inv(self._Vx)), None) if precomputation else (None, None)
+                (get_rmo(np.linalg.inv(self._Vx)), None)
+                if precomputation
+                else (None, None)
             )
         else:
-            Vx_lt, Vx_ut = lu(self._Vx)
-            self._Vx_lt, self._Vx_ut = rmo(Vx_lt), rmo(Vx_ut[::-1, ::-1])[::-1]
+            Vx_lt, Vx_ut = get_lu(self._Vx)
+            self._Vx_lt, self._Vx_ut = get_rmo(Vx_lt), get_rmo(Vx_ut[::-1, ::-1])[::-1]
             self._inv_Vx_lt, self._inv_Vx_ut = (
-                (rmo(np.linalg.inv(Vx_lt)), rmo(np.linalg.inv(Vx_ut)[::-1, ::-1])[::-1])
+                (
+                    get_rmo(np.linalg.inv(Vx_lt)),
+                    get_rmo(np.linalg.inv(Vx_ut)[::-1, ::-1])[::-1],
+                )
                 if precomputation
                 else (None, None)
             )
@@ -282,30 +304,34 @@ class Transform(AbstractTransform):
         # row major ordering D
         self._spinner_label = "Row major ordering D"
         if not is_lower_triangular(self._Dx.T):
-            Dx_lt, Dx_ut = lu(self._Dx)
-            Dx2_lt, Dx2_ut = lu(self._Dx2)
-            Dx3_lt, Dx3_ut = lu(self._Dx3)
+            Dx_lt, Dx_ut = get_lu(self._Dx)
+            Dx2_lt, Dx2_ut = get_lu(self._Dx2)
+            Dx3_lt, Dx3_ut = get_lu(self._Dx3)
             #
-            self._Dx_lt = [rmo(Dx_lt), rmo(Dx2_lt), rmo(Dx3_lt)]
+            self._Dx_lt = [get_rmo(Dx_lt), get_rmo(Dx2_lt), get_rmo(Dx3_lt)]
             self._Dx_ut = [
-                rmo(Dx_ut[::-1, ::-1])[::-1],
-                rmo(Dx2_ut[::-1, ::-1])[::-1],
-                rmo(Dx3_ut[::-1, ::-1])[::-1],
+                get_rmo(Dx_ut[::-1, ::-1])[::-1],
+                get_rmo(Dx2_ut[::-1, ::-1])[::-1],
+                get_rmo(Dx3_ut[::-1, ::-1])[::-1],
             ]
             #
-            self._DxT_lt = [rmo(Dx_ut.T), rmo(Dx2_ut.T), rmo(Dx3_ut.T)]
+            self._DxT_lt = [get_rmo(Dx_ut.T), get_rmo(Dx2_ut.T), get_rmo(Dx3_ut.T)]
             self._DxT_ut = [
-                rmo(Dx_lt.T[::-1, ::-1])[::-1],
-                rmo(Dx2_lt.T[::-1, ::-1])[::-1],
-                rmo(Dx3_lt.T[::-1, ::-1])[::-1],
+                get_rmo(Dx_lt.T[::-1, ::-1])[::-1],
+                get_rmo(Dx2_lt.T[::-1, ::-1])[::-1],
+                get_rmo(Dx3_lt.T[::-1, ::-1])[::-1],
             ]
         else:
             self._Dx_lt = [
-                rmo(self._Dx[::-1, ::-1])[::-1],
-                rmo(self._Dx2[::-1, ::-1])[::-1],
-                rmo(self._Dx3[::-1, ::-1])[::-1],
+                get_rmo(self._Dx[::-1, ::-1])[::-1],
+                get_rmo(self._Dx2[::-1, ::-1])[::-1],
+                get_rmo(self._Dx3[::-1, ::-1])[::-1],
             ]
-            self._DxT_lt = [rmo(self._Dx.T), rmo(self._Dx2.T), rmo(self._Dx3.T)]
+            self._DxT_lt = [
+                get_rmo(self._Dx.T),
+                get_rmo(self._Dx2.T),
+                get_rmo(self._Dx3.T),
+            ]
             #
             self._Dx_ut, self._DxT_ut = None, None
 
@@ -378,6 +404,14 @@ class Transform(AbstractTransform):
     def grid(self) -> np.ndarray:
         return self._grid
 
+    @property
+    def colex_order(self) -> np.ndarray:
+        return self._colex_order
+
+    @property
+    def leja_order(self) -> np.ndarray:
+        return self._leja_order
+
     def warmup(self) -> None:
         """Warmup the JIT compiler."""
         zeros_N = np.zeros(len(self), dtype=np.float64)
@@ -419,9 +453,9 @@ class Transform(AbstractTransform):
         >>> coeffs_f = t.fnt(values_f)
         """
         function_values = np.asarray(function_values).astype(np.float64)
-        if self._lex_order is not None:
+        if self._colex_order is not None:
             function_values = apply_permutation(
-                self._lex_order, function_values, invert=True
+                self._colex_order, function_values, invert=True
             )
         ###
         if self._inv_Vx_lt is not None and self._inv_Vx_ut is None:
@@ -591,16 +625,44 @@ class Transform(AbstractTransform):
         else:
             raise ValueError("Unexpected error: _Vx_lt must exist, _Vx_ut is optional.")
         ###
-        if self._lex_order is not None:
+        if self._colex_order is not None:
             function_values = apply_permutation(
-                self._lex_order, function_values, invert=False
+                self._colex_order, function_values, invert=False
             )
         return function_values
 
     def dx(
         self, coefficients: np.ndarray, i: int, k: Literal[1, 2, 3] = 1
     ) -> np.ndarray:
-        """Fast Differentiation TODO"""
+        """
+        Apply the k-th partial derivative along the i-th spatial direction using a fast Differentiation algorithm.
+
+        Parameters
+        ----------
+        coefficients : np.ndarray
+            Coefficients of the function in the predefined polynomial basis.
+        i : int
+            Index of the spatial direction along which to differentiate (0-based).
+        k : {1, 2, 3}, optional
+            Order of the derivative, default is 1 (first derivative).
+
+        Returns
+        -------
+        np.ndarray
+            Coefficients of the differentiated function (in the same basis).
+
+        Examples
+        --------
+        >>> import numpy as np
+        >>> from lpfun import Transform
+        >>> def f(x, y):
+        ...     return np.sin(x) * np.cos(y)
+        >>> t = Transform(spatial_dimension=2, polynomial_degree=10)
+        >>> values_f = f(t.grid[:, 0], t.grid[:, 1])
+        >>> coeffs_f = t.fnt(values_f)
+        >>> dfdx = t.dx(coeffs_f, i=0)
+        >>> dfdy2 = t.dx(coeffs_f, i=1, k=2)
+        """
         coefficients, i, k = (
             np.asarray(coefficients).astype(np.float64),
             int(i),
@@ -658,7 +720,35 @@ class Transform(AbstractTransform):
     def dxT(
         self, coefficients: np.ndarray, i: int, k: Literal[1, 2, 3] = 1
     ) -> np.ndarray:
-        """Fast Differentiation (Transpose) TODO"""
+        """
+        Apply the transpose of the k-th partial derivative operator along the i-th spatial direction using a fast Differentiation algorithm.
+
+        Parameters
+        ----------
+        coefficients : np.ndarray
+            Coefficients in the predefined polynomial basis to which the transposed differentiation operator is applied.
+        i : int
+            Index of the spatial direction along which the transposed derivative is taken (0-based).
+        k : {1, 2, 3}, optional
+            Order of the derivative, default is 1 (first derivative).
+
+        Returns
+        -------
+        np.ndarray
+            Transformed coefficients after applying the transposed derivative operator.
+
+        Examples
+        --------
+        >>> import numpy as np
+        >>> from lpfun import Transform
+        >>> def f(x, y):
+        ...     return np.sin(x) * np.cos(y)
+        >>> t = Transform(spatial_dimension=2, polynomial_degree=10)
+        >>> values_f = f(t.grid[:, 0], t.grid[:, 1])
+        >>> coeffs_f = t.fnt(values_f)
+        >>> adj_dfdx = t.dxT(coeffs_f, i=0)
+        >>> adj_dfdy3 = t.dxT(coeffs_f, i=1, k=3)
+        """
         coefficients, i, k = (
             np.asarray(coefficients).astype(np.float64),
             int(i),
@@ -713,8 +803,38 @@ class Transform(AbstractTransform):
             raise ValueError("Unexpected error.")
         ###
 
-    def eval(self, coefficients: np.ndarray, points: np.ndarray) -> float:
-        """Point Evaluation TODO"""
+    def eval(self, coefficients: np.ndarray, points: np.ndarray) -> np.ndarray:
+        """
+        Evaluate the function represented by given coefficients at specified points.
+
+        This method computes the values of the interpolated function at one or more points 
+        by evaluating the polynomial expansion defined by the coefficients.
+
+        Parameters
+        ----------
+        coefficients : np.ndarray
+            Coefficients of the function in the predefined polynomial basis.
+        points : np.ndarray
+            A 2D array of shape (num_points, spatial_dimension) representing the coordinates 
+            of the evaluation points.
+
+        Returns
+        -------
+        np.ndarray
+            Function values at the specified points.
+
+        Examples
+        --------
+        >>> import numpy as np
+        >>> from lpfun import Transform
+        >>> def f(x, y):
+        ...     return np.sin(x) * np.cos(y)
+        >>> t = Transform(spatial_dimension=2, polynomial_degree=10)
+        >>> values_f = f(t.grid[:, 0], t.grid[:, 1])
+        >>> coeffs_f = t.fnt(values_f)
+        >>> pts = np.array([[0.0, 0.0], [0.1, 0.2]])
+        >>> values_at_pts = t.eval(coeffs_f, pts)
+        """
         coefficients, points = (
             np.asarray(coefficients).astype(np.float64),
             np.asarray(points).astype(np.float64),
@@ -728,8 +848,55 @@ class Transform(AbstractTransform):
             return chebyshev2point(coefficients, points, self._A, self._m, self._n)
 
     def embed(self, t: AbstractTransform) -> np.ndarray:
-        """TODO"""
-        return ordinal_embedding(self._m, t.tube, self._T)
+        """
+        Embed a function from a lower-resolution transform `self` into a higher-resolution transform `t`.
+
+        This method returns the index array needed to embed coefficients from the polynomial basis of `self`
+        into that of `t`. The embedding is only valid if both transforms use the same nodes up to the 
+        polynomial degree of `self`, and if they share the same spatial dimension.
+
+        Parameters
+        ----------
+        t : AbstractTransform
+            The target transform whose multi index set contains the one of `self`.
+
+        Returns
+        -------
+        np.ndarray
+            An array of shape `(self.size,)` containing the embedding indices into `t`.
+
+        Raises
+        ------
+        ValueError
+            If spatial dimensions differ.
+            If the nodes do not match up to the polynomial degree.
+            If not both, the lp degree and the polynomial degree are greater or equal.
+
+        Examples
+        --------
+        >>> import numpy as np
+        >>> from lpfun import Transform
+        >>> t_coarse = Transform(spatial_dimension=2, polynomial_degree=4)
+        >>> t_fine = Transform(spatial_dimension=2, polynomial_degree=8)
+        >>> embed_idx = t_coarse.embed(t_fine)
+        >>> coeffs_coarse = t_coarse.fnt(np.sin(t_coarse.grid[:, 0]))
+        >>> coeffs_fine = np.zeros(len(t_fine))
+        >>> coeffs_fine[embed_idx] = coeffs_coarse
+        """
+        if t.spatial_dimension != self.spatial_dimension:
+            raise ValueError("Spatial dimensions do not match.")
+        if not np.allclose(t.nodes[: self.polynomial_degree + 1], self.nodes):
+            print(self.nodes)
+            print(t.nodes[: self.polynomial_degree + 1])
+            raise ValueError("Nodes mismatch: The nodes of `self` must be the starting nodes of `t`.")
+        if not (
+            (t.lp_degree >= self.lp_degree)
+            and (t.polynomial_degree >= self.polynomial_degree)
+        ):
+            raise ValueError(
+                "The index set of the transform `t` must already contain the index set of `self` for embedding."
+            )
+        return ordinal_embedding(self._m, self._T, t.tube)
 
     def __len__(self) -> int:
         return self._N_0

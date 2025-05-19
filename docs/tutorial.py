@@ -3,12 +3,20 @@
 # import numpy as np
 # from lpfun import Transform
 
+# # from lpfun.utils import leja_nodes # NOTE optional
+
+
 # # Function f to approximate
 # def f(x, y):
 #     return np.sin(x) * np.cos(y)
 
+
 # # Initialise Transform object
-# t = Transform(spatial_dimension=2, polynomial_degree=10)
+# t = Transform(
+#     spatial_dimension=2,
+#     polynomial_degree=10,
+#     # nodes=leja_nodes # NOTE optional
+# )
 
 # # Compute function values on the grid
 # values_f = f(t.grid[:, 0], t.grid[:, 1])
@@ -32,9 +40,14 @@
 import time
 import numpy as np
 from lpfun import Transform
+from lpfun.utils import leja_nodes
 
 # Initialise Transform object
-t = Transform(spatial_dimension=3, polynomial_degree=20)
+t = Transform(
+    spatial_dimension=3,
+    polynomial_degree=20,
+    nodes=leja_nodes,  # NOTE default nodes are cheb2nd_nodes
+)
 
 # Dimension of the polynomial space
 print(f"N = {len(t)}")
@@ -112,7 +125,12 @@ print(
 )
 
 # Embed the approximate derivative into a bigger polynomial space space
-t_prime = Transform(spatial_dimension=3, polynomial_degree=30, report=False)
-phi = t_prime.embed(t)
+t_prime = Transform(
+    spatial_dimension=3,
+    polynomial_degree=30,
+    nodes=leja_nodes,  # NOTE default nodes are cheb2nd_nodes
+    report=False,
+)
+phi = t.embed(t_prime)
 coeffs_df_prime = np.zeros(len(t_prime))
 coeffs_df_prime[phi] = coeffs_df.copy()

@@ -2,7 +2,7 @@
 name = "lpfun"
 version = "0.0.1"
 description = "A package for fast multivariate interpolation and spectral methods in lower spaces."
-authors = ["Phil-Alexander Hofmann"]
+authors = ["Phil-Alexander Hofmann <mail@philhofmann.de>"]
 license = "MIT"
 readme = "README.md"
 
