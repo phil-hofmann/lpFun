@@ -255,7 +255,7 @@ class Transform(AbstractTransform):
 
         # grid
         self._spinner_label = "Construct grid"
-        grid = get_grid(x, self._A, self._m, self._n, self._p)
+        grid = get_grid(self._x, self._A, self._m, self._n, self._p)
         self._colex_order = (
             np.lexsort(grid.T) if colex_order else None
         )  # user experience
@@ -268,11 +268,11 @@ class Transform(AbstractTransform):
         # compute matrices
         self._spinner_label = "Construct matrices"
         if basis == "newton":
-            self._Vx = newton2lagrange(x)
-            self._Dx = newton2derivative(x)
+            self._Vx = newton2lagrange(self._x)
+            self._Dx = newton2derivative(self._x)
         elif basis == "chebyshev":
-            self._Vx = chebyshev2lagrange(x)
-            self._Dx = chebyshev2derivative(x)
+            self._Vx = chebyshev2lagrange(self._x)
+            self._Dx = chebyshev2derivative(self._x)
         self._Dx2 = self._Dx @ self._Dx
         self._Dx3 = self._Dx @ self._Dx2
 

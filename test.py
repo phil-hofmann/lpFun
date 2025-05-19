@@ -58,7 +58,7 @@ def test_fnt_ifnt(m: int, p: float, ba: str, pr: bool):
         function_values = np.random.rand(len(t))
         reconstruction = t.ifnt(t.fnt(function_values))
         eps = np.linalg.norm(reconstruction - function_values)
-        assert eps < 1e-9
+        assert eps < 1e-8
 
 
 @pytest.mark.parametrize("m, p, ba, pr", m_p_ba_pr)

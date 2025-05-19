@@ -7,3 +7,15 @@ title: "lpFun"
 version: 0.0.1
 date-released: 2024-06-24
 repository-code: "https://github.com/phil-hofmann/lpFun"
+preferred-citation:
+  type: article
+  authors:
+    - family-names: "Hofmann"
+      given-names: "Phil-Alexander"
+    - family-names: "Wicaksono"
+      given-names: "Damar"
+    - family-names: "Hecht"
+      given-names: "Michael"
+  title: "Fast Newton Transform: Interpolation in Downward Closed Polynomial Spaces"
+  date: "2025"
+  url: "https://arxiv.org/abs/0.0"
