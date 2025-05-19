@@ -52,7 +52,7 @@ def test_fnt_ifnt(m: int, p: float, ba: str, pr: bool):
             basis=ba,
             precomputation=pr,
             precompilation=False,
-            lex_order=False,
+            colex_order=False,
             report=False,
         )
         function_values = np.random.rand(len(t))
@@ -71,7 +71,7 @@ def test_dx(m: int, p: float, ba: str, pr: bool):
             basis=ba,
             precomputation=pr,
             precompilation=False,
-            lex_order=False,
+            colex_order=False,
             report=False,
         )
 
@@ -106,7 +106,7 @@ def test_dxT(m: int, p: float, ba: str, pr: bool):
             basis=ba,
             precomputation=pr,
             precompilation=False,
-            lex_order=False,
+            colex_order=False,
             report=False,
         )
 
@@ -135,7 +135,7 @@ def test_eval(m: int, p: float, ba: str, pr: bool):
             basis=ba,
             precomputation=pr,
             precompilation=False,
-            lex_order=False,
+            colex_order=False,
             report=False,
         )
 
