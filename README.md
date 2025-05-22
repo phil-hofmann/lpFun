@@ -6,15 +6,15 @@
 </p>
 
 [![Cite this repo](https://img.shields.io/badge/Cite-this%20repository-blue)](https://github.com/phil-hofmann/lpFun/blob/main/CITATION.cff)
-[![arXiv](https://img.shields.io/badge/arXiv-0.0-green.svg)](https://arxiv.org/0.0)
+[![arXiv](https://img.shields.io/badge/arXiv-2505.14909-green.svg)](https://arxiv.org/abs/2505.14909)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 [![License](https://img.shields.io/github/license/minterpy-project/minterpy)](https://choosealicense.com/licenses/mit/)
 
 ## 👥 Team
 
-- [Phil-Alexander Hofmann](https://gitlab.com/philippo_calippo) - [CASUS](https://www.casus.science/) ([HZDR](https://www.hzdr.de/))
-- [Damar Wicaksono](https://gitlab.com/damar-wicaksono) - [CASUS](https://www.casus.science/) ([HZDR](https://www.hzdr.de/))
-- [Michael Hecht](https://gitlab.com/MikeyPice) - [CASUS](https://www.casus.science/) ([HZDR](https://www.hzdr.de/))
+- [Phil-Alexander Hofmann](https://gitlab.com/philippo_calippo) - [CASUS](https://www.casus.science/) ([HZDR](https://www.hzdr.de/)),
+- [Damar Wicaksono](https://gitlab.com/damar-wicaksono) - [CASUS](https://www.casus.science/) ([HZDR](https://www.hzdr.de/)),
+- [Michael Hecht](https://sites.google.com/view/prof-dr-michael-hecht/) - [CASUS](https://www.casus.science/) ([HZDR](https://www.hzdr.de/)).
 
 ## 💬 Citation
 
@@ -23,21 +23,23 @@
 If you use lpFun in any public context (publications, presentations, or derivative software), **please cite both**:
 
 - **Accompanying paper**:
-    > Phil-Alexander Hofmann, Damar Wicaksono, Michael Hecht.
-    > _Fast Newton Transform: Interpolation in Downward Closed Polynomial Spaces_.  
-    > arXiv, 2025. https://arxiv.org/abs/0.0
+
+  > Phil-Alexander Hofmann, Damar Wicaksono, Michael Hecht.
+  > _Fast Newton Transform: Interpolation in Downward Closed Polynomial Spaces_.  
+  > arXiv, 2025. https://arxiv.org/abs/2505.14909
 
 - **Software**:
-    > Phil-Alexander Hofmann. _lpFun_. 2025.  
-    > https://github.com/phil-hofmann/lpFun
+  > Phil-Alexander Hofmann. _lpFun_. 2025.  
+  > https://github.com/phil-hofmann/lpFun
 
 <br/>
 
 **Related references**:
+
 - _Hecht et al._ Multivariate Newton Interpolation in Downward Closed Spaces Reaches the Optimal Geometric Approximation Rates for Bos–Levenberg–Trefethen Functions. arXiv, 2025. https://arxiv.org/pdf/2504.17899
 - _Damar Wicaksono et al._ Minterpy: multivariate polynomial interpolation in
-  Python. The Journal of Open Source Software, 2025. https://joss.theoj.org/papers/10.21105/joss.07702 
-- _Phil-Alexander Hofmann._ Implementation and Complexity Analysis of Algorithms for Multivariate Newton Polynomials of p Degree. 2024. https://philhofmann.de/ 
+  Python. The Journal of Open Source Software, 2025. https://joss.theoj.org/papers/10.21105/joss.07702
+- _Phil-Alexander Hofmann._ Implementation and Complexity Analysis of Algorithms for Multivariate Newton Polynomials of p Degree. 2024.
 - Damar Wicaksono et al. _Minterpy_. 2025. https://github.com/minterpy-project/minterpy
 - Phil-Alexander Hofmann. _Prototype of lpFun_. 2024. https://gitlab.com/philhofmann/implementation-and-complexity-analysis-of-algorithms-for-multivariate-newton-polynomials-of-p-degree
 
@@ -286,11 +288,13 @@ max |df_rand-rec_df_rand| = 5.15e-14
 
 ## Acknowledgments
 
-I would like to acknowledge:
+We deeply acknowledge:
 
-- [Prof. Dr. Michael Hecht](https://www.casus.science/de-de/team-members/michael-hecht/) - [CASUS](https://www.casus.science/) ([HZDR](https://www.hzdr.de/)),
-- [Dr. Damar Wicaksono](https://www.casus.science/de-de/team-members/dr-damar-wicaksono/) - [CASUS](https://www.casus.science/) ([HZDR](https://www.hzdr.de/)),
-- [Prof. Dr. Peter Stadler](https://www.uni-leipzig.de/personenprofil/mitarbeiter/prof-dr-peter-florian-stadler) - [University of Leipzig](https://www.uni-leipzig.de/),
-- [Prof. Dr. Oliver Sander](https://tu-dresden.de/mn/math/numerik/sander) - [Techincal University of Dresden](https://tu-dresden.de/),
+- [Albert Cohen](https://www.ljll.fr/en/membre/cohen-albert/) - [Sorbonne Universit&eacute;](https://www.sorbonne-universite.fr/),
+- [Leslie Greengard](https://www.simonsfoundation.org/people/leslie-greengard/) - [Flatiron Institute](https://www.simonsfoundation.org/flatiron/),
+- [Oliver Sander](https://tu-dresden.de/mn/math/numerik/sander) - [Technical University of Dresden](https://tu-dresden.de/),
+- [Peter Stadler](https://www.uni-leipzig.de/personenprofil/mitarbeiter/prof-dr-peter-florian-stadler) - [University of Leipzig](https://www.uni-leipzig.de/),
+- [Shidong Jiang](https://www.simonsfoundation.org/people/shidong-jiang/) - [Flatiron Institute](https://www.simonsfoundation.org/flatiron/),
+- [Uwe Hernandez Acosta](https://github.com/szabo137) - [CASUS](https://www.casus.science/) ([HZDR](https://www.hzdr.de/)),
 
 and the support and resources provided by the [Center for Advanced Systems Understanding](https://www.casus.science/) ([Helmholtz-Zentrum Dreden-Rossendorf](https://www.hzdr.de/)) where the development of this project took place.
