@@ -1,7 +1,7 @@
 import numpy as np
 from numba import njit, prange
 from lpfun import PARALLEL
-from lpfun.core.set import ordinal_embedding, entropy
+from lpfun.core.set import ordinal_embedding
 
 """
 - This module contains numba jit-compiled functions for the transformation of a vector by a matrix.

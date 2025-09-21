@@ -2,7 +2,7 @@
   <img src="docs/social-banner-bg-rounded.png" height="128" width="384"/>
 </p>
 <p align="center">
-    A package for fast multivariate interpolation and differentiation in downward closed polynomial spaces.
+    A package for fast multivariate interpolation and differentiation.
 </p>
 
 [![Cite this repo](https://img.shields.io/badge/Cite-this%20repository-blue)](https://github.com/phil-hofmann/lpFun/blob/main/CITATION.cff)
@@ -10,108 +10,68 @@
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 [![License](https://img.shields.io/github/license/minterpy-project/minterpy)](https://choosealicense.com/licenses/mit/)
 
-## 👥 Team
+## Contents
 
-- [Phil-Alexander Hofmann](https://gitlab.com/philippo_calippo) - [CASUS](https://www.casus.science/) ([HZDR](https://www.hzdr.de/)),
-- [Damar Wicaksono](https://gitlab.com/damar-wicaksono) - [CASUS](https://www.casus.science/) ([HZDR](https://www.hzdr.de/)),
-- [Michael Hecht](https://sites.google.com/view/prof-dr-michael-hecht/) - [CASUS](https://www.casus.science/) ([HZDR](https://www.hzdr.de/)).
+- [License](#license)
+- [Citation](#citation)
+- [Team and Support](#team-and-support)
+- [Installation](#installation)
+- [Tutorial](#-tutorial)
+  - [1. Short Version](#1-short-version)
+  - [2. Long Version](#2-long-version)
+- [Acknowledgments](#acknowledgments)
 
-## 💬 Citation
+## License
 
-> 📚 [Download BibTeX](./lpFun.bib) (The project is licensed under the [MIT License](LICENSE.txt).)
+The project is licensed under the [MIT License](LICENSE.txt).
+
+## Citation
+
+[Download BibTeX](./lpFun.bib)
 
 If you use lpFun in any public context (publications, presentations, or derivative software), **please cite both**:
 
-- **Accompanying paper**:
+- **Accompanying paper**
 
-  > Phil-Alexander Hofmann, Damar Wicaksono, Michael Hecht.
-  > _Fast Newton Transform: Interpolation in Downward Closed Polynomial Spaces_.  
-  > arXiv, 2025. https://arxiv.org/abs/2505.14909
+    Phil-Alexander Hofmann, Damar Wicaksono, Michael Hecht, *Fast Newton Transform: Interpolation in Downward Closed Polynomial Spaces*, arXiv:2505.14909 [math.NA], 2025. https://doi.org/10.48550/arXiv.2505.14909
 
-- **Software**:
-  > Phil-Alexander Hofmann. _lpFun_. 2025.  
-  > https://github.com/phil-hofmann/lpFun
+- **Software**
 
-<br/>
+    Phil Hofmann. (2025). *lpFun*. GitHub. https://github.com/phil-hofmann/lpFun
 
-**Related references**:
+**Related references**
 
-- _Hecht et al._ Multivariate Newton Interpolation in Downward Closed Spaces Reaches the Optimal Geometric Approximation Rates for Bos–Levenberg–Trefethen Functions. arXiv, 2025. https://arxiv.org/pdf/2504.17899
-- _Damar Wicaksono et al._ Minterpy: multivariate polynomial interpolation in
-  Python. The Journal of Open Source Software, 2025. https://joss.theoj.org/papers/10.21105/joss.07702
-- _Phil-Alexander Hofmann._ Implementation and Complexity Analysis of Algorithms for Multivariate Newton Polynomials of p Degree. 2024.
-- Damar Wicaksono et al. _Minterpy_. 2025. https://github.com/minterpy-project/minterpy
-- Phil-Alexander Hofmann. _Prototype of lpFun_. 2024. https://gitlab.com/philhofmann/implementation-and-complexity-analysis-of-algorithms-for-multivariate-newton-polynomials-of-p-degree
+- Phil-Alexander Hofmann, Damar Wicaksono, Michael Hecht, *Interpolation in Polynomial Spaces of p-Degree*, arXiv:2507.13640 [math.NA], 2025. https://doi.org/10.48550/arXiv.2507.13640
 
-## 💻 Installation
+- Michael Hecht, Phil-Alexander Hofmann, Damar Wicaksono, Uwe Hernandez Acosta, Krzysztof Gonciarz, Jannik Kissinger, Vladimir Sivkin, Ivo F. Sbalzarini, *Multivariate Newton Interpolation in Downward Closed Spaces Reaches the Optimal Geometric Approximation Rates for Bos–Levenberg–Trefethen Functions*, arXiv:2504.17899 [math.NA], 2025. https://doi.org/10.48550/arXiv.2504.17899
 
-### 1. Including in Your Project
+- Damar Wicaksono, Uwe Hernandez Acosta, Sachin Krishnan Thekke Veettil, Jannik Kissinger, Michael Hecht, *Minterpy: multivariate polynomial interpolation in Python*, Journal of Open Source Software, 2025, 10(109):7702. https://doi.org/10.21105/joss.07702
 
-If you want to include this package in your project, you can install it directly from the GitHub repository:
+- Phil-Alexander Hofmann, *Implementation and Complexity Analysis of Algorithms for Multivariate Newton Polynomials of p Degree*, Bachelor's Thesis, University of Leipzig, 2024.
 
-1. Create a conda environment with Python 3.9
+- Damar Wicaksono et al. (2025). *Minterpy*. GitHub. https://github.com/minterpy-project/minterpy
 
-```bash
-conda create --name myenv python=3.9.20
-```
+- Phil-Alexander Hofmann. (2024). *Prototype of lpFun*. GitHub. https://gitlab.com/philhofmann/implementation-and-complexity-analysis-of-algorithms-for-multivariate-newton-polynomials-of-p-degree
 
-2. Activate environment
+## Team and Support
+
+- [Phil-Alexander Hofmann](https://gitlab.com/philippo_calippo)
+- [Damar Wicaksono](https://gitlab.com/damar-wicaksono)
+- [Michael Hecht](https://gitlab.com/mikeypiece)
+
+## Installation
+
+You can install the package directly from GitHub using `pip`:
 
 ```bash
-conda activate myenv
+    pip install git+https://github.com/phil-hofmann/lpfun.git
 ```
 
-3. Install the package from the GitHub repository
+If you don't have pip installed, follow the instructions here: [Installing pip](https://pip.pypa.io/en/stable/installation/).
 
-```bash
-pip install git+https://github.com/phil-hofmann/lpfun.git
-```
-
-4. If you want to deactivate the environment
-
-```bash
-conda deactivate
-```
-
-### 2. Setting Up the Repository on Your Local Machine
-
-Please follow the steps below
-
-1. Clone the project
-
-```bash
-git clone https://github.com/phil-hofmann/lpfun.git
-```
-
-2. Create a conda environment
-
-```bash
-conda env create -f environment.yml
-```
-
-3. Activate environment
-
-```bash
-conda activate lpfun
-```
-
-4. Install lpfun package using pip
-
-```bash
-pip install -e .
-```
-
-5. Run the tests to verify the installation
-
-```bash
-pytest -v
-```
-
-6. If you want to deactivate the environment
-
-```bash
-conda deactivate
-```
+Environment setup references:
+- Conda:  https://docs.conda.io/projects/conda/en/latest/user-guide/install/index.html
+- Poetry: https://python-poetry.org/docs/#installation
 
 ## 📖 Tutorial
 
