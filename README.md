@@ -3,8 +3,10 @@
 </p>
 <p align="center">
     A package for fast multivariate interpolation and differentiation.
+    A package for fast multivariate interpolation and differentiation.
 </p>
 
+[![GitHub Repository](https://img.shields.io/badge/GitHub-lpFun-blue?logo=github)](https://github.com/phil-hofmann/lpFun)
 [![GitHub Repository](https://img.shields.io/badge/GitHub-lpFun-blue?logo=github)](https://github.com/phil-hofmann/lpFun)
 [![Cite this repo](https://img.shields.io/badge/Cite-this%20repository-blue)](https://github.com/phil-hofmann/lpFun/blob/main/CITATION.cff)
 [![arXiv](https://img.shields.io/badge/arXiv-2505.14909-green.svg)](https://arxiv.org/abs/2505.14909)
