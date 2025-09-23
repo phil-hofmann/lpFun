@@ -1,18 +1,22 @@
 [tool.poetry]
 name = "lpfun"
-version = "0.0.1"
-description = "A package for fast multivariate interpolation and spectral methods in lower spaces."
-authors = ["Phil-Alexander Hofmann <mail@philhofmann.de>"]
+version = "0.2"
+description = " A package for fast multivariate interpolation and differentiation. "
+authors = ["Phil-Alexander Hofmann"]
 license = "MIT"
 readme = "README.md"
 
 
 [tool.poetry.dependencies]
-python = "3.9.20"
-numba = "0.60.0"
-numpy = "2.0.2"
-pytest = "8.3.3"
-scipy = "1.13.1"
+python = ">=3.9,<4.0"
+numba = ">=0.60,<0.61"
+numpy = ">=1.26,<3.0"
+scipy = ">=1.13,<2.0"
+
+
+[tool.poetry.group.dev.dependencies]
+pytest = ">=8.0,<9.0"
+black = ">=24.0,<25.0"
 
 
 [build-system]

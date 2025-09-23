@@ -1,17 +1,26 @@
 <p align="center">
-  <img src="docs/social-banner-bg-rounded.png" height="128" width="384"/>
-</p>
-<p align="center">
-    A package for fast multivariate interpolation and differentiation.
-    A package for fast multivariate interpolation and differentiation.
+    <img src="docs/social-banner-bg-rounded.png" height="128" width="384"/>
+    <br>
+    <i>Python package for fast multivariate interpolation and differentiation.</i>
 </p>
 
-[![GitHub Repository](https://img.shields.io/badge/GitHub-lpFun-blue?logo=github)](https://github.com/phil-hofmann/lpFun)
-[![GitHub Repository](https://img.shields.io/badge/GitHub-lpFun-blue?logo=github)](https://github.com/phil-hofmann/lpFun)
-[![Cite this repo](https://img.shields.io/badge/Cite-this%20repository-blue)](https://github.com/phil-hofmann/lpFun/blob/main/CITATION.cff)
-[![arXiv](https://img.shields.io/badge/arXiv-2505.14909-green.svg)](https://arxiv.org/abs/2505.14909)
-[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
-[![License](https://img.shields.io/github/license/minterpy-project/minterpy)](https://choosealicense.com/licenses/mit/)
+<p align="center">
+    <a href="https://github.com/phil-hofmann/lpfun">
+        <img src="https://img.shields.io/badge/GitHub-lpfun-blue?logo=github" alt="GitHub Repository">
+    </a>
+    <a href="./CITATION.cff">
+        <img src="https://img.shields.io/badge/Cite-this%20repository-blue" alt="Cite this repo">
+    </a>
+    <a href="https://doi.org/10.48550/arXiv.2505.14909">
+        <img src="https://img.shields.io/badge/arXiv-2505.14909-green.svg" alt="arXiv">
+    </a>
+    <a href="https://github.com/psf/black">
+        <img src="https://img.shields.io/badge/code%20style-black-000000.svg" alt="Code style: black">
+    </a>
+    <a href="https://choosealicense.com/licenses/mit/">
+        <img src="https://img.shields.io/github/license/phil-hofmann/lpfun" alt="License">
+    </a>
+</p>
 
 ## Contents
 
@@ -73,7 +82,7 @@ You can install the package directly from GitHub using `pip`:
 - If you don't have pip installed, follow the instructions [here](https://pip.pypa.io/en/stable/installation/).
 - Environment setup references: [Conda](https://docs.conda.io/projects/conda/en/latest/user-guide/install/index.html), [Poetry](https://python-poetry.org/docs/#installation).
 
-## 📖 Tutorial
+## Tutorial
 
 [tutorial.py](docs/tutorial.py)
 
@@ -250,11 +259,11 @@ max |df_rand-rec_df_rand| = 5.15e-14
 
 We deeply acknowledge:
 
-- [Albert Cohen](https://scholar.google.com/citations?user=MkKZKAMAAAAJ&hl=en&oi=ao)
-- [Leslie Greengard](https://scholar.google.com/citations?user=lW-MnjMAAAAJ&hl=en&oi=ao)
-- [Oliver Sander](https://scholar.google.com/citations?user=UNhUp4kAAAAJ&hl=en&oi=ao)
-- [Peter Stadler](https://scholar.google.com/citations?user=pVnGRlkAAAAJ&hl=en&oi=ao)
-- [Shidong Jiang](https://scholar.google.com/citations?user=WFM32XwAAAAJ&hl=en&oi=ao)
-- [Uwe Hernandez Acosta](https://scholar.google.com/citations?user=8TUZP10AAAAJ&hl=en)
+- [Albert Cohen](https://scholar.google.com/citations?user=MkKZKAMAAAAJ)
+- [Leslie Greengard](https://scholar.google.com/citations?user=lW-MnjMAAAAJ)
+- [Oliver Sander](https://scholar.google.com/citations?user=UNhUp4kAAAAJ)
+- [Peter Stadler](https://scholar.google.com/citations?user=pVnGRlkAAAAJ)
+- [Shidong Jiang](https://scholar.google.com/citations?user=WFM32XwAAAAJ)
+- [Uwe Hernandez Acosta](https://scholar.google.com/citations?user=8TUZP10AAAAJ)
 
 and the support and resources provided by the [Center for Advanced Systems Understanding](https://www.casus.science/) ([Helmholtz-Zentrum Dreden-Rossendorf](https://www.hzdr.de/)) where the development of this project took place.
