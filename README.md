@@ -1,15 +1,26 @@
 <p align="center">
-  <img src="docs/social-banner-bg-rounded.png" height="128" width="384"/>
-</p>
-<p align="center">
-    A package for fast multivariate interpolation and differentiation.
+    <img src="docs/social-banner-bg-rounded.png" height="128" width="384"/>
+    <br>
+    <i>Python package for fast multivariate interpolation and differentiation.</i>
 </p>
 
-[![GitHub Repository](https://img.shields.io/badge/GitHub-lpFun-blue?logo=github)](https://github.com/phil-hofmann/lpFun)
-[![Cite this repo](https://img.shields.io/badge/Cite-this%20repository-blue)](https://github.com/phil-hofmann/lpFun/blob/main/CITATION.cff)
-[![arXiv](https://img.shields.io/badge/arXiv-2505.14909-green.svg)](https://arxiv.org/abs/2505.14909)
-[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
-[![License](https://img.shields.io/github/license/minterpy-project/minterpy)](https://choosealicense.com/licenses/mit/)
+<p align="center">
+    <a href="https://github.com/phil-hofmann/lpfun">
+        <img src="https://img.shields.io/badge/GitHub-lpfun-blue?logo=github" alt="GitHub Repository">
+    </a>
+    <a href="./CITATION.cff">
+        <img src="https://img.shields.io/badge/Cite-this%20repository-blue" alt="Cite this repo">
+    </a>
+    <a href="https://doi.org/10.48550/arXiv.2505.14909">
+        <img src="https://img.shields.io/badge/arXiv-2505.14909-green.svg" alt="arXiv">
+    </a>
+    <a href="https://github.com/psf/black">
+        <img src="https://img.shields.io/badge/code%20style-black-000000.svg" alt="Code style: black">
+    </a>
+    <a href="https://choosealicense.com/licenses/mit/">
+        <img src="https://img.shields.io/github/license/phil-hofmann/lpfun" alt="License">
+    </a>
+</p>
 
 ## Contents
 
@@ -34,31 +45,31 @@ If you use lpFun in any public context (publications, presentations, or derivati
 
 - **Accompanying paper**
 
-    Phil-Alexander Hofmann, Damar Wicaksono, Michael Hecht, *Fast Newton Transform: Interpolation in Downward Closed Polynomial Spaces*, arXiv:2505.14909 [math.NA], 2025. https://doi.org/10.48550/arXiv.2505.14909
+    Phil-Alexander Hofmann, Damar Wicaksono, Michael Hecht, *Fast Newton Transform: Interpolation in Downward Closed Polynomial Spaces*, arXiv:2505.14909 [math.NA], 2025. [https://doi.org/10.48550/arXiv.2505.14909](https://doi.org/10.48550/arXiv.2505.14909)
 
 - **Software**
 
-    Phil Hofmann. (2025). *lpFun*. GitHub. https://github.com/phil-hofmann/lpFun
+    Phil Hofmann. (2025). *lpFun*. GitHub. [https://github.com/phil-hofmann/lpFun](https://github.com/phil-hofmann/lpFun)
 
 **Related references**
 
-- Phil-Alexander Hofmann, Damar Wicaksono, Michael Hecht, *Interpolation in Polynomial Spaces of p-Degree*, arXiv:2507.13640 [math.NA], 2025. https://doi.org/10.48550/arXiv.2507.13640
+- Phil-Alexander Hofmann, Damar Wicaksono, Michael Hecht, *Interpolation in Polynomial Spaces of p-Degree*, arXiv:2507.13640 [math.NA], 2025. [https://doi.org/10.48550/arXiv.2507.13640](https://doi.org/10.48550/arXiv.2507.13640)
 
-- Michael Hecht, Phil-Alexander Hofmann, Damar Wicaksono, Uwe Hernandez Acosta, Krzysztof Gonciarz, Jannik Kissinger, Vladimir Sivkin, Ivo F. Sbalzarini, *Multivariate Newton Interpolation in Downward Closed Spaces Reaches the Optimal Geometric Approximation Rates for Bos–Levenberg–Trefethen Functions*, arXiv:2504.17899 [math.NA], 2025. https://doi.org/10.48550/arXiv.2504.17899
+- Michael Hecht, Phil-Alexander Hofmann, Damar Wicaksono, Uwe Hernandez Acosta, Krzysztof Gonciarz, Jannik Kissinger, Vladimir Sivkin, Ivo F. Sbalzarini, *Multivariate Newton Interpolation in Downward Closed Spaces Reaches the Optimal Geometric Approximation Rates for Bos–Levenberg–Trefethen Functions*, arXiv:2504.17899 [math.NA], 2025. [https://doi.org/10.48550/arXiv.2504.17899](https://doi.org/10.48550/arXiv.2504.17899)
 
-- Damar Wicaksono, Uwe Hernandez Acosta, Sachin Krishnan Thekke Veettil, Jannik Kissinger, Michael Hecht, *Minterpy: multivariate polynomial interpolation in Python*, Journal of Open Source Software, 2025, 10(109):7702. https://doi.org/10.21105/joss.07702
+- Damar Wicaksono, Uwe Hernandez Acosta, Sachin Krishnan Thekke Veettil, Jannik Kissinger, Michael Hecht, *Minterpy: multivariate polynomial interpolation in Python*, Journal of Open Source Software, 2025, 10(109):7702. [https://doi.org/10.21105/joss.07702](https://doi.org/10.21105/joss.07702)
 
 - Phil-Alexander Hofmann, *Implementation and Complexity Analysis of Algorithms for Multivariate Newton Polynomials of p Degree*, Bachelor's Thesis, University of Leipzig, 2024.
 
-- Damar Wicaksono et al. (2025). *Minterpy*. GitHub. https://github.com/minterpy-project/minterpy
+- Damar Wicaksono et al. (2025). *Minterpy*. GitHub. [https://github.com/minterpy-project/minterpy](https://github.com/minterpy-project/minterpy)
 
-- Phil-Alexander Hofmann. (2024). *Prototype of lpFun*. GitHub. https://gitlab.com/philhofmann/implementation-and-complexity-analysis-of-algorithms-for-multivariate-newton-polynomials-of-p-degree
+- Phil-Alexander Hofmann. (2024). *Prototype of lpFun*. GitHub. [https://gitlab.com/philhofmann/implementation-and-complexity-analysis-of-algorithms-for-multivariate-newton-polynomials-of-p-degree](https://gitlab.com/philhofmann/implementation-and-complexity-analysis-of-algorithms-for-multivariate-newton-polynomials-of-p-degree)
 
 ## Team and Support
 
-- [Phil-Alexander Hofmann](https://gitlab.com/philippo_calippo)
-- [Damar Wicaksono](https://gitlab.com/damar-wicaksono)
-- [Michael Hecht](https://gitlab.com/mikeypiece)
+- [Phil-Alexander Hofmann](https://github.com/philippocalippo)
+- [Damar Wicaksono](https://github.com/damar-wicaksono)
+- [Michael Hecht](https://github.com/mikeypice)
 
 ## Installation
 
@@ -68,13 +79,10 @@ You can install the package directly from GitHub using `pip`:
     pip install git+https://github.com/phil-hofmann/lpfun.git
 ```
 
-If you don't have pip installed, follow the instructions here: [Installing pip](https://pip.pypa.io/en/stable/installation/).
+- If you don't have pip installed, follow the instructions [here](https://pip.pypa.io/en/stable/installation/).
+- Environment setup references: [Conda](https://docs.conda.io/projects/conda/en/latest/user-guide/install/index.html), [Poetry](https://python-poetry.org/docs/#installation).
 
-Environment setup references:
-- Conda:  https://docs.conda.io/projects/conda/en/latest/user-guide/install/index.html
-- Poetry: https://python-poetry.org/docs/#installation
-
-## 📖 Tutorial
+## Tutorial
 
 [tutorial.py](docs/tutorial.py)
 
@@ -251,11 +259,11 @@ max |df_rand-rec_df_rand| = 5.15e-14
 
 We deeply acknowledge:
 
-- [Albert Cohen](https://www.ljll.fr/en/membre/cohen-albert/) - [Sorbonne Universit&eacute;](https://www.sorbonne-universite.fr/),
-- [Leslie Greengard](https://www.simonsfoundation.org/people/leslie-greengard/) - [Flatiron Institute](https://www.simonsfoundation.org/flatiron/),
-- [Oliver Sander](https://tu-dresden.de/mn/math/numerik/sander) - [Technical University of Dresden](https://tu-dresden.de/),
-- [Peter Stadler](https://www.uni-leipzig.de/personenprofil/mitarbeiter/prof-dr-peter-florian-stadler) - [University of Leipzig](https://www.uni-leipzig.de/),
-- [Shidong Jiang](https://www.simonsfoundation.org/people/shidong-jiang/) - [Flatiron Institute](https://www.simonsfoundation.org/flatiron/),
-- [Uwe Hernandez Acosta](https://github.com/szabo137) - [CASUS](https://www.casus.science/) ([HZDR](https://www.hzdr.de/)),
+- [Albert Cohen](https://scholar.google.com/citations?user=MkKZKAMAAAAJ)
+- [Leslie Greengard](https://scholar.google.com/citations?user=lW-MnjMAAAAJ)
+- [Oliver Sander](https://scholar.google.com/citations?user=UNhUp4kAAAAJ)
+- [Peter Stadler](https://scholar.google.com/citations?user=pVnGRlkAAAAJ)
+- [Shidong Jiang](https://scholar.google.com/citations?user=WFM32XwAAAAJ)
+- [Uwe Hernandez Acosta](https://scholar.google.com/citations?user=8TUZP10AAAAJ)
 
 and the support and resources provided by the [Center for Advanced Systems Understanding](https://www.casus.science/) ([Helmholtz-Zentrum Dreden-Rossendorf](https://www.hzdr.de/)) where the development of this project took place.
