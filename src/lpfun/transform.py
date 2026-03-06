@@ -25,6 +25,10 @@ from lpfun.utils import (
     chebyshev2derivative,
     chebyshev2point,
     ###
+    legendre2lagrange,
+    legendre2derivative,
+    legendre2point,
+    ###
     is_lower_triangular,
     get_leja_order,
     get_grid,
@@ -122,7 +126,7 @@ class Transform(AbstractTransform):
         polynomial_degree: int,
         lp_degree: float = 2.0,
         nodes: Callable[[int], np.ndarray] = cheb2nd_nodes,
-        basis: Literal["newton", "chebyshev"] = "newton",
+        basis: Literal["newton", "chebyshev", "legendre"] = "newton",
         precomputation: bool = True,
         precompilation: bool = True,
         colex_order: bool = True,
@@ -144,9 +148,12 @@ class Transform(AbstractTransform):
         nodes : callable, optional
             A callable that, given an integer `n`, returns an array of `n` nodes in one dimension.
             Typically, this is a function returning Chebyshev nodes `cheb2nd_nodes` or Leja nodes `leja_nodes`.
-        basis:
+        basis: str, optional
             The polynomial basis to use for constructing Vandermonde and differentiation matrices.
-            Options are: "newton": Newton basis polynomials, "chebyshev": Chebyshev basis polynomials,
+            Options are:
+            - "newton": Newton basis polynomials
+            - "chebyshev": Chebyshev basis polynomials
+            - "legendre": Legendre basis polynomials
             the default option is "newton".
         precomputation : bool, optional
             If True, precompute the inverse Vandermonde matrix to speed up transforms.
@@ -197,7 +204,7 @@ class Transform(AbstractTransform):
         self._basis = str(basis)
         classify(self._m, self._n, self._p)
 
-        if not basis in ["newton", "chebyshev"]:
+        if not basis in ["newton", "chebyshev", "legendre"]:
             self._stop_spinner() if report else None
             raise ValueError("Invalid choice for basis.")
 
@@ -270,6 +277,9 @@ class Transform(AbstractTransform):
         elif basis == "chebyshev":
             self._Vx = chebyshev2lagrange(self._x)
             self._Dx = chebyshev2derivative(self._x)
+        elif basis == "legendre":
+            self._Vx = legendre2lagrange(self._x)
+            self._Dx = legendre2derivative(self._x)
         self._Dx2 = self._Dx @ self._Dx
         self._Dx3 = self._Dx @ self._Dx2
 
@@ -843,6 +853,8 @@ class Transform(AbstractTransform):
             )
         elif self._basis == "chebyshev":
             return chebyshev2point(coefficients, points, self._A, self._m, self._n)
+        elif self._basis == "legendre":
+            return legendre2point(coefficients, points, self._A, self._m, self._n)
 
     def embed(self, t: AbstractTransform) -> np.ndarray:
         """

@@ -7,7 +7,7 @@ from itertools import product
 
 ms = [1, 2, 3, 4, 5, 6]
 ps = [1.0, 2.0, np.inf]
-bases = ["newton", "chebyshev"]
+bases = ["newton", "chebyshev", "legendre"]
 precomputation = [True, False]
 m_p_ba_pr = list(product(ms, ps, bases, precomputation))
 NS = [4, 5, 6, 7, 8]
