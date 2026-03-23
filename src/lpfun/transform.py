@@ -112,8 +112,8 @@ class Transform(AbstractTransform):
         The one-dimensional interpolation nodes.
     grid : numpy.ndarray
         The multidimensional grid points (shape: [num_points, spatial_dimension]).
-    colex_order: TODO
-    leja_order: TODO
+    colex_order : bool, optional
+        If True, reassigns co-lexicographic ordering.
     """
 
     def __init__(
@@ -139,17 +139,15 @@ class Transform(AbstractTransform):
             The dimension `m` of the spatial domain, representing the number of input variables.
         polynomial_degree : int
             The maximum total degree `n` of the polynomial basis used for approximation.
-        lp_degree : float, optional
+        lp_degree : float
             The degree `p` of the ℓ^p norm that defines the polynomial space (default is 2.0, Euclidean degree).
         nodes : callable, optional
             A callable that, given an integer `n`, returns an array of `n` nodes in one dimension.
             Typically, this is a function returning Chebyshev nodes `cheb2nd_nodes` or Leja nodes `leja_nodes`.
-        basis : {"newton", "chebyshev"}, optional
+        basis:
             The polynomial basis to use for constructing Vandermonde and differentiation matrices.
-            Options are:
-            - "newton": Newton basis polynomials
-            - "chebyshev": Chebyshev basis polynomials
-            Default is "newton".
+            Options are: "newton": Newton basis polynomials, "chebyshev": Chebyshev basis polynomials,
+            the default option is "newton".
         precomputation : bool, optional
             If True, precompute the inverse Vandermonde matrix to speed up transforms.
             Precomputation can be less stable for large problems (default is True).
@@ -157,13 +155,12 @@ class Transform(AbstractTransform):
             If True, precompile all just-in-time (JIT) compiled functions with dummy inputs
             during initialization to reduce runtime overhead during actual calls (default is True).
         colex_order : bool, optional
-            If True, reassigns co-lexicographic ordering for nodes.
-            otherwise, returns
-        threshold : int, optional
+            If True, reassigns co-lexicographic ordering.
+        threshold:
             A safety threshold for the dimension of the polynomial space.
             If the dimension exceeds this number, initialization will raise an error to prevent
             excessive memory usage or computational cost (default is 150,000,000).
-        report : bool, optional
+        report:
             If True, print detailed initialization information and statistics after setup
             (default is True).
 
@@ -807,7 +804,7 @@ class Transform(AbstractTransform):
         """
         Evaluate the function represented by given coefficients at specified points.
 
-        This method computes the values of the interpolated function at one or more points 
+        This method computes the values of the interpolated function at one or more points
         by evaluating the polynomial expansion defined by the coefficients.
 
         Parameters
@@ -815,7 +812,7 @@ class Transform(AbstractTransform):
         coefficients : np.ndarray
             Coefficients of the function in the predefined polynomial basis.
         points : np.ndarray
-            A 2D array of shape (num_points, spatial_dimension) representing the coordinates 
+            A 2D array of shape (num_points, spatial_dimension) representing the coordinates
             of the evaluation points.
 
         Returns
@@ -852,7 +849,7 @@ class Transform(AbstractTransform):
         Embed a function from a lower-resolution transform `self` into a higher-resolution transform `t`.
 
         This method returns the index array needed to embed coefficients from the polynomial basis of `self`
-        into that of `t`. The embedding is only valid if both transforms use the same nodes up to the 
+        into that of `t`. The embedding is only valid if both transforms use the same nodes up to the
         polynomial degree of `self`, and if they share the same spatial dimension.
 
         Parameters
@@ -888,7 +885,9 @@ class Transform(AbstractTransform):
         if not np.allclose(t.nodes[: self.polynomial_degree + 1], self.nodes):
             print(self.nodes)
             print(t.nodes[: self.polynomial_degree + 1])
-            raise ValueError("Nodes mismatch: The nodes of `self` must be the starting nodes of `t`.")
+            raise ValueError(
+                "Nodes mismatch: The nodes of `self` must be the starting nodes of `t`."
+            )
         if not (
             (t.lp_degree >= self.lp_degree)
             and (t.polynomial_degree >= self.polynomial_degree)
