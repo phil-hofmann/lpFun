@@ -37,7 +37,7 @@ def cheb2nd_nodes(n: int) -> np.ndarray:
     return np.cos(np.arange(n, dtype=np.float64) * np.pi / (n - 1))
 
 
-def leja_nodes(n: int, m: int = 1000) -> np.ndarray:
+def leja_nodes(n: int, m: int = 25_000) -> np.ndarray:
     """O(n^3)"""
     if n < 0:
         raise ValueError("The parameter ``n`` should be non-negative.")
@@ -201,28 +201,55 @@ def chebyshev2point(
 @njit
 def get_leja_order(nodes: np.ndarray, limit: int = -1) -> np.ndarray:
     """O(n^3)"""
-    """This function originates from minterpy."""
-    ### NOTE -- no type conversion
-    n = len(nodes)
-    limit = n if limit == -1 else limit
-    ord = np.arange(1, n, dtype=np.int64)
-    lj = np.zeros(limit, dtype=np.int64)
-    lj[0] = 0
-    m = 0
-    for k in range(0, limit - 1):
-        jj = 0
-        for i in range(0, n - k - 1):
-            p = 1
-            for j in range(k + 1):
-                p = p * (nodes[lj[j]] - nodes[ord[i]])
-            p = np.abs(p)
-            if p >= m:
-                jj = i
-                m = p
-        m = 0
-        lj[k + 1] = ord[jj]
-        ord = np.delete(ord, jj)
-    return lj
+    n = nodes.shape[0]
+    if n == 0:
+        return None
+    if limit == -1:
+        limit = n
+
+    # preallocate
+    order = np.empty(n, dtype=np.int64)
+    chosen = np.zeros(n, dtype=np.bool_)
+
+    # pick the first node as the one with largest absolute value
+    max_idx = 0
+    max_val = np.abs(nodes[0])
+    for i in range(1, n):
+        val = np.abs(nodes[i])
+        if val > max_val:
+            max_val = val
+            max_idx = i
+
+    order[0] = max_idx
+    chosen[max_idx] = True
+
+    # product of distances for unchosen nodes (float64)
+    prod_dist = np.zeros(n, dtype=np.float64)
+    for i in range(n):
+        prod_dist[i] = np.abs(nodes[i] - nodes[max_idx])
+
+    # iterate to choose remaining Leja points
+    for k in range(1, limit):
+        best_idx = -1
+        best_val = -1.0
+
+        # find best unchosen index
+        for i in range(n):
+            if not chosen[i]:
+                if prod_dist[i] > best_val:
+                    best_val = prod_dist[i]
+                    best_idx = i
+
+        # assign chosen
+        order[k] = best_idx
+        chosen[best_idx] = True
+
+        # update products only for unchosen nodes
+        for i in range(n):
+            if not chosen[i]:
+                prod_dist[i] = prod_dist[i] * np.abs(nodes[i] - nodes[best_idx])
+
+    return order[:limit]
 
 
 # grid
@@ -328,7 +355,7 @@ def get_lu(M: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
     return L, U
 
 
-# @njit # NOTE pivoting increases numerical stability
+# @njit # NOTE pivoting is currently conflicting with the FNT
 # def get_lu_pivot(M: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
 #     """Stable LU with partial pivoting. Returns P, L, U so that P @ M = L @ U"""
 #     M = np.asarray(M).astype(np.float64)
