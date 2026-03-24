@@ -3,7 +3,7 @@ from math import gamma
 from numba import njit
 
 
-@njit
+@njit(cache=True)
 def apply_permutation(
     P: np.ndarray,
     x: np.ndarray,
@@ -20,7 +20,7 @@ def apply_permutation(
     return x_p
 
 
-@njit
+@njit(cache=True)
 def binomial(n: int, m: int) -> int:
     if m < 0 or m > n:
         return 0
@@ -30,7 +30,7 @@ def binomial(n: int, m: int) -> int:
     return result
 
 
-@njit
+@njit(cache=True)
 def memory_estimate(m: int, n: int, p: float) -> int:
     if p <= 1.0:
         singular = 1 + m * n

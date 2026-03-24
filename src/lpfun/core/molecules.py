@@ -33,7 +33,6 @@ from lpfun.core.atoms import (
 from typing import Literal
 
 
-# @njit # NOTE optional
 def transform(
     Vx: np.ndarray,
     f: np.ndarray,
@@ -124,7 +123,6 @@ def transform(
     )
 
 
-@njit
 def itransform(
     Vx: np.ndarray,
     c: np.ndarray,
@@ -219,7 +217,6 @@ def itransform(
     )
 
 
-@njit
 def dtransform(
     Dx: np.ndarray,
     c: np.ndarray,

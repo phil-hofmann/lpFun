@@ -7,7 +7,7 @@ from numba import njit, prange
 """Utility functions"""
 
 
-@njit
+@njit(cache=True)
 def classify(m: int, n: int, p: float) -> bool:
     m, n, p = int(m), int(n), float(p)
     ###
@@ -57,7 +57,7 @@ def leja_nodes(n: int, m: int = 25_000) -> np.ndarray:
 # vandermonde matrices
 
 
-@njit
+@njit(cache=True)
 def newton2lagrange(x: np.ndarray) -> np.ndarray:
     """O(n^2)"""
     x = np.asarray(x).astype(np.float64)
@@ -73,7 +73,7 @@ def newton2lagrange(x: np.ndarray) -> np.ndarray:
     return Vx
 
 
-@njit
+@njit(cache=True)
 def chebyshev2lagrange(x: np.ndarray) -> np.ndarray:
     """O(n^2)"""
     x = np.asarray(x).astype(np.float64)
@@ -92,7 +92,7 @@ def chebyshev2lagrange(x: np.ndarray) -> np.ndarray:
 # differentiation matrices
 
 
-@njit
+@njit(cache=True)
 def newton2derivative(nodes: np.ndarray) -> np.ndarray:
     """O(n^2)"""
     nodes = np.asarray(nodes).astype(np.float64)
@@ -110,7 +110,7 @@ def newton2derivative(nodes: np.ndarray) -> np.ndarray:
     return Dx.T
 
 
-@njit
+@njit(cache=True)
 def chebyshev2derivative(nodes: np.ndarray) -> np.ndarray:
     """O(n^2)"""
     ### NOTE -- Matrix is independent of the nodes
@@ -129,7 +129,7 @@ def chebyshev2derivative(nodes: np.ndarray) -> np.ndarray:
 # point evaluation
 
 
-@njit(parallel=True)
+@njit(cache=True, parallel=True)
 def newton2point(
     coefficients: np.ndarray,
     nodes: np.ndarray,
@@ -162,7 +162,7 @@ def newton2point(
     return values
 
 
-@njit(parallel=True)
+@njit(cache=True, parallel=True)
 def chebyshev2point(
     coefficients: np.ndarray,
     points: np.ndarray,
@@ -198,7 +198,7 @@ def chebyshev2point(
 # Leja order
 
 
-@njit
+@njit(cache=True)
 def get_leja_order(nodes: np.ndarray, limit: int = -1) -> np.ndarray:
     """O(n^3)"""
     n = nodes.shape[0]
@@ -281,7 +281,7 @@ def get_grid(
         return _get_grid(nodes, A, m)
 
 
-@njit
+@njit(cache=True)
 def _get_grid(
     nodes: np.ndarray,
     A: np.ndarray,
@@ -302,7 +302,7 @@ def _get_grid(
 # row major ordering
 
 
-@njit
+@njit(cache=True)
 def is_lower_triangular(
     M: np.ndarray,
     atol=1e-8,
@@ -319,7 +319,7 @@ def is_lower_triangular(
     return True
 
 
-@njit
+@njit(cache=True)
 def get_rmo(L: np.ndarray) -> np.ndarray:
     """O(n^2)"""
     L = np.asarray(L).astype(np.float64)
@@ -339,7 +339,7 @@ def get_rmo(L: np.ndarray) -> np.ndarray:
 # matrix operations
 
 
-@njit
+@njit(cache=True)
 def get_lu(M: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
     """O(n^3)"""
     M = np.asarray(M).astype(np.float64)
@@ -355,7 +355,7 @@ def get_lu(M: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
     return L, U
 
 
-# @njit # NOTE pivoting is currently conflicting with the FNT
+# @njit(cache=True) # NOTE pivoting is currently conflicting with the FNT
 # def get_lu_pivot(M: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
 #     """Stable LU with partial pivoting. Returns P, L, U so that P @ M = L @ U"""
 #     M = np.asarray(M).astype(np.float64)
