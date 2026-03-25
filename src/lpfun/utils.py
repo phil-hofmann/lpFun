@@ -2,9 +2,10 @@ import itertools
 import numpy as np
 import numba as nb
 from typing import Tuple
-from lpfun import CACHE
+from lpfun import CACHE, INLINE
 
 prange = nb.prange
+_inline = "always" if INLINE else "never"
 
 
 def njit(*args, **kwargs):
@@ -168,7 +169,7 @@ def legendre2derivative(nodes: np.ndarray) -> np.ndarray:
 # point evaluation
 
 
-@njit(parallel=True)
+@njit(inline=_inline, parallel=True)
 def newton2point(
     coefficients: np.ndarray,
     nodes: np.ndarray,
@@ -201,7 +202,7 @@ def newton2point(
     return values
 
 
-@njit(parallel=True)
+@njit(inline=_inline, parallel=True)
 def chebyshev2point(
     coefficients: np.ndarray,
     points: np.ndarray,
@@ -234,7 +235,7 @@ def chebyshev2point(
     return values
 
 
-@njit(parallel=True)
+@njit(inline=_inline, parallel=True)
 def legendre2point(
     coefficients: np.ndarray,
     points: np.ndarray,
