@@ -89,6 +89,22 @@ def chebyshev2lagrange(x: np.ndarray) -> np.ndarray:
     return Vx
 
 
+@njit
+def legendre2lagrange(x: np.ndarray) -> np.ndarray:
+    """O(n^2)"""
+    x = np.asarray(x).astype(np.float64)
+    n = len(x)
+    ###
+    Vx = np.zeros((n, n), dtype=np.float64)
+    for i in range(n):
+        Vx[i, 0] = 1.0
+        if n > 1:
+            Vx[i, 1] = x[i]
+        for j in range(2, n):
+            Vx[i, j] = ((2 * j - 1) * x[i] * Vx[i, j - 1] - (j - 1) * Vx[i, j - 2]) / j
+    return Vx
+
+
 # differentiation matrices
 
 
@@ -122,6 +138,21 @@ def chebyshev2derivative(nodes: np.ndarray) -> np.ndarray:
         for j in range(k - 1, -1, -2):
             Dx[j, k] = 2 * k
         Dx[0, k] *= 0.5
+    ###
+    return Dx
+
+
+@njit
+def legendre2derivative(nodes: np.ndarray) -> np.ndarray:
+    """O(n^2)"""
+    ### NOTE -- Matrix is independent of the nodes
+    nodes = np.asarray(nodes).astype(np.float64)
+    n = len(nodes) - 1
+    ###
+    Dx = np.zeros((n + 1, n + 1))
+    for k in range(1, n + 1):
+        for j in range(k - 1, -1, -2):
+            Dx[j, k] = 2 * j + 1
     ###
     return Dx
 
@@ -182,6 +213,41 @@ def chebyshev2point(
             basis[:, 1] = x
         for j in range(1, n):
             basis[:, j + 1] = 2 * x * basis[:, j] - basis[:, j - 1]
+        ###
+        value = 0.0
+        for i in prange(len(A)):
+            mi = A[i]
+            prod = 1.0
+            for j in range(m):
+                prod *= basis[j, mi[j]]
+            value += coefficients[i] * prod
+        ###
+        values[l] = value
+    return values
+
+
+@njit(parallel=True)
+def legendre2point(
+    coefficients: np.ndarray,
+    points: np.ndarray,
+    A: np.ndarray,
+    m: int,
+    n: int,
+) -> float:
+    """O(Nmn)"""
+    ### NOTE -- no type conversion
+    len_points = len(points)
+    values = np.zeros(len_points, dtype=np.float64)
+    for l in prange(len_points):
+        x = points[l]
+        ###
+        basis = np.empty((m, n + 1), dtype=np.float64)
+        basis[:, 0] = 1.0
+        if n >= 1:
+            basis[:, 1] = x
+        for j in range(2, n + 1):
+            for d in range(m):
+                basis[d, j] = ((2 * j - 1) * x[d] * basis[d, j - 1] - (j - 1) * basis[d, j - 2]) / j
         ###
         value = 0.0
         for i in prange(len(A)):
