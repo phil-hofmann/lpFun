@@ -1,15 +1,22 @@
 import numpy as np
+import numba as nb
 from typing import Tuple
-from numba import njit
 from itertools import product
+from lpfun import CACHE
 from lpfun.core.utils import apply_permutation, memory_estimate
+
+
+def njit(*args, **kwargs):
+    kwargs.setdefault("cache", CACHE)
+    return nb.njit(*args, **kwargs)
+
 
 """
 - This file is not parallelized.
 """
 
 
-@njit(cache=True)
+@njit
 def _lp_set(
     m: int,
     n: int,
@@ -77,7 +84,7 @@ def lp_set(
 # tube projection
 
 
-@njit(cache=True)
+@njit
 def _lp_tube(A: np.ndarray) -> np.ndarray:
     N, A0 = len(A), A[:, 0]
     T = np.zeros(len(A), dtype=np.int64)
@@ -110,7 +117,7 @@ def lp_tube(A: np.ndarray, m: int, n: int, p: float) -> np.ndarray:
 # permutations
 
 
-@njit(cache=True)
+@njit
 def permutation_max(
     m: int,
     n: int,
@@ -130,7 +137,7 @@ def permutation_max(
     return mat
 
 
-@njit(cache=True)
+@njit
 def transposition(T: np.ndarray) -> np.ndarray:
     N, n = np.sum(T), np.max(T)
     permutation_vector = np.zeros(N, dtype=np.int64)
@@ -143,7 +150,7 @@ def transposition(T: np.ndarray) -> np.ndarray:
     return permutation_vector
 
 
-@njit(cache=True)
+@njit
 def permutation(
     T: np.ndarray,
     i: int,
@@ -164,7 +171,7 @@ def permutation(
 # ordinal embedding
 
 
-@njit(cache=True)
+@njit
 def entropy(T: np.ndarray) -> np.ndarray:
     cs_T = np.cumsum(T)
     e_T = np.array([cs_T[-1]], dtype=np.int64)
@@ -182,7 +189,7 @@ def entropy(T: np.ndarray) -> np.ndarray:
     return e_T
 
 
-@njit(cache=True)
+@njit
 def _plusplus(
     m: int,
     i: np.ndarray,
@@ -205,7 +212,7 @@ def _plusplus(
     return None, None, -1
 
 
-@njit(cache=True)
+@njit
 def ordinal_embedding(
     m: int,
     T: np.ndarray,

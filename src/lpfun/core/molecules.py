@@ -33,6 +33,8 @@ from lpfun.core.atoms import (
 from typing import Literal
 
 
+# NOTE: do not cache, causes segfaults.
+# @njit
 def transform(
     Vx: np.ndarray,
     f: np.ndarray,
@@ -123,6 +125,8 @@ def transform(
     )
 
 
+# NOTE: do not cache, causes segfaults.
+# @njit
 def itransform(
     Vx: np.ndarray,
     c: np.ndarray,
@@ -217,6 +221,8 @@ def itransform(
     )
 
 
+# NOTE: do not cache, causes segfaults.
+# @njit
 def dtransform(
     Dx: np.ndarray,
     c: np.ndarray,

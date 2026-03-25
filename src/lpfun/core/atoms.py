@@ -1,7 +1,17 @@
 import numpy as np
-from numba import njit, prange
-from lpfun import PARALLEL
+import numba as nb
+from lpfun import PARALLEL, CACHE, INLINE
 from lpfun.core.set import ordinal_embedding
+
+prange = nb.prange
+
+
+def njit(*args, **kwargs):
+    """Wrapper around numba.njit that injects the global CACHE setting."""
+    kwargs.setdefault("cache", CACHE)
+    kwargs.setdefault("inline", "always" if INLINE else "never")
+    return nb.njit(*args, **kwargs)
+
 
 """
 - This module contains numba jit-compiled functions for the transformation of a vector by a matrix.
@@ -12,7 +22,7 @@ from lpfun.core.set import ordinal_embedding
 # cs_T, N_0, N_1, V_2, V_1 ?
 
 
-@njit(cache=True)
+@njit
 def reduceat(
     array: np.ndarray,
     split_indices: np.ndarray,
@@ -32,7 +42,7 @@ def reduceat(
 # 1d
 
 
-@njit(cache=True)
+@njit
 def transform_lt_1d(
     L: np.ndarray,
     x: np.ndarray,
@@ -50,7 +60,7 @@ def transform_lt_1d(
     return dot
 
 
-@njit(cache=True)
+@njit
 def transform_ut_1d(
     U: np.ndarray,
     x: np.ndarray,
@@ -69,7 +79,7 @@ def transform_ut_1d(
     return dot
 
 
-@njit(cache=True, parallel=PARALLEL)
+@njit(parallel=PARALLEL)
 def itransform_lt_1d(
     L: np.ndarray,
     x: np.ndarray,
@@ -87,7 +97,7 @@ def itransform_lt_1d(
     return dot
 
 
-@njit(cache=True, parallel=PARALLEL)
+@njit(parallel=PARALLEL)
 def itransform_ut_1d(
     U: np.ndarray,
     x: np.ndarray,
@@ -108,7 +118,7 @@ def itransform_ut_1d(
 # maximal
 
 
-@njit(cache=True, parallel=PARALLEL)  # NOTE: deactivated
+@njit(parallel=PARALLEL)  # NOTE: deactivated
 def transform_lt_max(
     L: np.ndarray,
     x: np.ndarray,
@@ -154,7 +164,7 @@ def transform_lt_max(
     return dot
 
 
-@njit(cache=True, parallel=PARALLEL)  # NOTE: deactivated
+@njit(parallel=PARALLEL)  # NOTE: deactivated
 def transform_ut_max(
     U: np.ndarray,
     x: np.ndarray,
@@ -203,7 +213,7 @@ def transform_ut_max(
     return dot
 
 
-@njit(cache=True, parallel=PARALLEL)
+@njit(parallel=PARALLEL)
 def itransform_lt_max(
     L: np.ndarray,
     x: np.ndarray,
@@ -240,7 +250,7 @@ def itransform_lt_max(
     return dot
 
 
-@njit(cache=True, parallel=PARALLEL)
+@njit(parallel=PARALLEL)
 def itransform_ut_max(
     U: np.ndarray,
     x: np.ndarray,
@@ -278,7 +288,7 @@ def itransform_ut_max(
     return dot
 
 
-@njit(cache=True, parallel=PARALLEL)
+@njit(parallel=PARALLEL)
 def dtransform_max(
     L: np.ndarray,
     x: np.ndarray,
@@ -308,7 +318,7 @@ def dtransform_max(
 # 2d
 
 
-@njit(cache=True, parallel=PARALLEL)
+@njit(parallel=PARALLEL)
 def transform_lt_2d(
     L: np.ndarray,
     x: np.ndarray,
@@ -352,7 +362,7 @@ def transform_lt_2d(
     return dot_2d
 
 
-@njit(cache=True, parallel=PARALLEL)
+@njit(parallel=PARALLEL)
 def transform_ut_2d(
     U: np.ndarray,
     x: np.ndarray,
@@ -403,7 +413,7 @@ def transform_ut_2d(
     return dot_2d
 
 
-@njit(cache=True, parallel=PARALLEL)
+@njit(parallel=PARALLEL)
 def itransform_lt_2d(
     L: np.ndarray,
     x: np.ndarray,
@@ -445,7 +455,7 @@ def itransform_lt_2d(
     return dot_2d
 
 
-@njit(cache=True, parallel=PARALLEL)
+@njit(parallel=PARALLEL)
 def itransform_ut_2d(
     U: np.ndarray,
     x: np.ndarray,
@@ -491,7 +501,7 @@ def itransform_ut_2d(
 # 3d
 
 
-@njit(cache=True, parallel=PARALLEL)
+@njit(parallel=PARALLEL)
 def transform_lt_3d(
     L: np.ndarray,
     x: np.ndarray,
@@ -571,7 +581,7 @@ def transform_lt_3d(
     return dot_3d
 
 
-@njit(cache=True, parallel=PARALLEL)
+@njit(parallel=PARALLEL)
 def transform_ut_3d(
     U: np.ndarray,
     x: np.ndarray,
@@ -665,7 +675,7 @@ def transform_ut_3d(
     return dot_3d
 
 
-@njit(cache=True, parallel=PARALLEL)
+@njit(parallel=PARALLEL)
 def itransform_lt_3d(
     L: np.ndarray,
     x: np.ndarray,
@@ -742,7 +752,7 @@ def itransform_lt_3d(
     return dot_3d
 
 
-@njit(cache=True, parallel=PARALLEL)
+@njit(parallel=PARALLEL)
 def itransform_ut_3d(
     U: np.ndarray,
     x: np.ndarray,
@@ -821,7 +831,7 @@ def itransform_ut_3d(
 # md
 
 
-@njit(cache=True, parallel=PARALLEL)
+@njit(parallel=PARALLEL)
 def transform_lt_md(
     L: np.ndarray,
     x: np.ndarray,
@@ -911,7 +921,7 @@ def transform_lt_md(
     return dot
 
 
-@njit(cache=True, parallel=PARALLEL)
+@njit(parallel=PARALLEL)
 def transform_ut_md(
     U: np.ndarray,
     x: np.ndarray,
@@ -1019,7 +1029,7 @@ def transform_ut_md(
     return dot
 
 
-@njit(cache=True, parallel=PARALLEL)
+@njit(parallel=PARALLEL)
 def itransform_lt_md(
     L: np.ndarray,
     x: np.ndarray,
@@ -1103,7 +1113,7 @@ def itransform_lt_md(
     return dot
 
 
-@njit(cache=True, parallel=PARALLEL)
+@njit(parallel=PARALLEL)
 def itransform_ut_md(
     U: np.ndarray,
     x: np.ndarray,
@@ -1191,7 +1201,7 @@ def itransform_ut_md(
     return dot
 
 
-@njit(cache=True, parallel=PARALLEL)  # TODO: create test
+@njit(parallel=PARALLEL)  # TODO: create test
 def dtransform_lt_md(
     L: np.ndarray,
     x: np.ndarray,
@@ -1220,7 +1230,7 @@ def dtransform_lt_md(
     return dot
 
 
-@njit(cache=True, parallel=PARALLEL)
+@njit(parallel=PARALLEL)
 def dtransform_ut_md(
     U: np.ndarray,
     x: np.ndarray,

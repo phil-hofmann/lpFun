@@ -1,9 +1,15 @@
 import numpy as np
+import numba as nb
 from math import gamma
-from numba import njit
+from lpfun import CACHE
 
 
-@njit(cache=True)
+def njit(*args, **kwargs):
+    kwargs.setdefault("cache", CACHE)
+    return nb.njit(*args, **kwargs)
+
+
+@njit
 def apply_permutation(
     P: np.ndarray,
     x: np.ndarray,
@@ -20,7 +26,7 @@ def apply_permutation(
     return x_p
 
 
-@njit(cache=True)
+@njit
 def binomial(n: int, m: int) -> int:
     if m < 0 or m > n:
         return 0
@@ -30,7 +36,7 @@ def binomial(n: int, m: int) -> int:
     return result
 
 
-@njit(cache=True)
+@njit
 def memory_estimate(m: int, n: int, p: float) -> int:
     if p <= 1.0:
         singular = 1 + m * n
