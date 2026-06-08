@@ -1,12 +1,41 @@
 import numpy as np
+import numba as nb
+from math import gamma
 from typing import Tuple
-from numba import njit
 from itertools import product
-from lpfun.core.utils import apply_permutation, memory_estimate
+
+from lpfun import CACHE
+from lpfun.utils import apply_permutation, binomial
+
+
+def njit(*args, **kwargs):
+    kwargs.setdefault("cache", CACHE)
+    return nb.njit(*args, **kwargs)
+
 
 """
-- This file is not parallelized.
+- Nothing in this file is parallelized.
 """
+
+
+@njit
+def memory_estimate(m: int, n: int, p: float) -> int:
+    """O(1)"""
+    if p <= 1.0:
+        singular = 1 + m * n
+        if m < n:
+            return int(singular * (1 - p) + binomial(n + m, m) * p)
+        else:
+            return int(singular * (1 - p) + binomial(n + m, n) * p)
+    elif p <= 2.0:
+        fac1 = (p * np.e / m) ** (1 / p)
+        fac2 = np.sqrt(p / (2 * np.pi * m))
+        return int(np.ceil((fac1 * (n + 2) * gamma(1 + 1 / p)) ** m * fac2))
+    else:
+        return int((n + 1) ** m)
+
+
+# set
 
 
 @njit
@@ -15,44 +44,45 @@ def _lp_set(
     n: int,
     p: float,
 ) -> np.ndarray:
+    """O(m|A|)"""
     memory = memory_estimate(m, n, p)
-    multi_index_set, multi_index, multi_index_p, num_p = (
+    index_set, index, index_p, num_p = (
         np.zeros((memory, m), dtype=np.int64),
         np.zeros(m, dtype=np.int64),
         np.zeros(m, dtype=np.float64),
         np.arange(0, n + 1).astype(np.float64) ** p,
     )
-    sum_multi_index_p, n_p, i, j = 0.0, n**p, 0, 0
+    sum_index_p, n_p, i, j = 0.0, n**p, 0, m - 1
     while True:
         while True:
-            if j >= m:
-                return multi_index_set[: i + 1]
-            elif multi_index[j] < n:
-                sum_multi_index_p = sum_multi_index_p - multi_index_p[j]
-                multi_index[j] += 1
-                multi_index_p[j] = num_p[multi_index[j]]
-                sum_multi_index_p = sum_multi_index_p + multi_index_p[j]
+            if j < 0:
+                return index_set[: i + 1]
+            elif index[j] < n:
+                sum_index_p -= index_p[j]
+                index[j] += 1
+                index_p[j] = num_p[index[j]]
+                sum_index_p += index_p[j]
                 break
             else:
-                sum_multi_index_p = sum_multi_index_p - multi_index_p[j]
-                multi_index[j] = 0
-                multi_index_p[j] = 0
-                j += 1
-        if sum_multi_index_p <= n_p:
+                sum_index_p -= index_p[j]
+                index[j] = 0
+                index_p[j] = 0
+                j -= 1
+        if sum_index_p <= n_p:
             i += 1
-            j = 0
-            multi_index_set[i] = multi_index
+            j = m - 1
+            index_set[i] = index
         else:
-            sum_multi_index_p = np.sum(multi_index**p)
-            if sum_multi_index_p <= n_p:
+            sum_index_p = np.sum(index**p)
+            if sum_index_p <= n_p:
                 i += 1
-                j = 0
-                multi_index_set[i] = multi_index
+                j = m - 1
+                index_set[i] = index
             else:
-                sum_multi_index_p = sum_multi_index_p - multi_index_p[j]
-                multi_index[j] = 0
-                multi_index_p[j] = 0
-                j += 1
+                sum_index_p -= index_p[j]
+                index[j] = 0
+                index_p[j] = 0
+                j -= 1
 
 
 def lp_set(
@@ -68,18 +98,17 @@ def lp_set(
     if m == 1:
         return np.array(range(n + 1), dtype=np.int64).reshape(-1, 1)
     elif p == np.inf:
-        return np.flip(
-            np.asarray(list(product(range(n + 1), repeat=m))).astype(np.int64), axis=1
-        )
+        return np.asarray(list(product(range(n + 1), repeat=m))).astype(np.int64)
     return _lp_set(m, n, p)
 
 
-# tube projection
+# tube size projections
 
 
 @njit
-def _lp_tube(A: np.ndarray) -> np.ndarray:
-    N, A0 = len(A), A[:, 0]
+def _tube(A: np.ndarray) -> np.ndarray:
+    """O(|A|)"""
+    N, A0 = len(A), A[:, -1]
     T = np.zeros(len(A), dtype=np.int64)
     i, j = 1, 0
     for k in range(1, N):
@@ -104,64 +133,119 @@ def lp_tube(A: np.ndarray, m: int, n: int, p: float) -> np.ndarray:
         return np.array([n + 1], dtype=np.int64)
     elif p == np.inf:
         return np.array([n + 1] * (n + 1) ** (m - 1), dtype=np.int64)
-    return _lp_tube(A)
+    return _tube(A)
 
 
 # permutations
 
 
 @njit
-def permutation_max(
+def transposition(T: np.ndarray) -> np.ndarray:
+    """O(|A|)"""
+    N = len(T)
+    if N == 0:
+        return np.empty(0, dtype=np.int64)
+
+    total = np.sum(T)
+    M = np.max(T)
+    tau = np.empty(total, dtype=np.int64)
+
+    offsets = np.empty(N, dtype=np.int64)
+    offsets[0] = 0
+    offsets[1:] = np.cumsum(T[:-1])
+
+    # Buckets
+    bucket_head = -np.ones(M + 1, dtype=np.int64)
+    bucket_next = -np.ones(N, dtype=np.int64)
+
+    for l in range(N):
+        k = T[l]
+        bucket_next[l] = bucket_head[k]
+        bucket_head[k] = l
+
+    # Active ordered linked list
+    prev_active = np.empty(N, dtype=np.int64)
+    next_active = np.empty(N, dtype=np.int64)
+
+    for l in range(N):
+        prev_active[l] = l - 1
+        next_active[l] = l + 1
+
+    next_active[N - 1] = -1
+    head = 0
+
+    j = 0
+
+    # Level-wise traversal
+    for k in range(1, M + 1):
+        # Process all currently active fibers.
+        l = head
+        while l != -1:
+            tau[j] = offsets[l] + (k - 1)
+            j += 1
+            l = next_active[l]
+
+        # Remove fibers whose size is exactly k.
+        l = bucket_head[k]
+        while l != -1:
+            nxt_bucket = bucket_next[l]
+
+            p = prev_active[l]
+            q = next_active[l]
+
+            if p != -1:
+                next_active[p] = q
+            else:
+                head = q
+
+            if q != -1:
+                prev_active[q] = p
+
+            l = nxt_bucket
+
+    return tau
+
+
+@njit
+def permutations(
+    N: int,
+    m: int,
+    pi: np.ndarray,
+) -> np.ndarray:
+    """O(m|A|)"""
+    perm = np.empty((m, N), dtype=np.int64)
+    sig = np.arange(N)
+    for i in range(m):
+        perm[i] = sig
+        sig = apply_permutation(sig, pi, invert=True)
+    return perm[::-1]
+
+
+@njit
+def permutations_max(
     m: int,
     n: int,
-    i: int,
 ) -> np.ndarray:
-    """O((n+1)^m)"""
-    N = (n + 1) ** m
-    mat = np.zeros(N, dtype=np.int64)
-    iter_len = (n + 1) ** i
-    step_len = (n + 1) ** (m - i)
-    k = 0
-    for j in range(step_len):
-        for i in range(iter_len):
-            val = i * step_len + j
-            mat[k] = val
-            k += 1
-    return mat
+    """O(m(n+1)^m)"""
+    ###
+    perm = np.empty((m, (n + 1) ** m), dtype=np.int64)
+    for i in range(m):
+        iter_len = (n + 1) ** (m - i)
+        step_len = (n + 1) ** i
+        ###
+        j = 0
+        for k in range(step_len):
+            ###
+            for l in range(iter_len):
+                perm[i, j] = l * step_len + k
+                j += 1
+            ###
+        ###
+    ###
+    return perm
 
 
-@njit
-def transposition(T: np.ndarray) -> np.ndarray:
-    N, n = np.sum(T), np.max(T)
-    permutation_vector = np.zeros(N, dtype=np.int64)
-    current_position = 0
-    for j in range(n):
-        for i in range(len(T)):
-            if j < T[i]:
-                permutation_vector[current_position] = np.sum(T[:i]) + j
-                current_position += 1
-    return permutation_vector
-
-
-@njit
-def permutation(
-    T: np.ndarray,
-    i: int,
-) -> np.ndarray:
-    n = np.max(T)
-    if i == 0:
-        return np.arange(n)
-    else:
-        Pi = transposition(T)
-        if i == 1:
-            return Pi
-        P = Pi[:]
-        for _ in range(i - 1):
-            P = apply_permutation(P, Pi, invert=True)
-        return P
-
-
-# ordinal embedding
+# rank embedding
 
 
 @njit
@@ -206,12 +290,12 @@ def _plusplus(
 
 
 @njit
-def ordinal_embedding(
+def rank_embedding(
     m: int,
     T: np.ndarray,
     T_prime: np.ndarray,
 ) -> np.ndarray:
-    """O(||T_prime||_1)"""
+    """O(|A'|)"""
     e_T = entropy(T)
     e_T_prime = entropy(T_prime)
     N = np.sum(T)

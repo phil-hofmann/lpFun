@@ -1,4 +1,3 @@
-import lpfun.core.atoms as atoms
-import lpfun.core.molecules as molecules
+import lpfun.core.grid as grid
 import lpfun.core.set as set
-import lpfun.core.utils as utils
+import lpfun.core.transform as transform
