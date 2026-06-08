@@ -3,11 +3,11 @@ __version__ = "0.2"
 ###
 
 PARALLEL = True
-CACHE = True
-INLINE = True
+CACHE = False
 
 ###
 
 import lpfun.core as core
-from .transform import Transform
+import lpfun.basis as basis
+from .function import Function
 import lpfun.utils as utils

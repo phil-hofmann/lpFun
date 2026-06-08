@@ -3,7 +3,6 @@ import pytest
 import numpy as np
 from itertools import product
 
-
 # Parameters
 
 ms = [1, 2, 3, 4, 5, 6]
@@ -23,7 +22,7 @@ def test_tube_absolute_degree(m: int):
         A = lpfun.core.set.lp_set(m, n, 1.0)
         tube = lpfun.core.set.lp_tube(A, m, n, 1.0)
         tube_sum = np.sum(tube)
-        cardinality = lpfun.core.utils.binomial(n + m, m)
+        cardinality = lpfun.utils.binomial(n + m, m)
         assert tube_sum == cardinality
 
 
@@ -44,109 +43,122 @@ def test_tube_euclidean_degree(m: int):
 
 
 @pytest.mark.parametrize("m, p, ba, pr", m_p_ba_pr)
-def test_fnt_ifnt(m: int, p: float, ba: str, pr: bool):
+def test_interp_eval(m: int, p: float, ba: str, pr: bool):
     for n in NS:
-        t = lpfun.Transform(
+        fun = lpfun.Function(
             m,
             n,
             p,
             basis=ba,
             precomputation=pr,
             precompilation=False,
-            colex_order=False,
             report=False,
         )
-        function_values = np.random.rand(len(t))
-        reconstruction = t.ifnt(t.fnt(function_values))
+        function_values = np.random.rand(len(fun))
+        reconstruction = fun.eval(fun.interp(function_values))
         eps = np.linalg.norm(reconstruction - function_values)
         assert eps < 1e-8
 
 
 @pytest.mark.parametrize("m, p, ba, pr", m_p_ba_pr)
-def test_dx(m: int, p: float, ba: str, pr: bool):
+def test_diff(m: int, p: float, ba: str, pr: bool):
     for n in NS:
-        t = lpfun.Transform(
+        fun = lpfun.Function(
             m,
             n,
             p,
             basis=ba,
             precomputation=pr,
             precompilation=False,
-            colex_order=False,
             report=False,
         )
 
         def f(x):
-            return np.sum(x ** (n - 1))
+            val = 0.0
+            for j in range(m):
+                val += (j + 1) * x[j] ** (n - 1)
+            return val
 
-        def df(k, x):
-            if k == 1:
-                return (n - 1) * x[i] ** (n - 2)
-            elif k == 2:
-                return (n - 1) * (n - 2) * x[i] ** (n - 3)
-            elif k == 3:
-                return (n - 1) * (n - 2) * (n - 3) * x[i] ** (n - 4)
+        def df(dim, order, x):
+            c = dim + 1
 
-        function_values = np.array([f(x) for x in t.grid])
-        coeffs = t.fnt(function_values)
-        for k in [1, 2, 3]:
-            for i in range(m):
-                dx_function_values = np.array([df(k, x) for x in t.grid])
-                dx_reconstruction = t.ifnt(t.dx(coeffs, i, k))
+            if order == 0:
+                return f(x)
+
+            if order == 1:
+                return c * (n - 1) * x[dim] ** (n - 2)
+
+            elif order == 2:
+                return c * (n - 1) * (n - 2) * x[dim] ** (n - 3)
+
+            elif order == 3:
+                return c * (n - 1) * (n - 2) * (n - 3) * x[dim] ** (n - 4)
+
+        function_values = np.array([f(x) for x in fun.grid])
+        coeffs = fun.interp(function_values)
+
+        for order in [0, 1, 2, 3]:
+            for dim in range(m):
+                dx_function_values = np.array([df(dim, order, x) for x in fun.grid])
+
+                dx_reconstruction = (
+                    fun.eval(coeffs)
+                    if order == 0
+                    else fun.eval(fun.diff(coeffs, dim, order))
+                )
+
                 eps = np.linalg.norm(dx_reconstruction - dx_function_values)
                 assert eps < 1e-6
 
 
+# @pytest.mark.parametrize("m, p, ba, pr", m_p_ba_pr)
+# def test_diff_transpose(m: int, p: float, ba: str, pr: bool):
+#     for n in NS:
+#         fun = lpfun.Function(
+#             m,
+#             n,
+#             p,
+#             basis=ba,
+#             precomputation=pr,
+#             precompilation=False,
+#             report=False,
+#         )
+
+#         for k in [1, 2, 3]:
+#             for i in range(m):
+#                 x = np.random.randn(len(t))
+#                 y = np.random.randn(len(t))
+
+#                 Dx = t.diff(x, i, k)  # D x
+#                 DTx = t.diff(y, i, k, transpose=True)  # D^T y
+
+#                 lhs = np.dot(Dx, y)  # <D x, y>
+#                 rhs = np.dot(x, DTx)  # <x, D^T y>
+
+#                 eps = np.abs(lhs - rhs)
+#                 assert eps < 1e-6
+
+
 @pytest.mark.parametrize("m, p, ba, pr", m_p_ba_pr)
-def test_dxT(m: int, p: float, ba: str, pr: bool):
+def test_call(m: int, p: float, ba: str, pr: bool):
     for n in NS:
-        t = lpfun.Transform(
-            m,
-            n,
-            p,
-            basis=ba,
-            precomputation=pr,
-            precompilation=False,
-            colex_order=False,
-            report=False,
-        )
-
-        for k in [1, 2, 3]:
-            for i in range(m):
-                x = np.random.randn(len(t))
-                y = np.random.randn(len(t))
-
-                Dx = t.dx(x, i, k)  # D x
-                DTx = t.dxT(y, i, k)  # D^T y
-
-                lhs = np.dot(Dx, y)  # <D x, y>
-                rhs = np.dot(x, DTx)  # <x, D^T y>
-
-                eps = np.abs(lhs - rhs)
-                assert eps < 1e-6
-
-
-@pytest.mark.parametrize("m, p, ba, pr", m_p_ba_pr)
-def test_eval(m: int, p: float, ba: str, pr: bool):
-    for n in NS:
-        t = lpfun.Transform(
+        fun = lpfun.Function(
             m,
             n + 1,
             p,
             basis=ba,
             precomputation=pr,
             precompilation=False,
-            colex_order=False,
             report=False,
         )
 
         def f(x):
             return np.sum(x**3)
 
-        function_values = np.array([f(x) for x in t.grid])
-        coeffs = t.fnt(function_values)
+        function_values = np.array([f(x) for x in fun.grid])
+        coeffs = fun.interp(function_values)
         points = np.random.rand(10, m)
         function_value = np.array([f(x) for x in points])
-        reconstruction = t.eval(coeffs, points)
+        reconstruction = fun(coeffs, points)
         eps = np.max(np.abs(reconstruction - function_value))
         assert eps < 1e-6
