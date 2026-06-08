@@ -1,7 +1,7 @@
 <p align="center">
     <img src="docs/social-banner-bg-rounded.png" height="128" width="384"/>
     <br>
-    <i>Python package for fast multivariate polynomial interpolation on quasi-tensorial grids associated with lp-type polynomial spaces.</i>
+    <i>Python package for fast multivariate polynomial interpolation in lp-type polynomial spaces.</i>
 </p>
 
 <p align="center">
