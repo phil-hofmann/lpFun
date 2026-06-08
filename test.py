@@ -111,32 +111,32 @@ def test_diff(m: int, p: float, ba: str, pr: bool):
                 assert eps < 1e-6
 
 
-# @pytest.mark.parametrize("m, p, ba, pr", m_p_ba_pr)
-# def test_diff_transpose(m: int, p: float, ba: str, pr: bool):
-#     for n in NS:
-#         fun = lpfun.Function(
-#             m,
-#             n,
-#             p,
-#             basis=ba,
-#             precomputation=pr,
-#             precompilation=False,
-#             report=False,
-#         )
+@pytest.mark.parametrize("m, p, ba, pr", m_p_ba_pr)
+def test_diffT(m: int, p: float, ba: str, pr: bool):
+    for n in NS:
+        fun = lpfun.Function(
+            m,
+            n,
+            p,
+            basis=ba,
+            precomputation=pr,
+            precompilation=False,
+            report=False,
+        )
 
-#         for k in [1, 2, 3]:
-#             for i in range(m):
-#                 x = np.random.randn(len(t))
-#                 y = np.random.randn(len(t))
+        for order in [1, 2, 3]:
+            for dim in range(m):
+                x = np.random.randn(len(fun))
+                y = np.random.randn(len(fun))
 
-#                 Dx = t.diff(x, i, k)  # D x
-#                 DTx = t.diff(y, i, k, transpose=True)  # D^T y
+                Dx = fun.diff(x, dim, order)
+                DTx = fun.diffT(y, dim, order)
 
-#                 lhs = np.dot(Dx, y)  # <D x, y>
-#                 rhs = np.dot(x, DTx)  # <x, D^T y>
+                lhs = np.dot(Dx, y)
+                rhs = np.dot(x, DTx)
 
-#                 eps = np.abs(lhs - rhs)
-#                 assert eps < 1e-6
+                eps = np.abs(lhs - rhs)
+                assert eps < 1e-6
 
 
 @pytest.mark.parametrize("m, p, ba, pr", m_p_ba_pr)

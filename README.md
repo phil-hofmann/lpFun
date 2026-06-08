@@ -1,7 +1,7 @@
 <p align="center">
     <img src="docs/social-banner-bg-rounded.png" height="128" width="384"/>
     <br>
-    <i>Python package for fast multivariate interpolation and differentiation.</i>
+    <i>Python package for fast multivariate polynomial interpolation on quasi-tensorial grids associated with lp-type polynomial spaces.
 </p>
 
 <p align="center">
@@ -24,215 +24,141 @@
 
 ## Contents
 
-- [License](#license)
-- [Citation](#citation)
-- [Team and Support](#team-and-support)
 - [Installation](#installation)
-- [Tutorial](#-tutorial)
-  - [1. Short Version](#1-short-version)
-  - [2. Long Version](#2-long-version)
+- [Quick start](#quick-start)
+- [Detailed example](#detailed-example)
+- [API overview](#api-overview)
+- [Citation](#citation)
 - [Troubleshooting](#troubleshooting)
+- [Team and Support](#team-and-support)
+- [License](#license)
 - [Acknowledgments](#acknowledgments)
-
-## License
-
-The project is licensed under the [MIT License](LICENSE.txt).
-
-## Citation
-
-[Download BibTeX](./lpFun.bib)
-
-If you use lpFun in any public context (publications, presentations, or derivative software), **please cite both**:
-
-- **Accompanying paper**
-
-    Phil-Alexander Hofmann, Damar Wicaksono, Michael Hecht, *Fast Newton Transform: Interpolation in Downward Closed Polynomial Spaces*, arXiv:2505.14909 [math.NA], 2025. [https://doi.org/10.48550/arXiv.2505.14909](https://doi.org/10.48550/arXiv.2505.14909)
-
-- **Software**
-
-    Phil Hofmann. (2025). *lpFun*. GitHub. [https://github.com/phil-hofmann/lpFun](https://github.com/phil-hofmann/lpFun)
-
-**Related references**
-
-- Phil-Alexander Hofmann, Damar Wicaksono, Michael Hecht, *Interpolation in Polynomial Spaces of p-Degree*, arXiv:2507.13640 [math.NA], 2025. [https://doi.org/10.48550/arXiv.2507.13640](https://doi.org/10.48550/arXiv.2507.13640)
-
-- Michael Hecht, Phil-Alexander Hofmann, Damar Wicaksono, Uwe Hernandez Acosta, Krzysztof Gonciarz, Jannik Kissinger, Vladimir Sivkin, Ivo F. Sbalzarini, *Multivariate Newton Interpolation in Downward Closed Spaces Reaches the Optimal Geometric Approximation Rates for Bos–Levenberg–Trefethen Functions*, arXiv:2504.17899 [math.NA], 2025. [https://doi.org/10.48550/arXiv.2504.17899](https://doi.org/10.48550/arXiv.2504.17899)
-
-- Damar Wicaksono, Uwe Hernandez Acosta, Sachin Krishnan Thekke Veettil, Jannik Kissinger, Michael Hecht, *Minterpy: multivariate polynomial interpolation in Python*, Journal of Open Source Software, 2025, 10(109):7702. [https://doi.org/10.21105/joss.07702](https://doi.org/10.21105/joss.07702)
-
-- Phil-Alexander Hofmann, *Implementation and Complexity Analysis of Algorithms for Multivariate Newton Polynomials of p Degree*, Bachelor's Thesis, University of Leipzig, 2024.
-
-- Damar Wicaksono et al. (2025). *Minterpy*. GitHub. [https://github.com/minterpy-project/minterpy](https://github.com/minterpy-project/minterpy)
-
-- Phil-Alexander Hofmann. (2024). *Prototype of lpFun*. GitHub. [https://gitlab.com/philhofmann/implementation-and-complexity-analysis-of-algorithms-for-multivariate-newton-polynomials-of-p-degree](https://gitlab.com/philhofmann/implementation-and-complexity-analysis-of-algorithms-for-multivariate-newton-polynomials-of-p-degree)
-
-## Team and Support
-
-- [Phil-Alexander Hofmann](https://github.com/philippocalippo)
-- [Piotr Held](https://github.com/qbrak)
-- [Damar Wicaksono](https://github.com/damar-wicaksono)
-- [Michael Hecht](https://github.com/mikeypice)
 
 ## Installation
 
-You can install the package directly from GitHub using `pip`:
+Install the package directly from GitHub using `pip`:
 
 ```bash
-    pip install git+https://github.com/phil-hofmann/lpfun.git
+pip install git+https://github.com/phil-hofmann/lpfun.git
 ```
 
-- If you don't have pip installed, follow the instructions [here](https://pip.pypa.io/en/stable/installation/).
-- Environment setup references: [Conda](https://docs.conda.io/projects/conda/en/latest/user-guide/install/index.html), [Poetry](https://python-poetry.org/docs/#installation).
+If you do not have `pip` installed, follow the official installation instructions:
+https://pip.pypa.io/en/stable/installation/.
 
-## Tutorial
+Optional environment setup references:
 
-[tutorial.py](docs/tutorial.py)
+- [Conda](https://docs.conda.io/projects/conda/en/latest/user-guide/install/index.html)
+- [Poetry](https://python-poetry.org/docs/#installation)
 
-### 1. Short Version
+## Quick start
 
 ```python
 import numpy as np
-from lpfun import Transform
+from lpfun import Function
 
-# from lpfun.utils import leja_nodes # NOTE optional
-
-
-# Function f to approximate
 def f(x, y):
     return np.sin(x) * np.cos(y)
 
-
-# Initialise Transform object
-t = Transform(
+# Initialize the function space
+fun = Function(
     spatial_dimension=2,
     polynomial_degree=10,
-    # nodes=leja_nodes # NOTE optional
 )
 
-# Compute function values on the grid
-values_f = f(t.grid[:, 0], t.grid[:, 1])
+# Sample the function on the interpolation grid
+values = f(fun.grid[:, 0], fun.grid[:, 1])
 
-# Perform the fast Newton transform (FNT) to compute the coefficients
-coeffs_f = t.fnt(values_f)
+# Compute polynomial coefficients
+coeffs = fun.interp(values)
 
-# Compute the approximate first derivative in the first coordinate direction
-coeffs_df = t.dx(coeffs_f, i=0, k=1)
+# Reconstruct values on the interpolation grid
+values_rec = fun.eval(coeffs)
 
-# Evaluate the approximate derivative at random points
-random_points = np.random.rand(10, 2)
-random_df = t.eval(coeffs_df, random_points)
+# Differentiate with respect to the first coordinate
+coeffs_dx = fun.diff(coeffs, dim=0, order=1)
 
-# Perform the inverse Newton transform (IFNT) to evaluate the approximate derivative on the grid
-rec_df = t.ifnt(coeffs_df)
+# Evaluate the derivative on the interpolation grid
+values_dx = fun.eval(coeffs_dx)
 ```
 
-### 2. Long Version
+## Detailed example
 
-The `Transform` class enables forward and backward transform, as well as the computation of derivatives and their adjoints.
+The `Function` class provides fast interpolation, evaluation, differentiation,
+and embedding between polynomial spaces.
 
 ```python
 import time
 import numpy as np
-from lpfun import Transform
-from lpfun.utils import leja_nodes
 
-# Initialise Transform object
-t = Transform(
+from lpfun import Function
+from lpfun.basis.nodes import leja_nodes
+
+# Initialize function space
+fun = Function(
     spatial_dimension=3,
     polynomial_degree=20,
-    nodes=leja_nodes,  # NOTE default nodes are cheb2nd_nodes
+    nodes=leja_nodes,  # default nodes are cheb2nd_nodes
 )
 
-# Dimension of the polynomial space
-print(f"N = {len(t)}")
+print(f"Dimension of the polynomial space = {len(fun)}")
 
-
-# Function f to approximate
 def f(x, y, z):
     return np.sin(x) + np.cos(y) + np.exp(z)
 
+# Sample function on the interpolation grid
+values = f(fun.grid[:, 0], fun.grid[:, 1], fun.grid[:, 2])
 
-# Compute function values on the grid
-values_f = f(t.grid[:, 0], t.grid[:, 1], t.grid[:, 2])
-
-# Perform the fast Newton transform (FNT) to compute the coefficients
+# Interpolate
 start = time.time()
-coeffs_f = t.fnt(values_f)
-print("t.fnt:", "{:.2f}".format((time.time() - start) * 1000), "ms")
+coeffs = fun.interp(values)
+print("fun.interp:", "{:.2f}".format((time.time() - start) * 1000), "ms")
 
-# Perform the inverse fast Newton transform (IFNT) to reconstruct values on the grid
+# Reconstruct values on the interpolation grid
 start = time.time()
-rec_f = t.ifnt(coeffs_f)
-print("t.ifnt:", "{:.2f}".format((time.time() - start) * 1000), "ms")
+values_rec = fun.eval(coeffs)
+print("fun.eval:", "{:.2f}".format((time.time() - start) * 1000), "ms")
 
-# Measure the maximum norm error for reconstruction
 print(
-    "max |rec_f - values_f| =",
-    "{:.2e}".format(np.max(np.abs(rec_f - values_f))),
+    "max |values_rec - values| =",
+    "{:.2e}".format(np.max(np.abs(values_rec - values))),
 )
 
-# Evaluate approximate f at random points
-rand_points = np.random.rand(10, 3)
-f_rand = f(rand_points[:, 0], rand_points[:, 1], rand_points[:, 2])
-start = time.time()
-rec_f_rand = t.eval(coeffs_f, rand_points)
-print("t.eval (random points):", "{:.2f}".format((time.time() - start) * 1000), "ms")
-
-# Print the maximum norm error
-print(
-    "|f_random - rec_f_random| =", "{:.2e}".format(np.max(np.abs(f_rand - rec_f_rand)))
-)
-
-
-# Compute the exact derivative
+# Compute exact derivative with respect to z
 def df_dz(x, y, z):
     return np.exp(z)
 
+values_dz = df_dz(fun.grid[:, 0], fun.grid[:, 1], fun.grid[:, 2])
 
-# Compute exact derivative values on the grid
-values_df = df_dz(t.grid[:, 0], t.grid[:, 1], t.grid[:, 2])
-
-# Compute approximate derivative coefficients
+# Differentiate polynomial coefficients
 start = time.time()
-coeffs_df = t.dx(coeffs_f, i=2, k=1)
-print("t.dx:", "{:.2f}".format((time.time() - start) * 1000), "ms")
+coeffs_dz = fun.diff(coeffs, dim=2, order=1)
+print("fun.diff:", "{:.2f}".format((time.time() - start) * 1000), "ms")
 
-# Perform inverse transform on derivative coefficients to reconstruct values on grid
-rec_df = t.ifnt(coeffs_df)
+# Reconstruct derivative values on the interpolation grid
+values_dz_rec = fun.eval(coeffs_dz)
 
-# Print maximum norm error
 print(
-    "max |rec_df - values_df| =",
-    "{:.2e}".format(np.max(np.abs(rec_df - values_df))),
+    "max |values_dz_rec - values_dz| =",
+    "{:.2e}".format(np.max(np.abs(values_dz_rec - values_dz))),
 )
 
-# Evaluate approximate df at random points
-df_rand = df_dz(rand_points[:, 0], rand_points[:, 1], rand_points[:, 2])
-start = time.time()
-rec_df_rand = t.eval(coeffs_df, rand_points)
-print("t.eval (random points):", "{:.2f}".format((time.time() - start) * 1000), "ms")
-
-# Print the maximum norm error
-print(
-    "max |df_rand-rec_df_rand| =",
-    "{:.2e}".format(np.max(np.abs(df_rand - rec_df_rand))),
-)
-
-# Embed the approximate derivative into a bigger polynomial space space
-t_prime = Transform(
+# Embed coefficients into a larger polynomial space
+fun_larger = Function(
     spatial_dimension=3,
     polynomial_degree=30,
-    nodes=leja_nodes, # NOTE default nodes are cheb2nd_nodes
+    nodes=leja_nodes,
     report=False,
 )
-phi = t.embed(t_prime)
-coeffs_df_prime = np.zeros(len(t_prime))
-coeffs_df_prime[phi] = coeffs_df.copy()
+
+embed_idx = fun.embed(fun_larger)
+
+coeffs_larger = np.zeros(len(fun_larger))
+coeffs_larger[embed_idx] = coeffs
 ```
 
-When you run this code, you should see outputs similar to:
+When you run this code, you should see output similar to:
 
-```
+```text
 ---------------------+---------------------
                    Report
 ---------------------+---------------------
@@ -241,41 +167,129 @@ Polynomial Degree    | 20
 lp Degree            | 2.0
 Condition V          | 1.44e+06
 Amount of Coeffs     | 4_662
-Construction         | 2_303.00 ms
-Precompilation       | 16_603.96 ms
+Construction         | 300.25 ms
+Precompilation       | 19.80 ms
 ---------------------+---------------------
 
-N = 4662
-t.fnt: 0.59 ms
-t.ifnt: 0.52 ms
-max |rec_f - values_f| = 7.11e-15
-t.eval (random points): 0.19 ms
-|f_random - rec_f_random| = 8.44e-15
-t.dx: 0.50 ms
-max |rec_df - values_df| = 1.03e-12
-t.eval (random points): 0.19 ms
-max |df_rand-rec_df_rand| = 5.15e-14
+Dimension of the polynomial space = 4662
+fun.interp: 0.55 ms
+fun.eval: 0.53 ms
+max |values_rec - values| = 8.88e-15
+fun.diff: 0.19 ms
+max |values_dz_rec - values_dz| = 5.80e-13
 ```
+
+## API overview
+
+The central object in `lpFun` is the `Function` class. It represents a
+multivariate polynomial function space on a quasi-tensorial interpolation grid
+and provides methods for interpolation, evaluation, differentiation, and
+embedding.
+
+### Construction
+
+```python
+from lpfun import Function
+
+fun = Function(
+    spatial_dimension=2,
+    polynomial_degree=10,
+    lp_degree=2.0,
+)
+```
+
+### Main methods
+
+| Task                               | Method                                | Description                                                                         |
+| ---------------------------------- | ------------------------------------- | ----------------------------------------------------------------------------------- |
+| Interpolate grid values            | `fun.interp(function_values)`         | Computes polynomial coefficients from values sampled on `fun.grid`.                 |
+| Evaluate on the interpolation grid | `fun.eval(coefficients)`              | Reconstructs function values on the interpolation grid from coefficients.           |
+| Evaluate at arbitrary points       | `fun(coefficients, points)`           | Evaluates the polynomial interpolant at user-specified points.                      |
+| Differentiate                      | `fun.diff(coefficients, dim, order)`  | Computes coefficients of a partial derivative.                                      |
+| Apply transposed derivative        | `fun.diffT(coefficients, dim, order)` | Applies the transpose of a partial differentiation operator.                        |
+| Embed into a larger space          | `fun.embed(larger_fun)`               | Returns indices for embedding coefficients into a larger compatible function space. |
+
+### Attributes
+
+| Attribute               | Type            | Description                                                        |
+| ----------------------- | --------------- | ------------------------------------------------------------------ |
+| `fun.spatial_dimension` | `int`           | Spatial dimension `m`, i.e. the number of input variables.         |
+| `fun.polynomial_degree` | `int`           | Maximum polynomial degree `n`.                                     |
+| `fun.lp_degree`         | `float`         | Degree `p` of the l^p polynomial index set.                        |
+| `fun.tube`              | `numpy.ndarray` | Directional polynomial degree constraints.                         |
+| `fun.index_set`         | `numpy.ndarray` | Multi-index set defining the polynomial exponents.                 |
+| `fun.nodes`             | `numpy.ndarray` | One-dimensional interpolation nodes.                               |
+| `fun.grid`              | `numpy.ndarray` | Interpolation grid with shape `(fun.size, fun.spatial_dimension)`. |
+| `fun.leja_order`        | `numpy.ndarray` | Leja ordering used to order the interpolation nodes.               |
+
+### Special methods
+
+| Expression     | Description                                                                                                                    |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `len(fun)`     | Returns the dimension of the polynomial space, i.e. the number of coefficients.                                                |
+| `fun == other` | Checks whether two `Function` objects describe the same polynomial space.                                                      |
+| `repr(fun)`    | Returns a formatted setup report with dimension, polynomial degree, condition number, number of coefficients, and setup times. |
+
+## Citation
+
+[Download BibTeX](./lpFun.bib)
+
+If you use lpFun in any public context, including publications, presentations,
+or derivative software, please cite both the accompanying paper and the
+software.
+
+### Accompanying paper
+
+Phil-Alexander Hofmann, Michael Hecht,
+_Accelerating Multivariate Newton Interpolation on Downward Closed Polynomial Spaces_,
+arXiv:2505.14909 [math.NA], 2025.
+https://doi.org/10.48550/arXiv.2505.14909
+
+### Software
+
+Phil Hofmann. (2025). _lpFun_. GitHub.
+https://github.com/phil-hofmann/lpFun
+
+### Related references
+
+- Michael Hecht, Phil-Alexander Hofmann, Damar Wicaksono, Uwe Hernandez Acosta, Krzysztof Gonciarz, Jannik Kissinger, Vladimir Sivkin, Ivo F. Sbalzarini, _Multivariate Newton interpolation in downward closed spaces reaches the optimal Bernstein–Walsh approximation rate_, IMA Journal of Numerical Analysis, draf137, 2026. https://doi.org/10.1093/imanum/draf137
+
+- Damar Wicaksono, Uwe Hernandez Acosta, Sachin Krishnan Thekke Veettil, Jannik Kissinger, Michael Hecht, _Minterpy: multivariate polynomial interpolation in Python_, Journal of Open Source Software, 2025, 10(109):7702. https://doi.org/10.21105/joss.07702
+
+- Damar Wicaksono et al. (2025). _Minterpy_. GitHub. https://github.com/minterpy-project/minterpy
 
 ## Troubleshooting
 
-If you encounter **segmentation faults**, they are most likely caused by stale [numba](https://numba.pydata.org/) cache files. This happens when source code changes cause compiled functions to shift line numbers, invalidating the cached binaries.
+If you encounter segmentation faults, they are most likely caused by stale
+[numba](https://numba.pydata.org/) cache files. This can happen when source
+code changes invalidate previously compiled cache files.
 
-**Option 1:** Clear the numba cache files:
+### Option 1: Clear numba cache files
 
 ```bash
 find src -name "*.nbi" -o -name "*.nbc" | xargs rm -f
 ```
 
-**Option 2:** Disable caching (useful during development):
+### Option 2: Disable caching during development
 
 ```python
 import lpfun
+
 lpfun.CACHE = False
 ```
 
-Set this **before** importing any other `lpfun` modules (e.g. `Transform`).
+Set this *before* importing any other `lpfun` modules.
 
+## Team and Support
+
+- [Phil-Alexander Hofmann](https://github.com/philippocalippo)
+- [Piotr Held](https://github.com/qbrak)
+- [Damar Wicaksono](https://github.com/damar-wicaksono)
+- [Michael Hecht](https://github.com/mikeypice)
+
+## License
+
+The project is licensed under the [MIT License](LICENSE.txt).
 
 ## Acknowledgments
 
@@ -288,4 +302,7 @@ We deeply acknowledge:
 - [Shidong Jiang](https://scholar.google.com/citations?user=WFM32XwAAAAJ)
 - [Uwe Hernandez Acosta](https://scholar.google.com/citations?user=8TUZP10AAAAJ)
 
-and the support and resources provided by the [Center for Advanced Systems Understanding](https://www.casus.science/) ([Helmholtz-Zentrum Dreden-Rossendorf](https://www.hzdr.de/)) where the development of this project took place.
+and the support and resources provided by the
+[Center for Advanced Systems Understanding](https://www.casus.science/)
+([Helmholtz-Zentrum Dresden-Rossendorf](https://www.hzdr.de/)), where the
+development of this project took place.
