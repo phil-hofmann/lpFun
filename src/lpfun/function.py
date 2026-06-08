@@ -9,7 +9,6 @@ from lpfun.utils import (
     classify,
     is_lower_triangular,
     get_lu,
-    # get_lu_pivot, # TODO
 )
 
 # core
@@ -370,15 +369,15 @@ class Function(AbstractFunction):
         """Warmup the JIT compiler."""
         zeros_N = np.zeros(len(self), dtype=np.float64)
         one_zero = np.zeros((1, self._m), dtype=np.float64)
-        self._spinner_label = "Precompile fast Newton transform"
+        self._spinner_label = "Precompiling interpolation..."
         self.interp(zeros_N)
-        self._spinner_label = "Precompile inverse fast Newton transform"
+        self._spinner_label = "Precompiling evaluation..."
         self.eval(zeros_N)
-        self._spinner_label = "Precompile derivative"
+        self._spinner_label = "Precompiling differentiation..."
         self.diff(zeros_N, 0)
-        self._spinner_label = "Precompile transposed derivative"
-        # self.dxT(zeros_N, 0) # TODO add again
-        self._spinner_label = "Precompile point evaluation"
+        self._spinner_label = "Precompiling transposed differentiation..."
+        self.diffT(zeros_N, 0)
+        self._spinner_label = "Precompiling point evaluation..."
         self(zeros_N, one_zero)
 
     def interp(self, function_values: np.ndarray) -> np.ndarray:

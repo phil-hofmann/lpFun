@@ -21,7 +21,6 @@ def newton2point(
     n: int,
 ) -> float:
     """O(Nmn)"""
-    ### NOTE -- no type conversion
     len_points = len(points)
     values = np.zeros(len_points, dtype=np.float64)
     for l in prange(len_points):
@@ -52,7 +51,6 @@ def chebyshev2point(
     m: int,
     n: int,
 ) -> float:
-    ### NOTE -- no type conversion
     len_points = len(points)
     values = np.zeros(len_points, dtype=np.float64)
     for l in prange(len_points):
@@ -86,7 +84,6 @@ def legendre2point(
     n: int,
 ) -> float:
     """O(Nmn)"""
-    ### NOTE -- no type conversion
     len_points = len(points)
     values = np.zeros(len_points, dtype=np.float64)
     for l in prange(len_points):

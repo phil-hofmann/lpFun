@@ -25,14 +25,12 @@ def binomial(n: int, m: int) -> int:
 @njit
 def classify(m: int, n: int, p: float) -> bool:
     m, n, p = int(m), int(n), float(p)
-    ###
     if m < 1:
         raise ValueError("The parameter dim should be at least 1.")
     if (p <= 0.0 or p > 2.0) and (not p == np.inf):
         raise ValueError(f"The parameter p should be in the range (0, 2] or inf.")
     if n < 0:
         raise ValueError("The parameter degree should be non-negative.")
-    ###
     return True
 
 
@@ -61,13 +59,11 @@ def is_lower_triangular(
 ) -> bool:
     """O(n^2)"""
     M = np.asarray(M).astype(np.float64)
-    ###
     n = len(M)
     for i in range(n):
         for j in range(i + 1, n):
             if not np.abs(M[i, j]) < atol:
                 return False
-    ###
     return True
 
 
@@ -75,7 +71,6 @@ def is_lower_triangular(
 def get_lu(M: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
     """O(n^3)"""
     M = np.asarray(M).astype(np.float64)
-    ###
     n = len(M)
     L = np.eye(n, dtype=np.float64)
     U = M[:, :]
@@ -83,35 +78,4 @@ def get_lu(M: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
         for i in range(j + 1, n):
             L[i, j] = U[i, j] / U[j, j]
             U[i, j:] -= L[i, j] * U[j, j:]
-    ###
     return L, U
-
-
-# @njit # NOTE pivoting is currently conflicting with the FNT
-# def get_lu_pivot(M: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-#     """Stable LU with partial pivoting. Returns P, L, U so that P @ M = L @ U"""
-#     M = np.asarray(M).astype(np.float64)
-#     n = len(M)
-#     L = np.zeros((n, n), dtype=np.float64)
-#     U = M.copy()
-#     P = np.eye(n, dtype=np.float64)
-
-#     for j in range(n):
-#         # Partial pivoting: find pivot row
-#         pivot = j + np.argmax(np.abs(U[j:, j]))
-#         if pivot != j:
-#             # Swap rows in U
-#             U[[j, pivot], :] = U[[pivot, j], :]
-#             # Swap rows in P
-#             P[[j, pivot], :] = P[[pivot, j], :]
-#             # Swap rows in L (columns before j)
-#             if j > 0:
-#                 L[[j, pivot], :j] = L[[pivot, j], :j]
-
-#         # Normal LU step
-#         L[j, j] = 1.0
-#         for i in range(j + 1, n):
-#             L[i, j] = U[i, j] / U[j, j]
-#             U[i, j:] -= L[i, j] * U[j, j:]
-
-#     return P, L, U
