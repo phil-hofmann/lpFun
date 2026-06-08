@@ -1,25 +1,19 @@
-cff-version: 0.2
+cff-version: 1.0
 message: "If you use this software, please cite it as below."
 authors:
   - family-names: "Hofmann"
     given-names: "Phil-Alexander"
-  - family-names: "Wicaksono"
-    given-names: "Damar"
-  - family-names: "Hecht"
-    given-names: "Michael"
 title: "lpFun"
-version: 0.2
-date-released: 2025-09-22
+version: 1.0
+date-released: 2026-06-08
 repository-code: "https://github.com/phil-hofmann/lpFun"
 preferred-citation:
   type: article
   authors:
     - family-names: "Hofmann"
       given-names: "Phil-Alexander"
-    - family-names: "Wicaksono"
-      given-names: "Damar"
     - family-names: "Hecht"
       given-names: "Michael"
-  title: "Fast Newton Transform: Interpolation in Downward Closed Polynomial Spaces"
-  date: "2025"
+  title: "Accelerating Multivariate Newton Interpolation in Downward Closed Polynomial Spaces"
+  date: "2026"
   url: "https://doi.org/10.48550/arXiv.2505.14909"

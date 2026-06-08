@@ -1,5 +1,5 @@
 # Anaconda setup
-name: lpfun 
+name: lpfun
 
 channels:
   - defaults
@@ -8,4 +8,4 @@ dependencies:
   - python>=3.9,<4.0
   - pip
   - pip:
-    - -r requirements.txt 
+      - -r requirements.txt

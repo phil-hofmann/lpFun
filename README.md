@@ -241,7 +241,7 @@ software.
 ### Accompanying paper
 
 Phil-Alexander Hofmann, Michael Hecht,
-_Accelerating Multivariate Newton Interpolation on Downward Closed Polynomial Spaces_,
+_Accelerating Multivariate Newton Interpolation in Downward Closed Polynomial Spaces_,
 arXiv:2505.14909 [math.NA], 2026.
 https://doi.org/10.48550/arXiv.2505.14909
 
