@@ -1,7 +1,7 @@
 <p align="center">
     <img src="docs/social-banner-bg-rounded.png" height="128" width="384"/>
     <br>
-    <i>Python package for fast multivariate polynomial interpolation in lp-type polynomial spaces.</i>
+    <i>Python package for fast multivariate polynomial interpolation in $\ell^p$-type polynomial spaces.</i>
 </p>
 
 <p align="center">
@@ -214,10 +214,10 @@ fun = Function(
 | Attribute               | Type            | Description                                                        |
 | ----------------------- | --------------- | ------------------------------------------------------------------ |
 | `fun.spatial_dimension` | `int`           | Spatial dimension `m`, i.e. the number of input variables.         |
-| `fun.polynomial_degree` | `int`           | Maximum polynomial degree `n`.                                     |
+| `fun.polynomial_degree` | `int`           | Maximum polynomial $\ell^p$ degree `n`.                                     |
 | `fun.lp_degree`         | `float`         | Degree `p` of the l^p polynomial index set.                        |
 | `fun.tube`              | `numpy.ndarray` | Directional polynomial degree constraints.                         |
-| `fun.index_set`         | `numpy.ndarray` | Multi-index set defining the polynomial exponents.                 |
+| `fun.index_set`         | `numpy.ndarray` | Index set defining the polynomial exponents.                 |
 | `fun.nodes`             | `numpy.ndarray` | One-dimensional interpolation nodes.                               |
 | `fun.grid`              | `numpy.ndarray` | Interpolation grid with shape `(fun.size, fun.spatial_dimension)`. |
 | `fun.leja_order`        | `numpy.ndarray` | Leja ordering used to order the interpolation nodes.               |
