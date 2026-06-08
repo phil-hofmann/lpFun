@@ -1,7 +1,7 @@
 <p align="center">
     <img src="docs/social-banner-bg-rounded.png" height="128" width="384"/>
     <br>
-    <i>Python package for fast multivariate polynomial interpolation on quasi-tensorial grids associated with lp-type polynomial spaces.
+    <i>Python package for fast multivariate polynomial interpolation on quasi-tensorial grids associated with lp-type polynomial spaces.</i>
 </p>
 
 <p align="center">
@@ -242,12 +242,12 @@ software.
 
 Phil-Alexander Hofmann, Michael Hecht,
 _Accelerating Multivariate Newton Interpolation on Downward Closed Polynomial Spaces_,
-arXiv:2505.14909 [math.NA], 2025.
+arXiv:2505.14909 [math.NA], 2026.
 https://doi.org/10.48550/arXiv.2505.14909
 
 ### Software
 
-Phil Hofmann. (2025). _lpFun_. GitHub.
+Phil Hofmann. (2026). _lpFun_. GitHub.
 https://github.com/phil-hofmann/lpFun
 
 ### Related references
@@ -278,7 +278,7 @@ import lpfun
 lpfun.CACHE = False
 ```
 
-Set this *before* importing any other `lpfun` modules.
+Set this _before_ importing any other `lpfun` modules.
 
 ## Team and Support
 
