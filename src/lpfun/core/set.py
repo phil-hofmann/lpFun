@@ -229,7 +229,8 @@ def permutations_max(
     """O(m(n+1)^m)"""
     ###
     perm = np.empty((m, (n + 1) ** m), dtype=np.int64)
-    for i in range(m):
+    for dim in range(m):
+        i = m - 1 - dim
         iter_len = (n + 1) ** (m - i)
         step_len = (n + 1) ** i
         ###
@@ -237,7 +238,7 @@ def permutations_max(
         for k in range(step_len):
             ###
             for l in range(iter_len):
-                perm[i, j] = l * step_len + k
+                perm[dim, j] = l * step_len + k
                 j += 1
             ###
         ###

@@ -1,5 +1,6 @@
 import sys
 import time
+import warnings
 import threading
 import numpy as np
 from typing import Literal, Callable
@@ -115,7 +116,7 @@ class Function(AbstractFunction):
     polynomial_degree : int
         The maximum total degree `n` used for the approximation.
     lp_degree : float
-        The `p` degree  of the l^p norm that defining the index set and polynomial space.
+        The parameter `p` of the l^p-type degree used to define the index set and polynomial space.
         The default is 2.0, coressponding to the Euclidean degree
     tube : numpy.ndarray
         Array encoding the directional polynomial degree constraints.
@@ -152,7 +153,7 @@ class Function(AbstractFunction):
             The `p` degree  of the l^p norm that defining the index set and polynomial space.
             The default is 2.0, coressponding to the Euclidean degree
         nodes : callable, optional
-            A callable that takes an integer `n` and returns an array of `n` one-dimensional interpolation nodes.
+            A callable that takes an integer `n` and returns an array of `n` one-dimensional distinct interpolation nodes.
             Typical choices are Chebyshev nodes `cheb2nd_nodes` or Leja nodes `leja_nodes`.
         basis: str, optional
             The polynomial basis used for constructing Vandermonde and differentiation matrices.
@@ -185,13 +186,13 @@ class Function(AbstractFunction):
         Example
         -------
         >>> import numpy as np
-        >>> from lpfun import `Function`
+        >>> from lpfun import Function
         >>> def f(x, y):
         ...     return np.sin(x) * np.cos(y)
         >>> fun = Function(spatial_dimension=2, polynomial_degree=10)
         >>> values = f(fun.grid[:, 0], fun.grid[:, 1])
         >>> coeffs = fun.interp(values)
-        >>> coeffs_dx = fun.diff(coeffs_f, dim=0, order=1)
+        >>> coeffs_dx = fun.diff(coeffs, dim=0, order=1)
         >>> values_dx = fun.eval(coeffs_dx)
         """
 
@@ -271,7 +272,7 @@ class Function(AbstractFunction):
         if is_lower_triangular(Dx.T):
             self._Dx = [Dx, Dx2, Dx3]
         else:
-            Dx_lu = tuple(get_lu(Dx) for Dx in self._Dx_all)
+            Dx_lu = tuple(get_lu(Dx) for Dx in [Dx, Dx2, Dx3])
             self._Dx_lt = tuple(lt for lt, _ in Dx_lu)
             self._Dx_ut = tuple(ut for _, ut in Dx_lu)
 
@@ -342,7 +343,7 @@ class Function(AbstractFunction):
         return self._n
 
     @property
-    def lp_degree(self) -> int:
+    def lp_degree(self) -> float:
         return self._p
 
     @property
@@ -406,7 +407,7 @@ class Function(AbstractFunction):
         >>> def f(x, y):
         ...     return np.sin(x) * np.cos(y)
         >>> fun = Function(spatial_dimension=2, polynomial_degree=10)
-        >>> values = fun(fun.grid[:, 0], fun.grid[:, 1])
+        >>> values = f(fun.grid[:, 0], fun.grid[:, 1])
         >>> coeffs = fun.interp(values)
         """
         function_values = np.asarray(function_values).astype(np.float64)
@@ -492,7 +493,7 @@ class Function(AbstractFunction):
         >>> def f(x, y):
         ...     return np.sin(x) * np.cos(y)
         >>> fun = Function(spatial_dimension=2, polynomial_degree=10)
-        >>> values = fun(fun.grid[:, 0], fun.grid[:, 1])
+        >>> values = f(fun.grid[:, 0], fun.grid[:, 1])
         >>> coeffs = fun.interp(values)
         >>> values_rec = fun.eval(coeffs)
         """
@@ -559,19 +560,19 @@ class Function(AbstractFunction):
         >>> def f(x, y):
         ...     return np.sin(x) * np.cos(y)
         >>> fun = Function(spatial_dimension=2, polynomial_degree=10)
-        >>> values = fun(fun.grid[:, 0], fun.grid[:, 1])
+        >>> values = f(fun.grid[:, 0], fun.grid[:, 1])
         >>> coeffs = fun.interp(values)
         >>> coeffs_dx = fun.diff(coeffs, dim=0)
-        >>> coeffs_dyy = t.diff(coeffs, dim=1, order=2)
+        >>> coeffs_dyy = fun.diff(coeffs, dim=1, order=2)
         """
         coefficients, dim, order = (
             np.asarray(coefficients).astype(np.float64),
             int(dim),
             int(order),
         )
-        if (dim < 0) or (dim > self._m):
+        if (dim < 0) or (dim >= self._m):
             raise ValueError(
-                f"Invalid value for dim. Please choose dim in between 1 and {self._m}."
+                f"Invalid value for dim. Please choose dim in between 0 and {self._m - 1}."
             )
         if not order in [1, 2, 3]:
             raise ValueError("Invalid value for k. Please choose 1, 2 or 3.")
@@ -702,19 +703,36 @@ class Function(AbstractFunction):
         Example
         -------
         >>> import numpy as np
-        >>> from lpfun import Transform
+        >>> from lpfun import Function
         >>> def f(x, y):
         ...     return np.sin(x) * np.cos(y)
         >>> fun = Function(spatial_dimension=2, polynomial_degree=10)
         >>> values = f(fun.grid[:, 0], fun.grid[:, 1])
         >>> coeffs = fun.interp(values)
         >>> pts = np.array([[0.0, 0.0], [0.1, 0.2]])
-        >>> values_at_pts = t.eval(coeffs, pts)
+        >>> values_at_pts = fun(coeffs, pts)
         """
+
         coefficients, points = (
             np.asarray(coefficients).astype(np.float64),
             np.asarray(points).astype(np.float64),
         )
+
+        if points.ndim == 1:
+            points = points.reshape(1, -1)
+
+        if points.shape[1] != self._m:
+            raise ValueError(
+                f"Points must have shape (num_points, {self._m}), "
+                f"but got {points.shape}."
+            )
+
+        if coefficients.shape[0] != len(self._A):
+            raise ValueError(
+                f"Coefficients must have length {len(self._A)}, "
+                f"but got {coefficients.shape[0]}."
+            )
+
         if self._basis == "newton":
             return newton2point(
                 coefficients, self._x, points, self._A, self._m, self._n
@@ -723,6 +741,8 @@ class Function(AbstractFunction):
             return chebyshev2point(coefficients, points, self._A, self._m, self._n)
         elif self._basis == "legendre":
             return legendre2point(coefficients, points, self._A, self._m, self._n)
+        else:
+            raise ValueError(f"Unknown basis: {self._basis}")
 
     def embed(self, larger_fun: AbstractFunction) -> np.ndarray:
         """
@@ -762,7 +782,7 @@ class Function(AbstractFunction):
          >>> larger_fun = Function(spatial_dimension=2, polynomial_degree=8)
          >>> embed_idx = fun.embed(larger_fun)
          >>> coeffs = fun.interp(np.sin(fun.grid[:, 0]))
-         >>> coeffs_larger = np.zeros(len(fun_fine))
+         >>> coeffs_larger = np.zeros(len(larger_fun))
          >>> coeffs_larger[embed_idx] = coeffs
         """
         if larger_fun.spatial_dimension != self.spatial_dimension:
@@ -771,7 +791,7 @@ class Function(AbstractFunction):
             print(self.nodes)
             print(larger_fun.nodes[: self.polynomial_degree + 1])
             raise ValueError(
-                "Nodes mismatch: The nodes of `self` must be the starting nodes of `t`."
+                "Nodes mismatch: The nodes of `self` must be the starting nodes of `larger_fun`."
             )
         if not (
             (larger_fun.lp_degree >= self.lp_degree)
@@ -788,13 +808,12 @@ class Function(AbstractFunction):
     def __eq__(self, value: object) -> bool:
         if not isinstance(value, Function):
             return False
-        if not value.dimension == self.dimension:
-            return False
-        if not value.polynomial_degree == self.polynomial_degree:
-            return False
-        if not value.p == self.p:
-            return False
-        return True
+        return (
+            value.spatial_dimension == self.spatial_dimension
+            and value.polynomial_degree == self.polynomial_degree
+            and value.lp_degree == self.lp_degree
+            and value._basis == self._basis
+        )
 
     def __repr__(self) -> str:
         return (

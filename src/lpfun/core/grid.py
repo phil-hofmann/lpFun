@@ -101,10 +101,7 @@ def get_grid(
     if m == 1:
         return nodes.reshape(-1, 1)
     elif p == np.inf:
-        return np.flip(
-            np.asarray(list(itertools.product(nodes, repeat=m)), dtype=np.float64),
-            axis=1,
-        )
+        return np.asarray(list(itertools.product(nodes, repeat=m)), dtype=np.float64)
     else:
         A = np.asarray(A).astype(np.int64)
         return _get_grid(nodes, A, m)
