@@ -22,8 +22,8 @@ def transform_lt(
     pi: np.ndarray,
     T: np.ndarray,
     cs_T: np.ndarray,
-    V_2: np.ndarray | None = None,
-    cs_V_2: np.ndarray | None = None,
+    V_2: np.ndarray,
+    cs_V_2: np.ndarray,
 ) -> np.ndarray:
     if m == 1:
         return _transform_lt_1d(L, x, n)
@@ -45,8 +45,8 @@ def transform_ut(
     pi: np.ndarray,
     T: np.ndarray,
     cs_T: np.ndarray,
-    V_2: np.ndarray | None = None,
-    cs_V_2: np.ndarray | None = None,
+    V_2: np.ndarray,
+    cs_V_2: np.ndarray,
 ) -> np.ndarray:
     if m == 1:
         return _transform_ut_1d(U, x, n)
@@ -68,8 +68,8 @@ def itransform_lt(
     pi: np.ndarray,
     T: np.ndarray,
     cs_T: np.ndarray,
-    V_2: np.ndarray | None = None,
-    cs_V_2: np.ndarray | None = None,
+    V_2: np.ndarray,
+    cs_V_2: np.ndarray,
 ) -> np.ndarray:
     if m == 1:
         return _itransform_lt_1d(L, x, n)
@@ -91,8 +91,8 @@ def itransform_ut(
     pi: np.ndarray,
     T: np.ndarray,
     cs_T: np.ndarray,
-    V_2: np.ndarray | None = None,
-    cs_V_2: np.ndarray | None = None,
+    V_2: np.ndarray,
+    cs_V_2: np.ndarray,
 ) -> np.ndarray:
     if m == 1:
         return _itransform_ut_1d(U, x, n)
