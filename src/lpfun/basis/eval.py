@@ -1,6 +1,6 @@
 import numpy as np
 import numba as nb
-from lpfun import CACHE
+from lpfun import CACHE, PARALLEL
 
 
 def njit(*args, **kwargs):
@@ -11,7 +11,7 @@ def njit(*args, **kwargs):
 prange = nb.prange
 
 
-@njit(parallel=True)
+@njit(parallel=PARALLEL)
 def newton2point(
     coefficients: np.ndarray,
     nodes: np.ndarray,
@@ -43,7 +43,7 @@ def newton2point(
     return values
 
 
-@njit(parallel=True)
+@njit(parallel=PARALLEL)
 def chebyshev2point(
     coefficients: np.ndarray,
     points: np.ndarray,
@@ -75,7 +75,7 @@ def chebyshev2point(
     return values
 
 
-@njit(parallel=True)
+@njit(parallel=PARALLEL)
 def legendre2point(
     coefficients: np.ndarray,
     points: np.ndarray,
