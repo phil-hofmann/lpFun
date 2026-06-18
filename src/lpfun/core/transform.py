@@ -198,7 +198,7 @@ def _itransform_ut_1d(
     return dot
 
 
-@njit(parallel=PARALLEL)
+@njit
 def _transform_lt_1d(
     L: np.ndarray,
     x: np.ndarray,
@@ -208,7 +208,7 @@ def _transform_lt_1d(
     ### indexing: j, k
     ###
     dot = np.zeros_like(x)
-    for k in prange(n):
+    for k in range(n):
         j = k * (k + 1) // 2
         j_next = j + k + 1
         dot[k] = np.sum(L[j:j_next] * x[: k + 1])
@@ -216,7 +216,7 @@ def _transform_lt_1d(
     return dot
 
 
-@njit(parallel=PARALLEL)
+@njit
 def _transform_ut_1d(
     U: np.ndarray,
     x: np.ndarray,
@@ -226,7 +226,7 @@ def _transform_ut_1d(
     ### indexing: j, k
     ###
     dot = np.zeros_like(x)
-    for k in prange(n):
+    for k in range(n):
         j, k_prime = k * (2 * n - k + 1) // 2, n - k - 1
         j_next = j + k_prime + 1
         dot[k] = np.sum(U[j:j_next] * x[k:])
@@ -350,7 +350,7 @@ def _transform_lt_2d(
         block = x[pos_i:next_pos_i]
         ###
         dot_block = np.zeros(t_i, dtype=np.float64)
-        for k in prange(t_i):
+        for k in range(t_i):
             j = k * (k + 1) // 2
             j_next = j + k + 1
             dot_block[k] = np.sum(L[j:j_next] * block[: k + 1])
@@ -365,7 +365,7 @@ def _transform_lt_2d(
         t_i, pos_i, next_pos_i = T[i], cs_T[i], cs_T[i + 1]
         ###
         dot_block = np.zeros(t_i, dtype=np.float64)
-        for k in prange(i + 1):
+        for k in range(i + 1):
             j, pos_k = i * (i + 1) // 2 + k, cs_T[k]
             dot_block += L[j] * dot_1d[pos_k : pos_k + t_i]
         ###
@@ -392,7 +392,7 @@ def _transform_ut_2d(
         block = x[pos_i:next_pos_i]
         ###
         dot_block = np.zeros(t_i, dtype=np.float64)
-        for k in prange(t_i):
+        for k in range(t_i):
             j = k * N - k * (k - 1) // 2
             j_next = j + t_i - k
             dot_block[k] = np.sum(U[j:j_next] * block[k:])
@@ -407,7 +407,7 @@ def _transform_ut_2d(
         t_i, pos_i, next_pos_i = T[i], cs_T[i], cs_T[i + 1]
         ###
         dot_block = np.zeros(t_i, dtype=np.float64)
-        for k in prange(N - i):
+        for k in range(N - i):
             j = i * N - i * (i - 1) // 2 + k
             t_k, pos_k, next_pos_k = T[i + k], cs_T[i + k], cs_T[i + k + 1]
             dot_block[:t_k] += U[j] * dot_1d[pos_k:next_pos_k]
@@ -455,7 +455,7 @@ def _itransform_lt_3d(
         t_i, pos_i, next_pos_i = T[i], cs_T[i], cs_T[i + 1]
         ###
         j = 0
-        for k in prange(t_i):
+        for k in range(t_i):
             pk = pos_i + k
             t_k, pos_k, next_pos_k = T[pk], cs_T[pk], cs_T[pk + 1]
             ###
@@ -542,7 +542,7 @@ def _itransform_ut_3d(
         delta = N_2 - t_i
         ###
         j = t_i * N_2 - t_i * (t_i - 1) // 2 - delta
-        for k in prange(t_i):
+        for k in range(t_i):
             k_prime = t_i - k - 1
             pk = pos_i + k_prime
             t_k, pos_k, next_pos_k = T[pk], cs_T[pk], cs_T[pk + 1]
@@ -612,7 +612,7 @@ def _transform_lt_3d(
         block = x[pos_i:next_pos_i]
         ###
         dot_block = np.zeros(t_i, dtype=np.float64)
-        for k in prange(t_i):
+        for k in range(t_i):
             j = k * (k + 1) // 2
             j_next = j + k + 1
             dot_block[k] = np.sum(L[j:j_next] * block[: k + 1])
@@ -626,12 +626,12 @@ def _transform_lt_3d(
     for i in prange(N_2):
         t_i, pos_i, vol_i, next_pos_i = T[i], cs_T[i], cs_V_2[i], cs_T[i + 1]
         ###
-        for k in prange(t_i):
+        for k in range(t_i):
             j = k * (k + 1) // 2
             pk = pos_i + k
             t_k, pos_k, next_pos_k = T[pk], cs_T[pk], cs_T[pk + 1]
             ###
-            for l in prange(k + 1):
+            for l in range(k + 1):
                 pos_l = cs_T[pos_i + l]
                 dot_2d[pos_k:next_pos_k] += L[j + l] * dot_1d[pos_l : pos_l + t_k]
             ###
@@ -648,7 +648,7 @@ def _transform_lt_3d(
         sub_t_i = T[pos_i:next_pos_i]
         ###
         dot_block = np.zeros(v_i, dtype=np.float64)
-        for k in prange(i + 1):
+        for k in range(i + 1):
             t_k, pos_k, next_pos_k = T[k], cs_T[k], cs_T[k + 1]
             vol_k, next_vol_k = cs_V_2[k], cs_V_2[k + 1]
             sub_t_k = T[pos_k:next_pos_k]
@@ -688,7 +688,7 @@ def _transform_ut_3d(
         block = x[pos_i:next_pos_i]
         ###
         dot_block = np.zeros(t_i, dtype=np.float64)
-        for k in prange(t_i):
+        for k in range(t_i):
             j = k * N_2 - k * (k - 1) // 2
             j_next = j + t_i - k
             dot_block[k] = np.sum(U[j:j_next] * block[k:])
@@ -703,12 +703,12 @@ def _transform_ut_3d(
         t_i, pos_i, next_pos_i = T[i], cs_T[i], cs_T[i + 1]
         t_i, pos_i, vol_i, next_pos_i = T[i], cs_T[i], cs_V_2[i], cs_T[i + 1]
         ###
-        for k in prange(t_i):
+        for k in range(t_i):
             pk = pos_i + k
             t_k, pos_k = T[pk], cs_T[pk]
             ###
             j = k * N_2 - k * (k - 1) // 2
-            for l in prange(t_i - k):
+            for l in range(t_i - k):
                 pkl = pos_i + k + l
                 t_l, pos_l, next_pos_l = T[pkl], cs_T[pkl], cs_T[pkl + 1]
                 dot_2d[pos_k : pos_k + t_l] += U[j + l] * dot_1d[pos_l:next_pos_l]
@@ -724,7 +724,7 @@ def _transform_ut_3d(
         pos_i, next_pos_i = cs_T[i], cs_T[i + 1]
         v_i, vol_i, next_vol_i = V_2[i], cs_V_2[i], cs_V_2[i + 1]
         ###
-        for k in prange(N_2 - i):
+        for k in range(N_2 - i):
             ik = i + k
             t_k, pos_k = T[ik], cs_T[ik]
             vol_k, next_vol_k = cs_V_2[ik], cs_V_2[ik + 1]
