@@ -79,3 +79,19 @@ def get_lu(M: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
             L[i, j] = U[i, j] / U[j, j]
             U[i, j:] -= L[i, j] * U[j, j:]
     return L, U
+
+
+@njit
+def get_rmo(L: np.ndarray) -> np.ndarray:
+    """O(n^2)"""
+    L = np.asarray(L).astype(np.float64)
+    n = len(L)
+    N = int(n * (n + 1) / 2)
+    result = np.zeros(N, dtype=np.float64)
+    k = 0
+    for i in range(n):
+        for j in range(i + 1):
+            result[k] = L[i, j]
+            k += 1
+    ###
+    return result

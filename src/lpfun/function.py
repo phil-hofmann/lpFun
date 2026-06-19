@@ -10,6 +10,7 @@ from lpfun.utils import (
     classify,
     is_lower_triangular,
     get_lu,
+    get_rmo,
 )
 
 # core
@@ -217,6 +218,18 @@ class Function(AbstractFunction):
         self._T = lp_tube(self._A, self._m, self._n, self._p)
         self._cs_T = np.r_[0, np.cumsum(self._T)]
 
+        if self._m == 3:
+            self._V_2 = np.array(
+                [
+                    np.sum(self._T[self._cs_T[i] : self._cs_T[i + 1]])
+                    for i in range(self._T[0])
+                ],
+                dtype=np.int64,
+            )
+            self._cs_V_2 = np.concatenate(
+                (np.array([0], dtype=np.int64), np.cumsum(self._V_2))
+            )
+
         # threshold
         self._spinner_label = "Checking threshold..."
         if threshold is None:
@@ -263,27 +276,34 @@ class Function(AbstractFunction):
         # LU decompositions
         self._spinner_label = "Computing LU decompositions..."
         lt_Vx = is_lower_triangular(Vx)
+        Vx_L, Vx_U = None, None
 
         if lt_Vx:
-            self._Vx = Vx
+            self._Vx = get_rmo(Vx)
         else:
-            self._Vx_lt, self._Vx_ut = get_lu(Vx)
+            Vx_L, Vx_U = get_lu(Vx)
+            self._Vx_L, self._Vx_U = get_rmo(Vx_L), get_rmo(Vx_U[::-1, ::-1])[::-1]
 
         if is_lower_triangular(Dx.T):
-            self._Dx = [Dx, Dx2, Dx3]
+            self._Dx = tuple(get_rmo(D[::-1, ::-1])[::-1] for D in (Dx, Dx2, Dx3))
+            self._Dx_T = tuple(get_rmo(D.T) for D in (Dx, Dx2, Dx3))
         else:
-            Dx_lu = tuple(get_lu(Dx) for Dx in [Dx, Dx2, Dx3])
-            self._Dx_lt = tuple(lt for lt, _ in Dx_lu)
-            self._Dx_ut = tuple(ut for _, ut in Dx_lu)
+            Dx_LU = tuple(get_lu(Dx) for Dx in [Dx, Dx2, Dx3])
+
+            self._Dx_L = tuple(get_rmo(lt) for lt, _ in Dx_LU)
+            self._Dx_U = tuple(get_rmo(ut[::-1, ::-1])[::-1] for _, ut in Dx_LU)
+
+            self._Dx_T_L = tuple(get_rmo(ut.T) for _, ut in Dx_LU)
+            self._Dx_T_U = tuple(get_rmo(lt.T[::-1, ::-1])[::-1] for lt, _ in Dx_LU)
 
         # Precompute inverses
         self._spinner_label = "Precomputing inverses..."
         if precomputation and lt_Vx:
-            self._inv_Vx = np.linalg.inv(self._Vx)
+            self._inv_Vx = get_rmo(np.linalg.inv(Vx))
 
         if precomputation and not lt_Vx:
-            self._inv_Vx_lt = np.linalg.inv(self._Vx_lt)
-            self._inv_Vx_ut = np.linalg.inv(self._Vx_ut)
+            self._inv_Vx_L = get_rmo(np.linalg.inv(Vx_L))
+            self._inv_Vx_U = get_rmo(np.linalg.inv(Vx_U)[::-1, ::-1])[::-1]
 
         construction_end = time.time()
         self._construction_ms = (construction_end - construction_start) * 1000
@@ -366,6 +386,18 @@ class Function(AbstractFunction):
     def leja_order(self) -> np.ndarray:
         return self._leja_order
 
+    @property
+    def _transform_args(self) -> dict:
+        return {
+            "m": self._m,
+            "n": self._n + 1,
+            "pi": self._pi,
+            "T": self._T,
+            "cs_T": self._cs_T,
+            "V_2": self._V_2 if hasattr(self, "_V_2") else None,
+            "cs_V_2": self._cs_V_2 if hasattr(self, "_cs_V_2") else None,
+        }
+
     def warmup(self) -> None:
         """Warmup the JIT compiler."""
         zeros_N = np.zeros(len(self), dtype=np.float64)
@@ -413,59 +445,25 @@ class Function(AbstractFunction):
         function_values = np.asarray(function_values).astype(np.float64)
         if hasattr(self, "_inv_Vx"):
             return transform_lt(
-                self._inv_Vx,
-                function_values,
-                self._m,
-                self._pi,
-                self._T,
-                self._cs_T,
+                L=self._inv_Vx, x=function_values, **self._transform_args
             )
-        elif hasattr(self, "_inv_Vx_lt") and hasattr(self, "_inv_Vx_ut"):
+        elif hasattr(self, "_inv_Vx_L") and hasattr(self, "_inv_Vx_U"):
             coefficients = transform_lt(
-                self._inv_Vx_lt,
-                function_values,
-                self._m,
-                self._pi,
-                self._T,
-                self._cs_T,
+                L=self._inv_Vx_L, x=function_values, **self._transform_args
             )
             return transform_ut(
-                self._inv_Vx_ut,
-                coefficients,
-                self._m,
-                self._pi,
-                self._T,
-                self._cs_T,
+                U=self._inv_Vx_U, x=coefficients, **self._transform_args
             )
         elif hasattr(self, "_Vx"):
-            return itransform_lt(
-                self._Vx,
-                function_values,
-                self._m,
-                self._pi,
-                self._T,
-                self._cs_T,
-            )
-        elif hasattr(self, "_Vx_lt") and hasattr(self, "_Vx_ut"):
+            return itransform_lt(L=self._Vx, x=function_values, **self._transform_args)
+        elif hasattr(self, "_Vx_L") and hasattr(self, "_Vx_U"):
             coefficients = itransform_lt(
-                self._Vx_lt,
-                function_values,
-                self._m,
-                self._pi,
-                self._T,
-                self._cs_T,
+                L=self._Vx_L, x=function_values, **self._transform_args
             )
-            return itransform_ut(
-                self._Vx_ut,
-                coefficients,
-                self._m,
-                self._pi,
-                self._T,
-                self._cs_T,
-            )
+            return itransform_ut(U=self._Vx_U, x=coefficients, **self._transform_args)
         else:
             raise ValueError(
-                "Unexpected error: _Vx_lt and _Vx_ut must exist for non-lower-triangular case."
+                "Unexpected error: _Vx_L and _Vx_U must exist for non-lower-triangular case."
             )
 
     def eval(self, coefficients: np.ndarray) -> np.ndarray:
@@ -501,29 +499,14 @@ class Function(AbstractFunction):
         function_values = np.zeros(len(self), dtype=np.float64)
         if hasattr(self, "_Vx"):
             function_values = transform_lt(
-                self._Vx,
-                coefficients,
-                self._m,
-                self._pi,
-                self._T,
-                self._cs_T,
+                self._Vx, coefficients, **self._transform_args
             )
-        elif hasattr(self, "_Vx_ut") and hasattr(self, "_Vx_lt"):
+        elif hasattr(self, "_Vx_U") and hasattr(self, "_Vx_L"):
             function_values = transform_ut(
-                self._Vx_ut,
-                coefficients,
-                self._m,
-                self._pi,
-                self._T,
-                self._cs_T,
+                U=self._Vx_U, x=coefficients, **self._transform_args
             )
             function_values = transform_lt(
-                self._Vx_lt,
-                function_values,
-                self._m,
-                self._pi,
-                self._T,
-                self._cs_T,
+                self._Vx_L, function_values, **self._transform_args
             )
         else:
             raise ValueError("Unexpected error.")
@@ -580,21 +563,23 @@ class Function(AbstractFunction):
             return dtransform_ut(
                 D=self._Dx[order - 1],
                 x=coefficients,
+                n=self._n + 1,
                 perm=self._permutations[dim],
                 T=self._T,
                 cs_T=self._cs_T,
             )
-        elif hasattr(self, "_Dx_ut") and hasattr(self, "_Dx_lt"):
+        elif hasattr(self, "_Dx_U") and hasattr(self, "_Dx_L"):
             coefficients = dtransform_lt(
-                D=self._Dx_lt[order - 1],
+                D=self._Dx_L[order - 1],
                 x=coefficients,
                 perm=self._permutations[dim],
                 T=self._T,
                 cs_T=self._cs_T,
             )
             return dtransform_ut(
-                D=self._Dx_ut[order - 1],
+                D=self._Dx_U[order - 1],
                 x=coefficients,
+                n=self._n + 1,
                 perm=self._permutations[dim],
                 T=self._T,
                 cs_T=self._cs_T,
@@ -655,24 +640,25 @@ class Function(AbstractFunction):
 
         if hasattr(self, "_Dx"):
             return dtransform_lt(
-                D=self._Dx[order - 1].T,
+                D=self._Dx_T[order - 1],
                 x=coefficients,
                 perm=self._permutations[dim],
                 T=self._T,
                 cs_T=self._cs_T,
             )
 
-        elif hasattr(self, "_Dx_ut") and hasattr(self, "_Dx_lt"):
+        elif hasattr(self, "_Dx_U") and hasattr(self, "_Dx_L"):
             coefficients = dtransform_lt(
-                D=self._Dx_ut[order - 1].T,
+                D=self._Dx_T_L[order - 1],
                 x=coefficients,
                 perm=self._permutations[dim],
                 T=self._T,
                 cs_T=self._cs_T,
             )
             return dtransform_ut(
-                D=self._Dx_lt[order - 1].T,
+                D=self._Dx_T_U[order - 1],
                 x=coefficients,
+                n=self._n + 1,
                 perm=self._permutations[dim],
                 T=self._T,
                 cs_T=self._cs_T,
