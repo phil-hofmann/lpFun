@@ -34,6 +34,11 @@ from lpfun.core.transform import (
     dtransform_lt,
     dtransform_ut,
 )
+from lpfun.core.blas import (
+    blas_plan,
+    transform_blas,
+    itransform_blas,
+)
 
 # basis
 from lpfun.basis.diff import (
@@ -140,6 +145,7 @@ class Function(AbstractFunction):
         precompilation: bool = True,
         threshold: int = 150_000_000,
         report: bool = True,
+        backend: Literal["auto", "tube", "blas"] = "auto",
     ):
         """
         Initialize the `Function` object for multivariate polynomial interpolation on quasi-tensorial grids.
@@ -173,11 +179,32 @@ class Function(AbstractFunction):
         report:
             If True, print initialization information and setup statistics.
             The default is True.
+        backend : str, optional
+            How the transforms behind `interp` and `eval` are executed. Both choices apply
+            the triangular factors of the 1D Vandermonde matrix along every direction and
+            give the same results up to rounding.
+            "tube" applies them tube by tube (`lpfun.core.transform`) and needs no memory
+            beyond the input and output vectors: it is the low-memory option.
+            "blas" pads the tubes with zeros and applies each factor as dense matrix
+            products (BLAS GEMM, `lpfun.core.blas`): the tubes are grouped into length
+            buckets and padded to the longest length of their bucket, the grouping being
+            the one that minimises a model of the time of the products. It keeps index
+            arrays and work buffers of a few times len(self) entries. With
+            `precomputation=False` it solves by BLAS TRSM. `diff` and `diffT` use the
+            tube-wise kernels in both cases.
+            "auto" picks "blas" for m >= 2. For m = 1 (a single tube, one matrix-vector
+            product) the tube-wise kernels are used whatever the choice.
+            The default is "auto".
 
         Raises
         ------
         ValueError
             If the dimension of the polynomial space exceeds `threshold`.
+        ValueError
+            If `basis` or `backend` is invalid.
+        ValueError
+            If `spatial_dimension`, `polynomial_degree` or `lp_degree` is out of range, or
+            if `nodes` does not return n + 1 distinct nodes.
 
         Notes
         -----
@@ -208,6 +235,12 @@ class Function(AbstractFunction):
         if not basis in ["newton", "chebyshev", "legendre"]:
             self._stop_spinner() if report else None
             raise ValueError("Invalid choice for basis.")
+        if not backend in ["auto", "tube", "blas"]:
+            self._stop_spinner() if report else None
+            raise ValueError("Invalid choice for backend.")
+        if backend == "auto" or self._m == 1:  # m = 1: a single tube
+            backend = "blas" if self._m >= 2 else "tube"
+        self._backend = str(backend)
 
         # index set
         self._spinner_label = "Constructing index set..."
@@ -296,14 +329,35 @@ class Function(AbstractFunction):
             self._Dx_T_L = tuple(get_rmo(ut.T) for _, ut in Dx_LU)
             self._Dx_T_U = tuple(get_rmo(lt.T[::-1, ::-1])[::-1] for lt, _ in Dx_LU)
 
-        # Precompute inverses
+        # Precompute inverses (without them, interp solves by substitution)
         self._spinner_label = "Precomputing inverses..."
-        if precomputation and lt_Vx:
-            self._inv_Vx = get_rmo(np.linalg.inv(Vx))
+        inv_factors = None
+        if precomputation:
+            if lt_Vx:
+                inv_factors = (np.linalg.inv(Vx),)
+            else:
+                inv_factors = (np.linalg.inv(Vx_L), np.linalg.inv(Vx_U))
 
-        if precomputation and not lt_Vx:
-            self._inv_Vx_L = get_rmo(np.linalg.inv(Vx_L))
-            self._inv_Vx_U = get_rmo(np.linalg.inv(Vx_U)[::-1, ::-1])[::-1]
+        if inv_factors is not None and self._backend == "tube":
+            if lt_Vx:
+                self._inv_Vx = get_rmo(inv_factors[0])
+            else:
+                self._inv_Vx_L = get_rmo(inv_factors[0])
+                self._inv_Vx_U = get_rmo(inv_factors[1][::-1, ::-1])[::-1]
+
+        # Dense factors for the BLAS backend, in the order of application: `_blas_fwd`
+        # for eval; for interp either `_blas_solve`, the forward factors in Fortran order
+        # (applied by solves), or `_blas_inv`, the inverses (applied by products)
+        if self._backend == "blas":
+            lower_upper = (np.tril(Vx),) if lt_Vx else (np.tril(Vx_L), np.triu(Vx_U))
+            self._blas_fwd = tuple(np.ascontiguousarray(M) for M in lower_upper[::-1])
+            self._blas_trsm = inv_factors is None
+            if self._blas_trsm:
+                self._blas_solve = tuple(np.asfortranarray(M) for M in lower_upper)
+            else:
+                self._blas_inv = (np.tril(inv_factors[0]),) + tuple(
+                    np.triu(M) for M in inv_factors[1:]
+                )
 
         construction_end = time.time()
         self._construction_ms = (construction_end - construction_start) * 1000
@@ -315,6 +369,13 @@ class Function(AbstractFunction):
             self._permutations = permutations_max(self._m, self._n)
         else:
             self._permutations = permutations(len(self), self._m, self._pi)
+
+        # BLAS plan (needs the transposition), counted as construction
+        if self._backend == "blas":
+            self._spinner_label = "Constructing BLAS plan..."
+            plan_start = time.time()
+            self._blas_args = blas_plan(self._T, self._cs_T, self._pi, self._m)
+            self._construction_ms += (time.time() - plan_start) * 1000
 
         # warmup JIT compiler
         self._spinner_label = "Precompiling jit functions..."
@@ -334,7 +395,7 @@ class Function(AbstractFunction):
     def _start_spinner(self):
         self._loading = True
         self._spinner_label = "Initializing..."
-        self._spinner_thread = threading.Thread(target=self._show_spinner)
+        self._spinner_thread = threading.Thread(target=self._show_spinner, daemon=True)
         self._spinner_thread.start()
 
     def _show_spinner(self):
@@ -385,6 +446,17 @@ class Function(AbstractFunction):
     @property
     def leja_order(self) -> np.ndarray:
         return self._leja_order
+
+    @property
+    def backend(self) -> str:
+        """How `interp` and `eval` are executed, "tube" or "blas"."""
+        return self._backend
+
+    def _check_length(self, x: np.ndarray, name: str) -> np.ndarray:
+        x = np.asarray(x, dtype=np.float64)  # no copy for float64 input (the kernels never write it)
+        if x.shape != (len(self),):
+            raise ValueError(f"{name} must have shape ({len(self)},), but got {x.shape}.")
+        return x
 
     @property
     def _transform_args(self) -> dict:
@@ -442,7 +514,11 @@ class Function(AbstractFunction):
         >>> values = f(fun.grid[:, 0], fun.grid[:, 1])
         >>> coeffs = fun.interp(values)
         """
-        function_values = np.asarray(function_values).astype(np.float64)
+        function_values = self._check_length(function_values, "function_values")
+        if self._backend == "blas":
+            if self._blas_trsm:
+                return itransform_blas(self._blas_solve, function_values, **self._blas_args)
+            return transform_blas(self._blas_inv, function_values, **self._blas_args)
         if hasattr(self, "_inv_Vx"):
             return transform_lt(
                 L=self._inv_Vx, x=function_values, **self._transform_args
@@ -495,7 +571,9 @@ class Function(AbstractFunction):
         >>> coeffs = fun.interp(values)
         >>> values_rec = fun.eval(coeffs)
         """
-        coefficients = np.asarray(coefficients).astype(np.float64)
+        coefficients = self._check_length(coefficients, "coefficients")
+        if self._backend == "blas":
+            return transform_blas(self._blas_fwd, coefficients, **self._blas_args)
         function_values = np.zeros(len(self), dtype=np.float64)
         if hasattr(self, "_Vx"):
             function_values = transform_lt(
@@ -549,7 +627,7 @@ class Function(AbstractFunction):
         >>> coeffs_dyy = fun.diff(coeffs, dim=1, order=2)
         """
         coefficients, dim, order = (
-            np.asarray(coefficients).astype(np.float64),
+            self._check_length(coefficients, "coefficients"),
             int(dim),
             int(order),
         )
@@ -625,7 +703,7 @@ class Function(AbstractFunction):
         >>> coeffs_dyyy_T = fun.diffT(coeffs, dim=1, order=3)
         """
         coefficients, dim, order = (
-            np.asarray(coefficients).astype(np.float64),
+            self._check_length(coefficients, "coefficients"),
             int(dim),
             int(order),
         )
@@ -809,6 +887,7 @@ class Function(AbstractFunction):
             f"{'Spatial Dimension':<20} | {self._m}\n"
             f"{'Polynomial Degree':<20} | {self._n:_}\n"
             f"{'l^p Degree':<20} | {self._p}\n"
+            f"{'Backend':<20} | {self._backend}\n"
             f"{'Condition V':<20} | {self._condition_number:.2e}\n"
             f"{'Amount of Coeffs':<20} | {len(self):_}\n"
             f"{'Construction':<20} | {self._construction_ms:_.2f} ms\n"
