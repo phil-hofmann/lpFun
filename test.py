@@ -162,3 +162,41 @@ def test_call(m: int, p: float, ba: str, pr: bool):
         reconstruction = fun(coeffs, points)
         eps = np.max(np.abs(reconstruction - function_value))
         assert eps < 1e-6
+
+
+# Leja ordering: deterministic tie-breaking, no underflow for large node sets
+
+LEJA_ORDER_REFERENCE = {
+    9: [0, 8, 4, 2, 6, 3, 5, 1, 7],
+    17: [0, 16, 8, 5, 12, 3, 10, 14, 6, 2, 11, 7, 13, 4, 9, 1, 15],
+    33: [0, 32, 16, 10, 23, 6, 27, 19, 13, 4, 25, 21, 8, 29, 14, 2, 18, 30, 11, 5, 24, 17, 9, 28, 3, 22, 15, 26, 7, 12, 20, 1, 31],
+}
+
+
+@pytest.mark.parametrize("n", sorted(LEJA_ORDER_REFERENCE))
+def test_leja_order_deterministic(n: int):
+    x = lpfun.basis.nodes.cheb2nd_nodes(n)
+    order = lpfun.core.grid.get_leja_order(x)
+    assert list(order) == LEJA_ORDER_REFERENCE[n]
+    # ties between x and -x are broken towards the larger node
+    assert x[order[3]] > 0
+
+
+def test_leja_order_no_underflow():
+    # the raw product of distances underflows after ~1000 picks on this grid,
+    # after which a naive implementation degenerates into ascending array order
+    x = lpfun.basis.nodes.cheb2nd_nodes(25_000)
+    order = lpfun.core.grid.get_leja_order(x, limit=2000)
+    assert len(np.unique(order)) == 2000
+    assert not np.all(np.diff(order[1100:]) > 0)
+
+
+def test_leja_order_large_degree_interp():
+    # beyond ~1082 nodes the old ordering degenerated and the (non-pivoted) LU of the
+    # Vandermonde matrix blew up: at n = 1500 the 1D interp error was ~1e18
+    n = 1500
+    fun = lpfun.Function(1, n, basis="chebyshev", precompilation=False, report=False)
+    lidx = np.rint(np.arccos(fun.nodes) * n / np.pi).astype(np.int64)
+    V = np.cos((np.outer(lidx, np.arange(n + 1)) % (2 * n)) * np.pi / n)  # T_k at the exact nodes
+    c = np.random.default_rng(n).uniform(-1, 1, n + 1)
+    assert np.abs(fun.interp(V @ c) - c).max() <= 5e-12

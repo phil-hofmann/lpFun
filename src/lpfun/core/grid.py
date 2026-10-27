@@ -11,10 +11,20 @@ def njit(*args, **kwargs):
 
 # prange = nb.prange
 
+# tolerance on the log-product of distances below which two candidates tie
+LEJA_TOL = 1e-9
+
 
 @njit
 def get_leja_order(nodes: np.ndarray, limit: int = -1) -> np.ndarray:
-    """O(n^3)"""
+    """O(n^2)
+
+    Greedy Leja order: start at the node of largest modulus, then repeatedly pick
+    the node maximizing the product of distances to the nodes chosen so far. The
+    product is accumulated as a sum of logarithms, so it cannot underflow. Ties
+    (e.g. x and -x on a symmetric grid, equal up to rounding) are broken towards
+    the first candidate in array order, i.e. the larger node on a descending grid.
+    """
     n = nodes.shape[0]
     if n == 0:
         return None
@@ -37,31 +47,34 @@ def get_leja_order(nodes: np.ndarray, limit: int = -1) -> np.ndarray:
     order[0] = max_idx
     chosen[max_idx] = True
 
-    # product of distances for unchosen nodes (float64)
-    prod_dist = np.zeros(n, dtype=np.float64)
+    # log-product of distances for unchosen nodes
+    log_dist = np.zeros(n, dtype=np.float64)
     for i in range(n):
-        prod_dist[i] = np.abs(nodes[i] - nodes[max_idx])
+        log_dist[i] = np.log(np.abs(nodes[i] - nodes[max_idx]))
 
     # iterate to choose remaining Leja points
     for k in range(1, limit):
-        best_idx = -1
-        best_val = -1.0
-
-        # find best unchosen index
+        # best score among unchosen nodes
+        best_val = -np.inf
         for i in range(n):
-            if not chosen[i]:
-                if prod_dist[i] > best_val:
-                    best_val = prod_dist[i]
-                    best_idx = i
+            if not chosen[i] and log_dist[i] > best_val:
+                best_val = log_dist[i]
+
+        # first unchosen node within tolerance of the best score
+        best_idx = -1
+        for i in range(n):
+            if not chosen[i] and log_dist[i] >= best_val - LEJA_TOL:
+                best_idx = i
+                break
 
         # assign chosen
         order[k] = best_idx
         chosen[best_idx] = True
 
-        # update products only for unchosen nodes
+        # update scores only for unchosen nodes
         for i in range(n):
             if not chosen[i]:
-                prod_dist[i] = prod_dist[i] * np.abs(nodes[i] - nodes[best_idx])
+                log_dist[i] += np.log(np.abs(nodes[i] - nodes[best_idx]))
 
     return order[:limit]
 
