@@ -36,9 +36,9 @@ def chebyshev2lagrange(x: np.ndarray) -> np.ndarray:
     Vx = np.zeros((n, n), dtype=np.float64)
     for i in range(n):
         Vx[i, 0] = 1.0
-        if n > 0:
+        if n > 1:
             Vx[i, 1] = x[i]
-        for j in range(2, n + 1):
+        for j in range(2, n):  # columns 0..n-1 (the former `n + 1` wrote one past the row)
             Vx[i, j] = 2 * x[i] * Vx[i, j - 1] - Vx[i, j - 2]
     return Vx
 
