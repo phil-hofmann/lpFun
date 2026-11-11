@@ -16,6 +16,10 @@ triangular one reads them as the zeros they hold. A bucket stores its tubes as t
 of one contiguous block. After each direction a gather brings the next direction to the
 columns and refills every pad from a zero slot.
 
+`transform_blas` and `itransform_blas` apply their matrices along every direction, for
+`interp` and `eval`. `dtransform_blas` applies one matrix along a single direction, for
+`diff` and `diffT`: the gathers rotate to that direction and on around the cycle.
+
 The buckets are chosen by `optimal_bucket_lengths`, which minimises a model of the time
 of the products; the solves use the same buckets. Its two constants `CALL` and `W0`
 belong to the machine and its BLAS library; the results do not depend on them. To tune
@@ -208,6 +212,37 @@ def itransform_blas(
     _solve_blocks(*last, bx)
     dot = np.empty(len(padpos), dtype=np.float64)
     _gather(X, final, dot)  # the last rotation, straight into the output
+    return dot
+
+
+def dtransform_blas(
+    D: np.ndarray,
+    x: np.ndarray,
+    dim: int,
+    m: int,
+    buckets: np.ndarray,
+    padpos: np.ndarray,
+    between: np.ndarray,
+    final: np.ndarray,
+) -> np.ndarray:
+    """O(S n + m S), S = padded size
+
+    Product with the triangular matrix `D` (dense, C order) along the direction `dim` only.
+    """
+    rotations = (dim + 1) % m  # gathers that bring the direction `dim` to the columns
+    X, B = _buffers(x, padpos, len(between))
+    for _ in range(rotations):
+        _gather(X, between, B)
+        X, B = B, X
+    _multiply_blocks(D, _blocks(buckets, X), _blocks(buckets, B))
+    dot = np.empty(len(padpos), dtype=np.float64)
+    if rotations == 0:
+        _gather(B, padpos, dot)  # no rotation to undo: read the entries from their slots
+        return dot
+    for _ in range(m - rotations - 1):  # the rest of the cycle, up to its last rotation
+        _gather(B, between, X)
+        X, B = B, X
+    _gather(B, final, dot)  # the last rotation, straight into the output
     return dot
 
 

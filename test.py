@@ -235,6 +235,19 @@ def test_function_blas_invalid_backend():
         lpfun.Function(2, 3, backend="lapack", precompilation=False, report=False)
 
 
+@pytest.mark.parametrize("m, p, ba", list(product([2, 3], ps, bases)))
+def test_diff_blas(m: int, p: float, ba: str):
+    # for m = 2 and m = 3 the BLAS backend also differentiates: same results as tube-wise
+    kw = dict(basis=ba, precompilation=False, report=False)
+    fun_blas = lpfun.Function(m, 7, p, backend="blas", **kw)
+    fun_tube = lpfun.Function(m, 7, p, backend="tube", **kw)
+    x = np.random.default_rng(m).uniform(-1, 1, len(fun_blas))
+    for dim, order in product(range(m), [1, 2, 3]):
+        for T in ("diff", "diffT"):
+            got, ref = getattr(fun_blas, T)(x, dim, order), getattr(fun_tube, T)(x, dim, order)
+            np.testing.assert_allclose(got, ref, rtol=1e-10, atol=1e-10 * max(1.0, np.abs(ref).max()))
+
+
 @pytest.mark.parametrize("pr", precomputation)
 def test_function_blas_state(pr: bool):
     # the plan and the factors exist for both precomputation values; "tube" keeps no BLAS
@@ -339,6 +352,28 @@ def test_blas_transforms(m: int):
     # a single lower factor (the Newton case): the solve against the product with the inverse
     solved = itransform_blas((np.asfortranarray(L),), x, **plan)
     np.testing.assert_allclose(solved, transform_blas((inv_L,), x, **plan), rtol=1e-10, atol=1e-12)
+
+
+@pytest.mark.parametrize("m, p", list(product([2, 3, 4, 5], [1.0, 2.0])))
+def test_dtransform_blas(m: int, p: float):
+    """`dtransform_blas` along every direction against the tube-wise kernels, for an upper
+    and a lower triangular matrix; `Function` uses it for m <= 3 only."""
+    from lpfun.core.blas import blas_plan, dtransform_blas
+    n = 7
+    kw = dict(basis="chebyshev", precompilation=False, report=False)
+    fun = lpfun.Function(m, n, p, backend="blas", **kw)
+    tube = lpfun.Function(m, n, p, backend="tube", **kw)
+    assert hasattr(fun, "_blas_Dx") == (m <= 3) and not hasattr(tube, "_blas_Dx")
+    plan = blas_plan(fun._T, fun._cs_T, fun._pi, m)
+    x = np.random.default_rng(m).uniform(-1, 1, len(fun))
+    D = np.triu(lpfun.basis.diff.chebyshev2derivative(fun.nodes))
+    for dim in range(m):
+        ref = tube.diff(x, dim)
+        got = dtransform_blas(D, x, dim, **plan)
+        np.testing.assert_allclose(got, ref, rtol=1e-11, atol=1e-11 * np.abs(ref).max())
+        ref = tube.diffT(x, dim)
+        got = dtransform_blas(np.ascontiguousarray(D.T), x, dim, **plan)
+        np.testing.assert_allclose(got, ref, rtol=1e-11, atol=1e-11 * np.abs(ref).max())
 
 
 @pytest.mark.parametrize("call, w0", [(50_000, 32), (50_000, 0), (0, 32), (300, 3), (2_000, 100), (0, 0)])

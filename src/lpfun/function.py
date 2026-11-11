@@ -38,6 +38,7 @@ from lpfun.core.blas import (
     blas_plan,
     transform_blas,
     itransform_blas,
+    dtransform_blas,
 )
 
 # basis
@@ -180,9 +181,10 @@ class Function(AbstractFunction):
             If True, print initialization information and setup statistics.
             The default is True.
         backend : str, optional
-            How the transforms behind `interp` and `eval` are executed. Both choices apply
-            the triangular factors of the 1D Vandermonde matrix along every direction and
-            give the same results up to rounding.
+            How the transforms behind `interp`, `eval`, `diff` and `diffT` are executed. Both
+            choices apply triangular matrices along the directions (the factors of the 1D
+            Vandermonde matrix along every direction, or the differentiation matrix along
+            one) and give the same results up to rounding.
             "tube" applies them tube by tube (`lpfun.core.transform`) and needs no memory
             beyond the input and output vectors: it is the low-memory option.
             "blas" pads the tubes with zeros and applies each factor as dense matrix
@@ -190,8 +192,9 @@ class Function(AbstractFunction):
             buckets and padded to the longest length of their bucket, the grouping being
             the one that minimises a model of the time of the products. It keeps index
             arrays and work buffers of a few times len(self) entries. With
-            `precomputation=False` it solves by BLAS TRSM. `diff` and `diffT` use the
-            tube-wise kernels in both cases.
+            `precomputation=False` it solves by BLAS TRSM. `diff` and `diffT` use it for
+            m = 2 and m = 3, where the tubes are long; for m >= 4 they use the tube-wise
+            kernels, which are as fast there.
             "auto" picks "blas" for m >= 2. For m = 1 (a single tube, one matrix-vector
             product) the tube-wise kernels are used whatever the choice.
             The default is "auto".
@@ -358,6 +361,11 @@ class Function(AbstractFunction):
                 self._blas_inv = (np.tril(inv_factors[0]),) + tuple(
                     np.triu(M) for M in inv_factors[1:]
                 )
+            # dense differentiation matrices for diff and diffT: along a single direction
+            # the products pay for the rotations only while the tubes are long (m <= 3)
+            if self._m <= 3 and hasattr(self, "_Dx"):
+                self._blas_Dx = tuple(np.triu(D) for D in (Dx, Dx2, Dx3))
+                self._blas_Dx_T = tuple(np.ascontiguousarray(D.T) for D in self._blas_Dx)
 
         construction_end = time.time()
         self._construction_ms = (construction_end - construction_start) * 1000
@@ -449,7 +457,7 @@ class Function(AbstractFunction):
 
     @property
     def backend(self) -> str:
-        """How `interp` and `eval` are executed, "tube" or "blas"."""
+        """How `interp`, `eval`, `diff` and `diffT` are executed, "tube" or "blas"."""
         return self._backend
 
     def _check_length(self, x: np.ndarray, name: str) -> np.ndarray:
@@ -637,6 +645,9 @@ class Function(AbstractFunction):
             )
         if not order in [1, 2, 3]:
             raise ValueError("Invalid value for k. Please choose 1, 2 or 3.")
+        if hasattr(self, "_blas_Dx"):
+            D = self._blas_Dx[order - 1]
+            return dtransform_blas(D, coefficients, dim, **self._blas_args)
         if hasattr(self, "_Dx"):
             return dtransform_ut(
                 D=self._Dx[order - 1],
@@ -716,6 +727,9 @@ class Function(AbstractFunction):
         if order not in [1, 2, 3]:
             raise ValueError("Invalid value for order. Please choose 1, 2, or 3.")
 
+        if hasattr(self, "_blas_Dx"):
+            D = self._blas_Dx_T[order - 1]
+            return dtransform_blas(D, coefficients, dim, **self._blas_args)
         if hasattr(self, "_Dx"):
             return dtransform_lt(
                 D=self._Dx_T[order - 1],
