@@ -164,6 +164,79 @@ def test_call(m: int, p: float, ba: str, pr: bool):
         assert eps < 1e-6
 
 
+# Chebyshev basis on the Chebyshev-Lobatto points: the exact-angle Vandermonde matrix
+
+KW = dict(precompilation=False, report=False)
+
+
+def _lidx(x: np.ndarray) -> np.ndarray:
+    """Lobatto indices of the (reordered) Chebyshev-Lobatto points x = cos(l pi / n)."""
+    n = len(x) - 1
+    return np.rint(np.arccos(np.clip(x, -1, 1)) * n / np.pi).astype(np.int64)
+
+
+@pytest.mark.parametrize("n", [1, 2, 3, 5, 8, 12, 32, 33, 100])
+def test_chebyshev2lagrange_lobatto(n: int):
+    x = lpfun.basis.nodes.cheb2nd_nodes(n + 1)
+    x = x[lpfun.core.grid.get_leja_order(x)]
+    lidx = _lidx(x)
+    V = lpfun.basis.vander.chebyshev2lagrange_lobatto(lidx, n)
+    k = np.arange(n + 1)
+    # reference: angles reduced to [0, pi] in integers, then one cosine
+    r = np.outer(lidx, k) % (2 * n)
+    r = np.where(r > n, 2 * n - r, r)
+    np.testing.assert_allclose(V, np.cos(r * np.pi / n), rtol=0, atol=5e-16)
+    np.testing.assert_allclose(V, lpfun.basis.vander.chebyshev2lagrange(x), rtol=0, atol=1e-13 * max(1, n / 8))
+
+
+@pytest.mark.parametrize("n", list(range(1, 41)) + [64, 100, 257])
+def test_lobatto_detection(n: int):
+    # the default nodes in Leja order are detected as the Chebyshev-Lobatto points
+    fun = lpfun.Function(1, n, basis="chebyshev", **KW)
+    lidx = lpfun.function._lobatto_indices(fun.nodes)
+    assert lidx is not None and np.array_equal(np.sort(lidx), np.arange(n + 1))
+    assert np.array_equal(fun.nodes, np.cos(lidx * np.pi / n))
+
+
+def test_lobatto_detection_negative():
+    detect = lpfun.function._lobatto_indices
+    # degree 0: a single node, nothing to detect
+    assert detect(np.zeros(1)) is None
+    # Leja nodes are Lobatto points of a finer grid (cos(k pi / 24999)), not of degree n
+    assert detect(lpfun.basis.nodes.leja_nodes(10)) is None
+    # Chebyshev points of the first kind
+    assert detect(np.cos((2 * np.arange(10) + 1) * np.pi / 20)) is None
+    # perturbed Lobatto points beyond the tolerance (1e-15): the factors would be those of the
+    # exact points while the grid is perturbed
+    for eps in (1e-9, 1e-12):
+        assert detect(lpfun.basis.nodes.cheb2nd_nodes(10) * (1 - eps)) is None
+    # the same points from another formula are accepted
+    assert detect(np.sin(np.pi / 2 - np.arange(10) * np.pi / 9)) is not None
+
+
+@pytest.mark.parametrize("m, n, p", list(product([1, 2, 3, 4], [1, 4, 7, 8], ps)))
+def test_chebyshev_roundtrip(m: int, n: int, p: float):
+    # Chebyshev basis on the default nodes (exact-angle factors): eval inverts interp
+    rng = np.random.default_rng(1)
+    for pr in precomputation:
+        fun = lpfun.Function(m, n, p, basis="chebyshev", precomputation=pr, **KW)
+        f = rng.uniform(-1, 1, len(fun))
+        np.testing.assert_allclose(fun.eval(fun.interp(f)), f, rtol=0, atol=1e-12)
+
+
+@pytest.mark.parametrize("n", [5, 16, 40])
+def test_lu_1d_exact_vs_dense(n: int):
+    # 1D: interp equals the dense solve with the exact-node Vandermonde to ~eps*cond
+    probe = lpfun.Function(1, n, basis="chebyshev", **KW)
+    lidx = _lidx(probe.nodes)
+    V = np.cos((np.outer(lidx, np.arange(n + 1)) % (2 * n)) * np.pi / n)
+    f = np.random.default_rng(n).uniform(-1, 1, n + 1)
+    c_dense = np.linalg.solve(V, f)
+    for pr in precomputation:
+        fun = lpfun.Function(1, n, basis="chebyshev", precomputation=pr, **KW)
+        np.testing.assert_allclose(fun.interp(f), c_dense, rtol=0, atol=1e-13 * np.abs(c_dense).max())
+
+
 # Leja ordering: deterministic tie-breaking, no underflow for large node sets
 
 LEJA_ORDER_REFERENCE = {
