@@ -198,6 +198,15 @@ fun = Function(
 )
 ```
 
+The option `backend` chooses how `interp`, `eval`, `diff` and `diffT` are executed. Both
+backends give the same results up to rounding.
+
+| `backend`          | Description                                                                                       |
+| ------------------ | ------------------------------------------------------------------------------------------------- |
+| `"auto"` (default) | `"blas"` for spatial dimension 2 and higher, `"tube"` in one dimension.                           |
+| `"tube"`           | Applies the triangular factors tube by tube. Needs no memory beyond the input and output vectors. |
+| `"blas"`           | Pads the tubes and applies the factors as dense BLAS products. Faster, and uses more memory.      |
+
 ### Main methods
 
 | Task                               | Method                                | Description                                                                         |
@@ -221,6 +230,7 @@ fun = Function(
 | `fun.nodes`             | `numpy.ndarray` | One-dimensional interpolation nodes.                               |
 | `fun.grid`              | `numpy.ndarray` | Interpolation grid with shape `(fun.size, fun.spatial_dimension)`. |
 | `fun.leja_order`        | `numpy.ndarray` | Leja ordering used to order the interpolation nodes.               |
+| `fun.backend`           | `str`           | Backend in use, `"tube"` or `"blas"`.                              |
 
 ### Special methods
 
