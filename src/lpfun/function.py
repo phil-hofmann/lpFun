@@ -10,7 +10,6 @@ from lpfun.utils import (
     classify,
     is_lower_triangular,
     get_lu,
-    get_rmo,
 )
 
 # core
@@ -27,12 +26,10 @@ from lpfun.core.set import (
     permutations_max,
 )
 from lpfun.core.transform import (
-    transform_lt,
-    transform_ut,
-    itransform_lt,
-    itransform_ut,
-    dtransform_lt,
-    dtransform_ut,
+    transform_plan,
+    transform,
+    itransform,
+    dtransform,
 )
 
 # basis
@@ -140,6 +137,7 @@ class Function(AbstractFunction):
         precompilation: bool = True,
         threshold: int = 150_000_000,
         report: bool = True,
+        backend: Literal["auto", "tube", "blas"] = "auto",
     ):
         """
         Initialize the `Function` object for multivariate polynomial interpolation on quasi-tensorial grids.
@@ -173,11 +171,32 @@ class Function(AbstractFunction):
         report:
             If True, print initialization information and setup statistics.
             The default is True.
+        backend : str, optional
+            How the transforms behind `interp`, `eval`, `diff` and `diffT` are executed. Both
+            choices apply triangular matrices along the directions (the factors of the 1D
+            Vandermonde matrix along every direction, or the differentiation matrix along
+            one) and give the same results up to rounding.
+            "tube" applies them tube by tube, by loops over the tubes, without padding.
+            "blas" pads the tubes with zeros and applies each matrix by dense BLAS
+            routines (GEMM, or TRSM with `precomputation=False`): the tubes are grouped
+            into length buckets and padded to the longest length of their bucket, the
+            grouping being the one that minimises a model of the time of the products. It
+            is faster and its work buffers are larger by the padding.
+            Both run on the same layout and the same driver (`lpfun.core.transform`): for
+            "tube" every tube is a bucket of its own.
+            "auto" picks "blas" for m >= 2. For m = 1 (a single tube, one matrix-vector
+            product) the tube-wise kernel is used whatever the choice.
+            The default is "auto".
 
         Raises
         ------
         ValueError
             If the dimension of the polynomial space exceeds `threshold`.
+        ValueError
+            If `basis` or `backend` is invalid.
+        ValueError
+            If `spatial_dimension`, `polynomial_degree` or `lp_degree` is out of range, or
+            if `nodes` does not return n + 1 distinct nodes.
 
         Notes
         -----
@@ -208,6 +227,12 @@ class Function(AbstractFunction):
         if not basis in ["newton", "chebyshev", "legendre"]:
             self._stop_spinner() if report else None
             raise ValueError("Invalid choice for basis.")
+        if not backend in ["auto", "tube", "blas"]:
+            self._stop_spinner() if report else None
+            raise ValueError("Invalid choice for backend.")
+        if backend == "auto" or self._m == 1:  # m = 1: a single tube
+            backend = "blas" if self._m >= 2 else "tube"
+        self._backend = str(backend)
 
         # index set
         self._spinner_label = "Constructing index set..."
@@ -217,18 +242,6 @@ class Function(AbstractFunction):
         self._spinner_label = "Constructing tube size projection..."
         self._T = lp_tube(self._A, self._m, self._n, self._p)
         self._cs_T = np.r_[0, np.cumsum(self._T)]
-
-        if self._m == 3:
-            self._V_2 = np.array(
-                [
-                    np.sum(self._T[self._cs_T[i] : self._cs_T[i + 1]])
-                    for i in range(self._T[0])
-                ],
-                dtype=np.int64,
-            )
-            self._cs_V_2 = np.concatenate(
-                (np.array([0], dtype=np.int64), np.cumsum(self._V_2))
-            )
 
         # threshold
         self._spinner_label = "Checking threshold..."
@@ -273,37 +286,44 @@ class Function(AbstractFunction):
         # condition number
         self._condition_number = np.linalg.cond(Vx)
 
-        # LU decompositions
+        # LU decompositions: dense triangular factors, each with its flag "lower triangular"
         self._spinner_label = "Computing LU decompositions..."
-        lt_Vx = is_lower_triangular(Vx)
-        Vx_L, Vx_U = None, None
-
-        if lt_Vx:
-            self._Vx = get_rmo(Vx)
+        if is_lower_triangular(Vx):
+            factors, lower = (np.tril(Vx),), (True,)
         else:
             Vx_L, Vx_U = get_lu(Vx)
-            self._Vx_L, self._Vx_U = get_rmo(Vx_L), get_rmo(Vx_U[::-1, ::-1])[::-1]
+            factors, lower = (np.tril(Vx_L), np.triu(Vx_U)), (True, False)
 
-        if is_lower_triangular(Dx.T):
-            self._Dx = tuple(get_rmo(D[::-1, ::-1])[::-1] for D in (Dx, Dx2, Dx3))
-            self._Dx_T = tuple(get_rmo(D.T) for D in (Dx, Dx2, Dx3))
-        else:
-            Dx_LU = tuple(get_lu(Dx) for Dx in [Dx, Dx2, Dx3])
+        # eval applies V = L U, so U comes first
+        self._eval_factors, self._eval_lower = factors[::-1], lower[::-1]
 
-            self._Dx_L = tuple(get_rmo(lt) for lt, _ in Dx_LU)
-            self._Dx_U = tuple(get_rmo(ut[::-1, ::-1])[::-1] for _, ut in Dx_LU)
-
-            self._Dx_T_L = tuple(get_rmo(ut.T) for _, ut in Dx_LU)
-            self._Dx_T_U = tuple(get_rmo(lt.T[::-1, ::-1])[::-1] for lt, _ in Dx_LU)
-
-        # Precompute inverses
+        # interp applies inv(V) = inv(U) inv(L), so L comes first: by products with the
+        # precomputed inverses, or without them by solves with the factors themselves
         self._spinner_label = "Precomputing inverses..."
-        if precomputation and lt_Vx:
-            self._inv_Vx = get_rmo(np.linalg.inv(Vx))
+        self._interp_solve = not precomputation
+        self._interp_lower = lower
+        if precomputation:
+            self._interp_factors = (np.tril(np.linalg.inv(factors[0])),) + tuple(
+                np.triu(np.linalg.inv(M)) for M in factors[1:]
+            )
+        else:
+            self._interp_factors = factors
 
-        if precomputation and not lt_Vx:
-            self._inv_Vx_L = get_rmo(np.linalg.inv(Vx_L))
-            self._inv_Vx_U = get_rmo(np.linalg.inv(Vx_U)[::-1, ::-1])[::-1]
+        # differentiation matrices of order 1, 2, 3 and their transposes, as factors in
+        # the order of application
+        if is_lower_triangular(Dx.T):
+            uppers = tuple(np.triu(D) for D in (Dx, Dx2, Dx3))
+            self._Dx = tuple((U,) for U in uppers)
+            self._Dx_T = tuple((np.ascontiguousarray(U.T),) for U in uppers)
+            self._Dx_lower, self._Dx_T_lower = (False,), (True,)
+        else:
+            # D = L U applies U first; D.T = U.T L.T applies L.T first
+            Dx_LU = tuple(get_lu(D) for D in (Dx, Dx2, Dx3))
+            self._Dx = tuple((np.triu(ut), np.tril(lt)) for lt, ut in Dx_LU)
+            self._Dx_T = tuple(
+                (np.ascontiguousarray(lt.T), np.ascontiguousarray(ut.T)) for lt, ut in Dx_LU
+            )
+            self._Dx_lower, self._Dx_T_lower = (False, True), (False, True)
 
         construction_end = time.time()
         self._construction_ms = (construction_end - construction_start) * 1000
@@ -315,6 +335,12 @@ class Function(AbstractFunction):
             self._permutations = permutations_max(self._m, self._n)
         else:
             self._permutations = permutations(len(self), self._m, self._pi)
+
+        # layout of the transforms (needs the transposition), counted as construction
+        self._spinner_label = "Constructing transform plan..."
+        plan_start = time.time()
+        self._plan = transform_plan(self._T, self._cs_T, self._pi, self._m, self._backend)
+        self._construction_ms += (time.time() - plan_start) * 1000
 
         # warmup JIT compiler
         self._spinner_label = "Precompiling jit functions..."
@@ -334,7 +360,7 @@ class Function(AbstractFunction):
     def _start_spinner(self):
         self._loading = True
         self._spinner_label = "Initializing..."
-        self._spinner_thread = threading.Thread(target=self._show_spinner)
+        self._spinner_thread = threading.Thread(target=self._show_spinner, daemon=True)
         self._spinner_thread.start()
 
     def _show_spinner(self):
@@ -387,16 +413,15 @@ class Function(AbstractFunction):
         return self._leja_order
 
     @property
-    def _transform_args(self) -> dict:
-        return {
-            "m": self._m,
-            "n": self._n + 1,
-            "pi": self._pi,
-            "T": self._T,
-            "cs_T": self._cs_T,
-            "V_2": self._V_2 if hasattr(self, "_V_2") else None,
-            "cs_V_2": self._cs_V_2 if hasattr(self, "_cs_V_2") else None,
-        }
+    def backend(self) -> str:
+        """How `interp`, `eval`, `diff` and `diffT` are executed, "tube" or "blas"."""
+        return self._backend
+
+    def _check_length(self, x: np.ndarray, name: str) -> np.ndarray:
+        x = np.asarray(x, dtype=np.float64)  # no copy for float64 input (the kernels never write it)
+        if x.shape != (len(self),):
+            raise ValueError(f"{name} must have shape ({len(self)},), but got {x.shape}.")
+        return x
 
     def warmup(self) -> None:
         """Warmup the JIT compiler."""
@@ -442,29 +467,14 @@ class Function(AbstractFunction):
         >>> values = f(fun.grid[:, 0], fun.grid[:, 1])
         >>> coeffs = fun.interp(values)
         """
-        function_values = np.asarray(function_values).astype(np.float64)
-        if hasattr(self, "_inv_Vx"):
-            return transform_lt(
-                L=self._inv_Vx, x=function_values, **self._transform_args
+        function_values = self._check_length(function_values, "function_values")
+        if self._interp_solve:
+            return itransform(
+                self._interp_factors, self._interp_lower, function_values, **self._plan
             )
-        elif hasattr(self, "_inv_Vx_L") and hasattr(self, "_inv_Vx_U"):
-            coefficients = transform_lt(
-                L=self._inv_Vx_L, x=function_values, **self._transform_args
-            )
-            return transform_ut(
-                U=self._inv_Vx_U, x=coefficients, **self._transform_args
-            )
-        elif hasattr(self, "_Vx"):
-            return itransform_lt(L=self._Vx, x=function_values, **self._transform_args)
-        elif hasattr(self, "_Vx_L") and hasattr(self, "_Vx_U"):
-            coefficients = itransform_lt(
-                L=self._Vx_L, x=function_values, **self._transform_args
-            )
-            return itransform_ut(U=self._Vx_U, x=coefficients, **self._transform_args)
-        else:
-            raise ValueError(
-                "Unexpected error: _Vx_L and _Vx_U must exist for non-lower-triangular case."
-            )
+        return transform(
+            self._interp_factors, self._interp_lower, function_values, **self._plan
+        )
 
     def eval(self, coefficients: np.ndarray) -> np.ndarray:
         """
@@ -495,22 +505,8 @@ class Function(AbstractFunction):
         >>> coeffs = fun.interp(values)
         >>> values_rec = fun.eval(coeffs)
         """
-        coefficients = np.asarray(coefficients).astype(np.float64)
-        function_values = np.zeros(len(self), dtype=np.float64)
-        if hasattr(self, "_Vx"):
-            function_values = transform_lt(
-                self._Vx, coefficients, **self._transform_args
-            )
-        elif hasattr(self, "_Vx_U") and hasattr(self, "_Vx_L"):
-            function_values = transform_ut(
-                U=self._Vx_U, x=coefficients, **self._transform_args
-            )
-            function_values = transform_lt(
-                self._Vx_L, function_values, **self._transform_args
-            )
-        else:
-            raise ValueError("Unexpected error.")
-        return function_values
+        coefficients = self._check_length(coefficients, "coefficients")
+        return transform(self._eval_factors, self._eval_lower, coefficients, **self._plan)
 
     def diff(
         self, coefficients: np.ndarray, dim: int, order: Literal[1, 2, 3] = 1
@@ -549,7 +545,7 @@ class Function(AbstractFunction):
         >>> coeffs_dyy = fun.diff(coeffs, dim=1, order=2)
         """
         coefficients, dim, order = (
-            np.asarray(coefficients).astype(np.float64),
+            self._check_length(coefficients, "coefficients"),
             int(dim),
             int(order),
         )
@@ -559,33 +555,11 @@ class Function(AbstractFunction):
             )
         if not order in [1, 2, 3]:
             raise ValueError("Invalid value for k. Please choose 1, 2 or 3.")
-        if hasattr(self, "_Dx"):
-            return dtransform_ut(
-                D=self._Dx[order - 1],
-                x=coefficients,
-                n=self._n + 1,
-                perm=self._permutations[dim],
-                T=self._T,
-                cs_T=self._cs_T,
+        for D, lower in zip(self._Dx[order - 1], self._Dx_lower):
+            coefficients = dtransform(
+                D, lower, coefficients, self._permutations[dim], **self._plan
             )
-        elif hasattr(self, "_Dx_U") and hasattr(self, "_Dx_L"):
-            coefficients = dtransform_lt(
-                D=self._Dx_L[order - 1],
-                x=coefficients,
-                perm=self._permutations[dim],
-                T=self._T,
-                cs_T=self._cs_T,
-            )
-            return dtransform_ut(
-                D=self._Dx_U[order - 1],
-                x=coefficients,
-                n=self._n + 1,
-                perm=self._permutations[dim],
-                T=self._T,
-                cs_T=self._cs_T,
-            )
-        else:
-            raise ValueError("Unexpected error.")
+        return coefficients
 
     def diffT(
         self, coefficients: np.ndarray, dim: int, order: Literal[1, 2, 3] = 1
@@ -625,7 +599,7 @@ class Function(AbstractFunction):
         >>> coeffs_dyyy_T = fun.diffT(coeffs, dim=1, order=3)
         """
         coefficients, dim, order = (
-            np.asarray(coefficients).astype(np.float64),
+            self._check_length(coefficients, "coefficients"),
             int(dim),
             int(order),
         )
@@ -638,34 +612,11 @@ class Function(AbstractFunction):
         if order not in [1, 2, 3]:
             raise ValueError("Invalid value for order. Please choose 1, 2, or 3.")
 
-        if hasattr(self, "_Dx"):
-            return dtransform_lt(
-                D=self._Dx_T[order - 1],
-                x=coefficients,
-                perm=self._permutations[dim],
-                T=self._T,
-                cs_T=self._cs_T,
+        for D, lower in zip(self._Dx_T[order - 1], self._Dx_T_lower):
+            coefficients = dtransform(
+                D, lower, coefficients, self._permutations[dim], **self._plan
             )
-
-        elif hasattr(self, "_Dx_U") and hasattr(self, "_Dx_L"):
-            coefficients = dtransform_lt(
-                D=self._Dx_T_L[order - 1],
-                x=coefficients,
-                perm=self._permutations[dim],
-                T=self._T,
-                cs_T=self._cs_T,
-            )
-            return dtransform_ut(
-                D=self._Dx_T_U[order - 1],
-                x=coefficients,
-                n=self._n + 1,
-                perm=self._permutations[dim],
-                T=self._T,
-                cs_T=self._cs_T,
-            )
-
-        else:
-            raise ValueError("Unexpected error.")
+        return coefficients
 
     def __call__(self, coefficients: np.ndarray, points: np.ndarray) -> np.ndarray:
         """
@@ -809,6 +760,7 @@ class Function(AbstractFunction):
             f"{'Spatial Dimension':<20} | {self._m}\n"
             f"{'Polynomial Degree':<20} | {self._n:_}\n"
             f"{'l^p Degree':<20} | {self._p}\n"
+            f"{'Backend':<20} | {self._backend}\n"
             f"{'Condition V':<20} | {self._condition_number:.2e}\n"
             f"{'Amount of Coeffs':<20} | {len(self):_}\n"
             f"{'Construction':<20} | {self._construction_ms:_.2f} ms\n"
