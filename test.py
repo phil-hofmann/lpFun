@@ -200,3 +200,350 @@ def test_leja_order_large_degree_interp():
     V = np.cos((np.outer(lidx, np.arange(n + 1)) % (2 * n)) * np.pi / n)  # T_k at the exact nodes
     c = np.random.default_rng(n).uniform(-1, 1, n + 1)
     assert np.abs(fun.interp(V @ c) - c).max() <= 5e-12
+
+
+# BLAS backend of the LU transforms
+
+BLAS_NS = [1, 4, 7]
+
+
+@pytest.mark.parametrize("m, n, p, ba, pr", list(product([2, 3, 4, 5], BLAS_NS, ps, bases, precomputation)))
+def test_function_blas(m: int, n: int, p: float, ba: str, pr: bool):
+    rng = np.random.default_rng(0)
+    kwargs = dict(basis=ba, precomputation=pr, precompilation=False, report=False)
+    fun_blas = lpfun.Function(m, n, p, backend="blas", **kwargs)
+    fun_tube = lpfun.Function(m, n, p, backend="tube", **kwargs)
+    assert fun_blas._backend == "blas"
+    values = rng.random(len(fun_blas))
+    coeffs = rng.random(len(fun_blas))
+    # the GEMMs sum in a different order than the tube kernels; entries can cancel to
+    # well below the vector's scale (|eval| ~ 1e3 at m = 5), so atol scales with it
+    for got, ref in ((fun_blas.interp(values), fun_tube.interp(values)), (fun_blas.eval(coeffs), fun_tube.eval(coeffs))):
+        np.testing.assert_allclose(got, ref, rtol=1e-10, atol=1e-12 * max(1.0, np.abs(ref).max()))
+    # round trip
+    np.testing.assert_allclose(fun_blas.eval(fun_blas.interp(values)), values, rtol=0, atol=1e-10)
+
+
+def test_function_blas_precompilation():
+    fun = lpfun.Function(3, 6, 2.0, backend="blas", report=False)
+    values = np.random.default_rng(1).random(len(fun))
+    np.testing.assert_allclose(fun.eval(fun.interp(values)), values, rtol=0, atol=1e-10)
+
+
+def test_function_blas_invalid_backend():
+    with pytest.raises(ValueError):
+        lpfun.Function(2, 3, backend="lapack", precompilation=False, report=False)
+
+
+@pytest.mark.parametrize("m, p, ba", list(product([2, 3, 4, 5], ps, bases)))
+def test_diff_blas(m: int, p: float, ba: str):
+    # the BLAS backend also differentiates, in every dimension: same results as tube-wise
+    kw = dict(basis=ba, precompilation=False, report=False)
+    fun_blas = lpfun.Function(m, 7, p, backend="blas", **kw)
+    fun_tube = lpfun.Function(m, 7, p, backend="tube", **kw)
+    x = np.random.default_rng(m).uniform(-1, 1, len(fun_blas))
+    for dim, order in product(range(m), [1, 2, 3]):
+        for T in ("diff", "diffT"):
+            got, ref = getattr(fun_blas, T)(x, dim, order), getattr(fun_tube, T)(x, dim, order)
+            np.testing.assert_allclose(got, ref, rtol=1e-10, atol=1e-10 * max(1.0, np.abs(ref).max()))
+
+
+@pytest.mark.parametrize("pr, be", list(product(precomputation, ["tube", "blas"])))
+def test_function_state(pr: bool, be: str):
+    # both backends keep the same state: the plan and the dense triangular factors in the
+    # order of application, each with its flag "lower triangular"
+    kw = dict(backend=be, precomputation=pr, precompilation=False, report=False)
+    g = lpfun.Function(3, 5, basis="chebyshev", **kw)
+    assert set(g._plan) == {"m", "backend", "buckets", "padpos", "between", "final", "serial"}
+    assert g._plan["backend"] == be and g._plan["m"] == 3
+    assert len(g._eval_factors) == len(g._interp_factors) == 2
+    assert g._eval_lower == (False, True) and g._interp_lower == (True, False)
+    assert g._interp_solve == (not pr)
+    newton = lpfun.Function(3, 5, **kw)
+    assert len(newton._eval_factors) == len(newton._interp_factors) == 1
+    assert newton._eval_lower == newton._interp_lower == (True,)
+    assert len(g._Dx) == len(g._Dx_T) == 3 and g._Dx_lower == (False,) and g._Dx_T_lower == (True,)
+    assert be in repr(g)
+
+
+@pytest.mark.parametrize("m, n, p", [(1, 9, 2.0), (2, 12, 1.0), (3, 7, 2.0), (4, 5, np.inf), (5, 4, 0.5)])
+def test_tube_layout(m: int, n: int, p: float):
+    """With backend="tube" every tube is a bucket of its own: nothing is padded, the layout
+    is the vector itself and the gather between two directions is the transposition."""
+    fun = lpfun.Function(m, n, p, backend="tube", precompilation=False, report=False)
+    plan, N = fun._plan, len(fun)
+    assert np.array_equal(plan["buckets"][:, 0], fun._T)
+    assert np.array_equal(plan["buckets"][:, 1], fun._cs_T[:-1])
+    assert np.all(plan["buckets"][:, 2] == 1)
+    assert np.array_equal(plan["padpos"], np.arange(N)) and len(plan["between"]) == N
+    assert np.array_equal(plan["between"], plan["final"])
+    assert np.array_equal(plan["between"][fun._pi], np.arange(N))  # the inverse of pi
+
+
+@pytest.mark.parametrize("m, n, ba, pr", list(product([1, 2, 3, 5], [3, 9], ["newton", "chebyshev"], precomputation)))
+def test_tube_serial_kernels(m: int, n: int, ba: str, pr: bool):
+    """The tube-wise kernels on one thread give the results of the parallel ones bit for
+    bit; a single tube and small problems take them, the BLAS backend never."""
+    from lpfun.core import transform as tr
+    kw = dict(basis=ba, precomputation=pr, precompilation=False, report=False)
+    fun = lpfun.Function(m, n, backend="tube", **kw)
+    work = int(np.sum(fun._T.astype(np.int64) ** 2)) // 2
+    assert fun._plan["serial"] == (m == 1 or work < tr.SERIAL_TUBES)
+    assert tr.transform_plan(fun._T, fun._cs_T, fun._pi, m, "blas")["serial"] is False
+    x = np.random.default_rng(n).uniform(-1, 1, len(fun))
+    results = []
+    for serial in (True, False):
+        fun._plan["serial"] = serial
+        results.append([fun.interp(x), fun.eval(x), fun.diff(x, m - 1), fun.diffT(x, 0)])
+    for a, b in zip(results[0], results[1]):
+        np.testing.assert_array_equal(a, b)
+    big = lpfun.Function(3, 60, backend="tube", precompilation=False, report=False)
+    assert big._plan["serial"] is False
+
+
+@pytest.mark.parametrize(
+    "m, n, p, ba, pr, be",
+    list(product([1, 2, 3, 4], [1, 4], [1.0, 2.0, np.inf], bases, precomputation, ["tube", "blas"])),
+)
+def test_transforms_against_dense(m: int, n: int, p: float, ba: str, pr: bool, be: str):
+    """`interp`, `eval`, `diff` and `diffT` against the dense matrices of the operators,
+    built entry by entry from the 1D matrices: a reference that shares no code with the
+    transforms."""
+    fun = lpfun.Function(m, n, p, basis=ba, backend=be, precomputation=pr, precompilation=False, report=False)
+    vander = {"newton": "newton2lagrange", "chebyshev": "chebyshev2lagrange", "legendre": "legendre2lagrange"}
+    deriv = {"newton": "newton2derivative", "chebyshev": "chebyshev2derivative", "legendre": "legendre2derivative"}
+    Vx = getattr(lpfun.basis.vander, vander[ba])(fun.nodes)
+    Dx = getattr(lpfun.basis.diff, deriv[ba])(fun.nodes)
+    A, N = fun.index_set, len(fun)
+    # V[i, j] = prod_d Vx[A[i, d], A[j, d]]: basis function j at grid point i
+    V = np.ones((N, N))
+    for d in range(m):
+        V *= Vx[A[:, d][:, None], A[:, d][None, :]]
+    x = np.random.default_rng(m * 10 + n).uniform(-1, 1, N)
+    scale = np.abs(V).sum(axis=1).max()
+    np.testing.assert_allclose(fun.eval(x), V @ x, rtol=0, atol=1e-12 * scale)
+    np.testing.assert_allclose(fun.interp(V @ x), x, rtol=0, atol=1e-9)
+    for dim in range(m):
+        # D[i, j] = Dx[A[i, dim], A[j, dim]] where the other coordinates agree, else 0
+        others = np.delete(A, dim, axis=1)
+        same = np.all(others[:, None, :] == others[None, :, :], axis=2)
+        D = np.where(same, Dx[A[:, dim][:, None], A[:, dim][None, :]], 0.0)
+        for order, Dk in ((1, D), (2, D @ D), (3, D @ D @ D)):
+            tol = 1e-12 * max(1.0, np.abs(Dk).sum(axis=1).max())
+            np.testing.assert_allclose(fun.diff(x, dim, order), Dk @ x, rtol=0, atol=tol)
+            np.testing.assert_allclose(fun.diffT(x, dim, order), Dk.T @ x, rtol=0, atol=tol)
+
+
+@pytest.mark.parametrize(
+    "m, n, p, ba, pr",
+    [(3, 20, 2.0, "chebyshev", True), (3, 16, 1.0, "newton", True), (3, 9, np.inf, "legendre", False),
+     (4, 12, 2.0, "chebyshev", False), (4, 9, 1.0, "legendre", True), (5, 8, 2.0, "newton", False),
+     (6, 6, 2.0, "chebyshev", True), (2, 60, 0.5, "chebyshev", True), (2, 40, 1.0, "newton", False),
+     (2, 48, 2.0, "legendre", True), (2, 30, np.inf, "chebyshev", False)],
+)
+def test_blas_layout(m: int, n: int, p: float, ba: str, pr: bool):
+    """The padded layout: buckets by the DP, aligned blocks, valid index maps; products and
+    triangular solves agree with the tube-wise kernels at degrees where the DP takes
+    several buckets."""
+    from lpfun.core.transform import optimal_bucket_lengths, transform, ALIGN
+    kw = dict(basis=ba, precomputation=pr, precompilation=False, report=False)
+    fun = lpfun.Function(m, n, p, backend="blas", **kw)
+    plan = fun._plan
+    N, S, buckets = len(fun), len(plan["between"]), plan["buckets"]
+    # the DP's tops cover every tube and are a partition into ranges (padded to the range's
+    # longest length); blocks are aligned and tile the buffer
+    tops = optimal_bucket_lengths(fun._T)
+    assert np.all(tops >= fun._T) and np.all(np.isin(np.unique(tops), fun._T))
+    assert plan["m"] == m and len(buckets) == len(np.unique(tops)) <= len(np.unique(fun._T))
+    assert np.all(buckets[:, 1:] % ALIGN == 0)
+    assert np.array_equal(buckets[:, 1], np.r_[0, np.cumsum(buckets[:, 0] * buckets[:, 2])][:-1])
+    assert S == int(np.sum(buckets[:, 0] * buckets[:, 2]))
+    assert N <= S <= len(fun._T) * (n + 1) + ALIGN * (n + 1) * len(buckets)
+    # every entry has its own slot; the pads read the zero slot; both gathers permute the slots
+    padpos = plan["padpos"]
+    assert padpos.dtype == np.int32 and plan["between"].dtype == np.int32
+    assert len(np.unique(padpos)) == N and padpos.min() >= 0 and padpos.max() < S
+    free = np.setdiff1d(np.arange(S), padpos)
+    assert np.all(plan["between"][free] == S)
+    assert np.array_equal(np.sort(plan["between"][padpos]), np.sort(padpos))
+    assert np.array_equal(np.sort(plan["final"]), np.sort(padpos))
+    rng = np.random.default_rng(3)
+    f = rng.uniform(-1, 1, N)
+    ref = lpfun.Function(m, n, p, backend="tube", **kw)
+    for got, want in ((fun.interp(f), ref.interp(f)), (fun.eval(f), ref.eval(f))):
+        np.testing.assert_allclose(got, want, rtol=1e-10, atol=1e-12 * max(1.0, np.abs(want).max()))
+    with pytest.raises(ValueError):  # a short input would be read past its end
+        transform(fun._eval_factors, fun._eval_lower, f[:-1], **plan)
+
+
+@pytest.mark.parametrize("size", [1, 1000, 70_000])
+def test_gather_scatter(size: int):
+    """The gather, scatter and move kernels against numpy, on their serial and parallel paths."""
+    from lpfun.core import transform as tr
+    assert 1000 < tr.SERIAL < 70_000
+    rng = np.random.default_rng(size)
+    src, idx = rng.random(size + 5), rng.permutation(size + 5)[:size].astype(np.int32)
+    dst = np.full(size + 5, -1.0)
+    tr._gather(src, idx, dst)
+    assert np.array_equal(dst[:size], src[idx]) and np.all(dst[size:] == -1.0)
+    dst = np.full(size + 5, -1.0)
+    tr._scatter(src[:size], idx, dst)
+    expected = np.full(size + 5, -1.0)
+    expected[idx] = src[:size]
+    assert np.array_equal(dst, expected)
+    idst = rng.permutation(size + 5)[:size]
+    dst = np.full(size + 5, -1.0)
+    tr._move(src, idx, idst, dst)
+    expected = np.full(size + 5, -1.0)
+    expected[idst] = src[idx]
+    assert np.array_equal(dst, expected)
+
+
+@pytest.mark.parametrize("m, be", list(product([2, 3, 4], ["tube", "blas"])))
+def test_transform_and_itransform(m: int, be: str):
+    """`transform` and `itransform` on their own: the identity round-trips bit for bit
+    through the gather chain; a lower factor's garbage in the pads never reaches the upper
+    factor that follows it."""
+    from lpfun.core.transform import transform_plan, transform, itransform
+    n = 7
+    kw = dict(basis="chebyshev", precompilation=False, report=False)
+    fun = lpfun.Function(m, n, 1.0, backend=be, **kw)  # p = 1: many distinct lengths
+    other = lpfun.Function(m, n, 1.0, backend="tube" if be == "blas" else "blas", **kw)
+    plan = transform_plan(fun._T, fun._cs_T, fun._pi, m, be)
+    x = np.random.default_rng(m).uniform(-1, 1, len(fun))
+    I = np.eye(n + 1)
+    np.testing.assert_array_equal(transform((I,), (True,), x, **plan), x)
+    np.testing.assert_array_equal(transform((I, I), (True, False), x, **plan), x)
+    np.testing.assert_array_equal(itransform((I,), (True,), x, **plan), x)
+    np.testing.assert_array_equal(itransform((I, I), (True, False), x, **plan), x)
+    # the factors one at a time and in one call; products with the inverses and solves
+    U, L = fun._eval_factors
+    inv_L, inv_U = fun._interp_factors
+    one_by_one = transform((L,), (True,), transform((U,), (False,), x, **plan), **plan)
+    np.testing.assert_allclose(one_by_one, other.eval(x), rtol=1e-11, atol=1e-12)
+    np.testing.assert_allclose(transform((U, L), (False, True), x, **plan), other.eval(x), rtol=1e-11, atol=1e-12)
+    np.testing.assert_allclose(transform((inv_L, inv_U), (True, False), x, **plan), other.interp(x), rtol=1e-10, atol=1e-12)
+    solved = itransform((L, U), (True, False), x, **plan)
+    np.testing.assert_allclose(solved, other.interp(x), rtol=1e-10, atol=1e-12)
+    np.testing.assert_allclose(transform((U, L), (False, True), solved, **plan), x, rtol=1e-10, atol=1e-12)
+    # a single lower factor (the Newton case): the solve against the product with the inverse
+    solved = itransform((L,), (True,), x, **plan)
+    np.testing.assert_allclose(solved, transform((inv_L,), (True,), x, **plan), rtol=1e-10, atol=1e-12)
+    with pytest.raises(ValueError):
+        transform_plan(fun._T, fun._cs_T, fun._pi, m, "gemm")
+
+
+@pytest.mark.parametrize("m, p, be", list(product([2, 3, 4, 5], [1.0, 2.0], ["tube", "blas"])))
+def test_dtransform(m: int, p: float, be: str):
+    """`dtransform` along every direction, for an upper and a lower triangular matrix,
+    against the other backend."""
+    from lpfun.core.transform import transform_plan, dtransform
+    n = 7
+    kw = dict(basis="chebyshev", precompilation=False, report=False)
+    fun = lpfun.Function(m, n, p, backend=be, **kw)
+    other = lpfun.Function(m, n, p, backend="tube" if be == "blas" else "blas", **kw)
+    plan = transform_plan(fun._T, fun._cs_T, fun._pi, m, be)
+    x = np.random.default_rng(m).uniform(-1, 1, len(fun))
+    D = np.triu(lpfun.basis.diff.chebyshev2derivative(fun.nodes))
+    for dim in range(m):
+        ref = other.diff(x, dim)
+        got = dtransform(D, False, x, fun._permutations[dim], **plan)
+        np.testing.assert_allclose(got, ref, rtol=1e-11, atol=1e-11 * np.abs(ref).max())
+        ref = other.diffT(x, dim)
+        got = dtransform(np.ascontiguousarray(D.T), True, x, fun._permutations[dim], **plan)
+        np.testing.assert_allclose(got, ref, rtol=1e-11, atol=1e-11 * np.abs(ref).max())
+    with pytest.raises(ValueError):
+        dtransform(D, False, x[:-1], fun._permutations[0], **plan)
+
+
+@pytest.mark.parametrize("call, w0", [(50_000, 32), (50_000, 0), (0, 32), (300, 3), (2_000, 100), (0, 0)])
+def test_optimal_bucket_lengths_is_the_exact_minimum(call: int, w0: int):
+    """`optimal_bucket_lengths` returns a partition of the sorted lengths into ranges whose modelled
+    time, sum of ``call + L^2 (w + w0)``, is the least over all 2^(K-1) such partitions."""
+    from itertools import combinations
+    from lpfun.core import transform as blas
+
+    def cost(tops, T):
+        L, cnt = np.unique(tops, return_counts=True)
+        w = -(-cnt // blas.ALIGN) * blas.ALIGN
+        return float(np.sum(call + L.astype(float) ** 2 * (w + w0)))
+
+    rng = np.random.default_rng(call + w0)
+    for trial in range(6):
+        u = np.sort(rng.choice(np.arange(1, 40), size=rng.integers(1, 10), replace=False))
+        T = np.repeat(u, rng.integers(1, 60, size=len(u)))[::-1].copy()  # nonincreasing, as in a plan
+        tops = blas.optimal_bucket_lengths(T, call=call, w0=w0)
+        assert np.all(tops >= T) and np.all(np.isin(tops, u))
+        assert np.all(np.diff(tops) <= 0)  # ranges of consecutive lengths
+        best = np.inf
+        for r in range(len(u)):
+            for cuts in combinations(range(1, len(u)), r):
+                ends = np.r_[np.array(cuts, dtype=np.int64), len(u)]  # range j ends before u[ends[j]]
+                tops_c = u[ends - 1][np.searchsorted(ends, np.searchsorted(u, T), side="right")]
+                best = min(best, cost(tops_c, T))
+        assert cost(tops, T) == pytest.approx(best, rel=1e-12)
+
+
+def test_optimal_bucket_lengths_width_term_merges_narrow_buckets(monkeypatch):
+    """The pass over the operand, ``L^2 w0`` per bucket, merges buckets of a few columns:
+    for m = 2 every length is shared by one or two tubes. The constants come from the
+    arguments, else from the module constants at the time of the call."""
+    from lpfun.core import transform as blas
+
+    fun = lpfun.Function(2, 300, 2.0, backend="tube", precompilation=False, report=False)
+    T = fun._T
+    counts = [len(np.unique(blas.optimal_bucket_lengths(T, w0=w0))) for w0 in (0, 32, 10**9)]
+    assert counts[0] > counts[1] > counts[2] == 1
+    assert blas.W0 == 32 and len(np.unique(blas.optimal_bucket_lengths(T))) == counts[1]
+    plans = [blas.transform_plan(T, fun._cs_T, fun._pi, 2, "blas", w0=w0) for w0 in (0, None, 10**9)]
+    assert [len(q["buckets"]) for q in plans] == counts
+    assert len(blas.transform_plan(T, fun._cs_T, fun._pi, 2, "blas", call=10**12, w0=0)["buckets"]) == 1
+    monkeypatch.setattr(blas, "W0", 0)
+    assert len(np.unique(blas.optimal_bucket_lengths(T))) == counts[0]
+    monkeypatch.setattr(blas, "CALL", 10**12)
+    assert len(blas.transform_plan(T, fun._cs_T, fun._pi, 2, "blas")["buckets"]) == 1
+    for bad in (dict(call=-1.0), dict(w0=-1.0), dict(w0=float("nan"))):
+        with pytest.raises(ValueError):
+            blas.optimal_bucket_lengths(T, **bad)
+
+
+# defaults and input checks
+
+KW = dict(precompilation=False, report=False)
+
+
+@pytest.mark.parametrize("ba", bases)
+def test_auto_rule(ba: str):
+    for m in range(1, 7):
+        assert lpfun.Function(m, 4, basis=ba, **KW).backend == ("tube" if m == 1 else "blas")
+    for p in (0.5, 1.0, 2.0, np.inf):  # thin sets included
+        assert lpfun.Function(2, 20, p, basis=ba, **KW).backend == "blas"
+    assert lpfun.Function(3, 6, 0.5, basis=ba, **KW).backend == "blas"
+    # explicit choices are kept
+    assert lpfun.Function(4, 5, basis=ba, backend="tube", **KW)._backend == "tube"
+    assert lpfun.Function(1, 5, basis=ba, backend="blas", **KW)._backend == "tube"  # a single tube
+
+
+def test_repr_and_eq():
+    g = lpfun.Function(2, 5, basis="chebyshev", **KW)
+    u = lpfun.Function(2, 5, basis="chebyshev", backend="tube", **KW)
+    assert "blas" in repr(g)
+    # the transform changes neither the space nor the meaning of the coefficients
+    assert g == u
+
+
+
+@pytest.mark.parametrize("T", ["tube", "blas"])
+def test_input_length_checked(T: str):
+    # a short or long input raises instead of reading past the array on the BLAS path
+    fun = lpfun.Function(3, 6, backend=T, **KW)
+    for bad in (np.ones(len(fun) - 1), np.ones(len(fun) + 7), np.ones((len(fun), 1))):
+        with pytest.raises(ValueError):
+            fun.interp(bad)
+        with pytest.raises(ValueError):
+            fun.eval(bad)
+        with pytest.raises(ValueError):
+            fun.diff(bad, 0)
+        with pytest.raises(ValueError):
+            fun.diffT(bad, 0)
+    assert fun.interp(list(np.ones(len(fun)))).shape == (len(fun),)
