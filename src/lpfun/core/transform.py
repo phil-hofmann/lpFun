@@ -7,15 +7,17 @@ tube of length t is multiplied by the leading block M[:t, :t], or solved with it
 `transform` (products) and `itransform` (solves) do so along every direction, one after
 another; `dtransform` (products) along a single direction.
 
-One layout serves both backends. The tubes are grouped into buckets; a bucket stores its
-tubes, padded with zeros to its length L, as the columns of one contiguous block of shape
-(L, width). After each direction a gather brings the next direction to the columns.
+Both backends work on buckets of tubes. A bucket stores its tubes, padded with zeros to
+its length L, as the columns of one contiguous block of shape (L, width). After each
+direction the entries are rotated: the next direction comes to the columns.
 
 * ``backend="tube"``: every tube is its own bucket of width 1. Nothing is padded, the
-  layout is the vector itself, and a numba kernel applies M[:t, :t] tube by tube.
+  layout is the vector itself, and a numba kernel applies M[:t, :t] tube by tube. It
+  writes every result straight to its place in the next direction.
 * ``backend="blas"``: the tubes are grouped into buckets of similar length and every block
   is applied by one BLAS call: GEMM, the GEneral Matrix-Matrix product C = A @ B, or TRSM,
-  the TRiangular Solve with a Matrix of right-hand sides.
+  the TRiangular Solve with a Matrix of right-hand sides. A gather then rotates the
+  entries.
 
 The padding is exact: a lower triangular matrix never reads the pads, and an upper
 triangular one reads them as the zeros they hold. The gathers refill every pad from a zero
@@ -116,34 +118,52 @@ def transform_plan(
     backend : "tube" or "blas", as given.
     buckets : rows (length, base, width); the tubes of a bucket are the columns of the
               block (length, width) at `base`.
+
+    ``backend="tube"`` rotates inside its kernels and needs only
+
+    pi      : the transposition, as given: entry i of the current direction is entry pi[i]
+              of the next.
+    serial  : whether the kernels run on one thread: for a single tube, and below
+              `SERIAL_TUBES` multiply-adds per direction, where waking the thread pool
+              costs more than it saves.
+
+    ``backend="blas"`` rotates by gathers and needs
+
     padpos  : slot of every entry, base + row * width + column: row is the position of the
               entry in its tube, column the rank of the tube in its bucket.
     between : gather between two directions, of length S: the transposition `pi` composed
               with `padpos`; every pad reads the zero slot S.
     final   : gather after the last direction.
-    serial  : whether the tube-wise kernels run on one thread: for a single tube, and below
-              `SERIAL_TUBES` multiply-adds per direction, where waking the thread pool
-              costs more than it saves. Always False for ``backend="blas"``.
 
-    The gathers are stored rather than composed from `pi` and `padpos` on every call: the
-    composition costs a second pass and a zero fill, 2.5 to 8 times one gather.
+    The keys of the other backend are None (`serial` False). The gathers are stored rather
+    than composed from `pi` and `padpos` on every call: the composition costs a second pass
+    and a zero fill, 2.5 to 8 times one gather.
     """
     if not backend in ["tube", "blas"]:
         raise ValueError("Invalid choice for backend.")
     T = np.asarray(T, dtype=np.int64)
     cs_T = np.asarray(cs_T, dtype=np.int64)
+    pi = np.asarray(pi, dtype=np.int64)
     N = int(cs_T[-1])
-    ### buckets: the block (length, width) of a bucket starts at base
     if backend == "tube":
-        length = T
-        bucket = np.arange(len(T), dtype=np.int64)  # bucket of every tube: its own
-        count = np.ones(len(T), dtype=np.int64)
-        width = count
-    else:
-        tops = optimal_bucket_lengths(T, call, w0)
-        length, bucket, count = np.unique(tops, return_inverse=True, return_counts=True)
-        bucket = bucket.ravel().astype(np.int64)  # bucket of every tube: one per padded length
-        width = -(-count.astype(np.int64) // ALIGN) * ALIGN  # rounded up to a multiple of ALIGN
+        ### every tube is a bucket of width 1, at its place in the vector
+        width = np.ones(len(T), dtype=np.int64)
+        work = int(np.sum(T * T)) // 2  # multiply-adds of one triangular product along a direction
+        return {
+            "m": int(m),
+            "backend": "tube",
+            "buckets": np.column_stack((T, cs_T[:-1], width)),
+            "pi": pi.astype(np.int32 if N < 2**31 - 1 else np.int64),
+            "serial": bool(len(T) == 1 or work < SERIAL_TUBES),
+            "padpos": None,
+            "between": None,
+            "final": None,
+        }
+    ### buckets: one per padded length, its block (length, width) starts at base
+    tops = optimal_bucket_lengths(T, call, w0)
+    length, bucket, count = np.unique(tops, return_inverse=True, return_counts=True)
+    bucket = bucket.ravel().astype(np.int64)  # bucket of every tube
+    width = -(-count.astype(np.int64) // ALIGN) * ALIGN  # rounded up to a multiple of ALIGN
     size = length * width
     base = np.cumsum(size) - size
     S = int(np.sum(size))
@@ -159,22 +179,21 @@ def transform_plan(
     padpos = base[b] + row * width[b] + column[tube]
     ### gathers: entry i of the next direction is entry ipi[i] of the current one
     ipi = np.empty(N, dtype=np.int64)
-    ipi[np.asarray(pi, dtype=np.int64)] = np.arange(N, dtype=np.int64)
+    ipi[pi] = np.arange(N, dtype=np.int64)
     final = padpos[ipi]  # into the plain vector
     between = np.full(S, S, dtype=np.int64)  # into the layout: the pads read slot S
     between[padpos] = final
     ###
-    work = int(np.sum(T * T)) // 2  # multiply-adds of one triangular product along a direction
-    serial = backend == "tube" and (len(T) == 1 or work < SERIAL_TUBES)
     dtype = np.int32 if S + 1 < 2**31 - 1 else np.int64
     return {
         "m": int(m),
-        "backend": str(backend),
+        "backend": "blas",
         "buckets": np.column_stack((length, base, width)).astype(np.int64),
+        "pi": None,
+        "serial": False,
         "padpos": padpos.astype(dtype),
         "between": between.astype(dtype),
         "final": final.astype(dtype),
-        "serial": bool(serial),
     }
 
 
@@ -185,30 +204,20 @@ def transform(
     m: int,
     backend: str,
     buckets: np.ndarray,
-    padpos: np.ndarray,
-    between: np.ndarray,
-    final: np.ndarray,
+    pi: Optional[np.ndarray],
     serial: bool,
+    padpos: Optional[np.ndarray],
+    between: Optional[np.ndarray],
+    final: Optional[np.ndarray],
 ) -> np.ndarray:
     """O(m S n) per matrix, S = size of the layout
 
     Products with the triangular matrices `Ms` (dense, C order) one after another, each
     along every direction. `lower` tells for every matrix whether it is lower triangular.
     """
-    multiply, _ = _kernels(backend, serial)
-    products = []
-    for M, low in zip(Ms, lower):
-        products += [(M, low)] * m  # each matrix along every direction
-    last_M, last_low = products.pop()  # the last product is followed by the final gather
-    X, B = _buffers(x, padpos, len(between))
-    bx, bb = _blocks(backend, buckets, X), _blocks(backend, buckets, B)
-    for M, low in products:
-        multiply(M, low, bx, bb)
-        _gather(B, between, X)  # X[:S] = B[between]: rotate to the next direction
-    multiply(last_M, last_low, bx, bb)
-    dot = np.empty(len(padpos), dtype=np.float64)
-    _gather(B, final, dot)  # dot = B[final]: the last rotation, straight into the output
-    return dot
+    if backend == "tube":
+        return _transform_tubes(Ms, lower, _vector(x, len(pi)), m, buckets, pi, serial)
+    return _transform_blocks(Ms, _vector(x, len(padpos)), m, buckets, padpos, between, final)
 
 
 def itransform(
@@ -218,32 +227,21 @@ def itransform(
     m: int,
     backend: str,
     buckets: np.ndarray,
-    padpos: np.ndarray,
-    between: np.ndarray,
-    final: np.ndarray,
+    pi: Optional[np.ndarray],
     serial: bool,
+    padpos: Optional[np.ndarray],
+    between: Optional[np.ndarray],
+    final: Optional[np.ndarray],
 ) -> np.ndarray:
     """O(m S n) per matrix, S = size of the layout
 
     Solves with the triangular matrices `Ms` (dense, C order) one after another, each
     along every direction. `lower` tells for every matrix whether it is lower triangular.
     """
-    _, solve = _kernels(backend, serial)
-    solves = []
-    for M, low in zip(Ms, lower):
-        solves += [(M, low)] * m  # each matrix along every direction
-    last_M, last_low = solves.pop()  # the last solve is followed by the final gather
-    X, B = _buffers(x, padpos, len(between))
-    bx, bb = _blocks(backend, buckets, X), _blocks(backend, buckets, B)
-    for M, low in solves:
-        solve(M, low, bx)
-        _gather(X, between, B)  # B[:S] = X[between]: rotate to the next direction
-        X, B = B, X
-        bx, bb = bb, bx
-    solve(last_M, last_low, bx)
-    dot = np.empty(len(padpos), dtype=np.float64)
-    _gather(X, final, dot)  # dot = X[final]: the last rotation, straight into the output
-    return dot
+    if backend == "tube":
+        return _itransform_tubes(Ms, lower, _vector(x, len(pi)), m, buckets, pi, serial)
+    x = _vector(x, len(padpos))
+    return _itransform_blocks(Ms, lower, x, m, buckets, padpos, between, final)
 
 
 def dtransform(
@@ -254,49 +252,98 @@ def dtransform(
     m: int,
     backend: str,
     buckets: np.ndarray,
-    padpos: np.ndarray,
-    between: np.ndarray,
-    final: np.ndarray,
+    pi: Optional[np.ndarray],
     serial: bool,
+    padpos: Optional[np.ndarray],
+    between: Optional[np.ndarray],
+    final: Optional[np.ndarray],
 ) -> np.ndarray:
     """O(S n), S = size of the layout
 
     Product with the triangular matrix `D` (dense, C order) along a single direction: the
     permutation `perm` brings that direction to the tubes, ``x[perm]``, and back.
     """
-    multiply, _ = _kernels(backend, serial)
-    x = np.ascontiguousarray(x, dtype=np.float64)
-    if x.shape != padpos.shape:
-        raise ValueError(f"x must have shape {padpos.shape}, but got {x.shape}.")
-    S = len(between)
-    X, B = _aligned_zeros(S + 1), _aligned_zeros(S + 1)
-    _move(x, perm, padpos, X)  # X[padpos] = x[perm]: the direction to the tubes, into the layout
-    multiply(D, lower, _blocks(backend, buckets, X), _blocks(backend, buckets, B))
-    dot = np.empty(len(padpos), dtype=np.float64)
-    _move(B, padpos, perm, dot)  # dot[perm] = B[padpos]: and back
-    return dot
+    if backend == "tube":
+        return _dtransform_tubes(D, lower, _vector(x, len(perm)), perm, buckets, serial)
+    return _dtransform_blocks(D, _vector(x, len(padpos)), perm, buckets, padpos, between)
 
 
-def _kernels(
-    backend: str,
-    serial: bool,
-):
-    """O(1)
-
-    The product and the solve of a backend.
-    """
-    if backend == "blas":
-        return _multiply_blocks, _solve_blocks
-    if serial:
-        return _multiply_tubes_serial, _solve_tubes_serial
-    return _multiply_tubes, _solve_tubes
-
-
-# tube-wise kernels (backend="tube"): every bucket is one tube, at its place in the vector
+# tube-wise backend: every bucket is one tube, at its place in the vector
+#
+# The kernels multiply (or solve) and rotate in one pass: every result goes straight to
+# its place in the next direction, B[rot[i]] for the entry i. So there are no gathers, and
+# two work vectors are enough.
 #
 # The serial kernels are separate functions on purpose. Compiling one function twice, with
 # and without parallel=True, does not work: numba's cache does not tell the two apart and
 # hands both the code of whichever was compiled first.
+
+
+def _transform_tubes(
+    Ms: Sequence[np.ndarray],
+    lower: Sequence[bool],
+    x: np.ndarray,
+    m: int,
+    buckets: np.ndarray,
+    pi: np.ndarray,
+    serial: bool,
+) -> np.ndarray:
+    """O(m n|A|) per matrix
+
+    `transform` for ``backend="tube"``.
+    """
+    multiply = _multiply_tubes_serial if serial else _multiply_tubes
+    X, B = np.empty(len(x), dtype=np.float64), np.empty(len(x), dtype=np.float64)
+    src = x  # the first product reads the input itself, the later ones the work vectors
+    for M, low in zip(Ms, lower):
+        for _ in range(m):  # along every direction
+            multiply(M, low, buckets, pi, src, B)  # B[pi] = M @ src, tube by tube
+            X, B = B, X
+            src = X
+    return X
+
+
+def _itransform_tubes(
+    Ms: Sequence[np.ndarray],
+    lower: Sequence[bool],
+    x: np.ndarray,
+    m: int,
+    buckets: np.ndarray,
+    pi: np.ndarray,
+    serial: bool,
+) -> np.ndarray:
+    """O(m n|A|) per matrix
+
+    `itransform` for ``backend="tube"``.
+    """
+    solve = _solve_tubes_serial if serial else _solve_tubes
+    X = x.copy()  # the solves are in place
+    B = np.empty(len(x), dtype=np.float64)
+    for M, low in zip(Ms, lower):
+        for _ in range(m):  # along every direction
+            solve(M, low, buckets, pi, X, B)  # B[pi] = inv(M) @ X, tube by tube
+            X, B = B, X
+    return X
+
+
+def _dtransform_tubes(
+    D: np.ndarray,
+    lower: bool,
+    x: np.ndarray,
+    perm: np.ndarray,
+    buckets: np.ndarray,
+    serial: bool,
+) -> np.ndarray:
+    """O(n|A|)
+
+    `dtransform` for ``backend="tube"``.
+    """
+    multiply = _multiply_tubes_serial if serial else _multiply_tubes
+    X = np.empty(len(x), dtype=np.float64)
+    _gather(x, perm, X)  # X = x[perm]: the direction to the tubes
+    dot = np.empty(len(x), dtype=np.float64)
+    multiply(D, lower, buckets, perm, X, dot)  # dot[perm] = D @ X, tube by tube: and back
+    return dot
 
 
 @njit(inline="always")
@@ -305,12 +352,13 @@ def _multiply_tube(
     lower: bool,
     t: int,
     pos: int,
+    rot: np.ndarray,
     X: np.ndarray,
     B: np.ndarray,
 ) -> None:
     """O(t^2)
 
-    B <- M[:t, :t] @ X for the tube of length t at `pos`.
+    B[rot] <- M[:t, :t] @ X for the tube of length t at `pos`.
     """
     for k in range(t):
         s = 0.0
@@ -320,7 +368,7 @@ def _multiply_tube(
         else:
             for l in range(k, t):
                 s += M[k, l] * X[pos + l]
-        B[pos + k] = s
+        B[rot[pos + k]] = s
 
 
 @njit(inline="always")
@@ -329,12 +377,14 @@ def _solve_tube(
     lower: bool,
     t: int,
     pos: int,
+    rot: np.ndarray,
     X: np.ndarray,
+    B: np.ndarray,
 ) -> None:
     """O(t^2)
 
     In place X <- inv(M[:t, :t]) @ X for the tube of length t at `pos`, by forward (lower)
-    or back (upper) substitution.
+    or back (upper) substitution, and B[rot] <- X.
     """
     if lower:
         for k in range(t):
@@ -342,98 +392,188 @@ def _solve_tube(
             for l in range(k):
                 s += M[k, l] * X[pos + l]
             X[pos + k] = (X[pos + k] - s) / M[k, k]
+            B[rot[pos + k]] = X[pos + k]
     else:
         for k in range(t - 1, -1, -1):
             s = 0.0
             for l in range(k + 1, t):
                 s += M[k, l] * X[pos + l]
             X[pos + k] = (X[pos + k] - s) / M[k, k]
+            B[rot[pos + k]] = X[pos + k]
 
 
 @njit(parallel=PARALLEL)
 def _multiply_tubes(
     M: np.ndarray,
     lower: bool,
-    bx: Tuple[np.ndarray, np.ndarray],
-    bb: Tuple[np.ndarray, np.ndarray],
+    buckets: np.ndarray,
+    rot: np.ndarray,
+    X: np.ndarray,
+    B: np.ndarray,
 ) -> None:
     """O(n|A|)
 
-    B <- M[:t, :t] @ X for every tube of length t: the product along the current direction.
+    B[rot] <- M[:t, :t] @ X for every tube of length t: the product along the current
+    direction, written to the places `rot` of the entries.
     """
-    buckets, X = bx
-    _, B = bb
     for i in prange(len(buckets)):
-        _multiply_tube(M, lower, buckets[i, 0], buckets[i, 1], X, B)
+        _multiply_tube(M, lower, buckets[i, 0], buckets[i, 1], rot, X, B)
 
 
 @njit
 def _multiply_tubes_serial(
     M: np.ndarray,
     lower: bool,
-    bx: Tuple[np.ndarray, np.ndarray],
-    bb: Tuple[np.ndarray, np.ndarray],
+    buckets: np.ndarray,
+    rot: np.ndarray,
+    X: np.ndarray,
+    B: np.ndarray,
 ) -> None:
     """O(n|A|)
 
     `_multiply_tubes` on one thread.
     """
-    buckets, X = bx
-    _, B = bb
     for i in range(len(buckets)):
-        _multiply_tube(M, lower, buckets[i, 0], buckets[i, 1], X, B)
+        _multiply_tube(M, lower, buckets[i, 0], buckets[i, 1], rot, X, B)
 
 
 @njit(parallel=PARALLEL)
 def _solve_tubes(
     M: np.ndarray,
     lower: bool,
-    bx: Tuple[np.ndarray, np.ndarray],
+    buckets: np.ndarray,
+    rot: np.ndarray,
+    X: np.ndarray,
+    B: np.ndarray,
 ) -> None:
     """O(n|A|)
 
-    In place X <- inv(M[:t, :t]) @ X for every tube of length t: the solve along the
-    current direction.
+    In place X <- inv(M[:t, :t]) @ X for every tube of length t, and B[rot] <- X: the
+    solve along the current direction, written to the places `rot` of the entries.
     """
-    buckets, X = bx
     for i in prange(len(buckets)):
-        _solve_tube(M, lower, buckets[i, 0], buckets[i, 1], X)
+        _solve_tube(M, lower, buckets[i, 0], buckets[i, 1], rot, X, B)
 
 
 @njit
 def _solve_tubes_serial(
     M: np.ndarray,
     lower: bool,
-    bx: Tuple[np.ndarray, np.ndarray],
+    buckets: np.ndarray,
+    rot: np.ndarray,
+    X: np.ndarray,
+    B: np.ndarray,
 ) -> None:
     """O(n|A|)
 
     `_solve_tubes` on one thread.
     """
-    buckets, X = bx
     for i in range(len(buckets)):
-        _solve_tube(M, lower, buckets[i, 0], buckets[i, 1], X)
+        _solve_tube(M, lower, buckets[i, 0], buckets[i, 1], rot, X, B)
 
 
-# BLAS kernels (backend="blas"): one call per bucket
+# BLAS backend: one call per bucket, then a gather to the next direction
 #
-# These loops are plain Python on purpose: they run once per bucket, a handful of times,
-# and all their time is spent inside BLAS. Inside numba the product would need contiguous
-# operands (a copy of M[:t, :t] per call) and scipy's dtrsm is not available at all.
-# BLAS threads on its own, so there is nothing to gain from a parallel loop around it.
+# A BLAS call writes a whole block in one piece, so it cannot send every result to its
+# place in the next direction as the tube-wise kernels do: the rotation is a gather of its
+# own, `between`, and `final` after the last direction.
+#
+# The loops over the buckets are plain Python on purpose: they run once per bucket, a
+# handful of times, and all their time is spent inside BLAS. Inside numba the product
+# would need contiguous operands (a copy of M[:t, :t] per call) and scipy's dtrsm is not
+# available at all. BLAS threads on its own, so there is nothing to gain from a parallel
+# loop around it.
+
+
+def _transform_blocks(
+    Ms: Sequence[np.ndarray],
+    x: np.ndarray,
+    m: int,
+    buckets: np.ndarray,
+    padpos: np.ndarray,
+    between: np.ndarray,
+    final: np.ndarray,
+) -> np.ndarray:
+    """O(m S n) per matrix
+
+    `transform` for ``backend="blas"``.
+    """
+    products = []
+    for M in Ms:
+        products += [M] * m  # each matrix along every direction
+    last_M = products.pop()  # the last product is followed by the final gather
+    X, B = _buffers(x, padpos, len(between))
+    bx, bb = _blocks(buckets, X), _blocks(buckets, B)
+    for M in products:
+        _multiply_blocks(M, bx, bb)
+        _gather(B, between, X)  # X[:S] = B[between]: rotate to the next direction
+    _multiply_blocks(last_M, bx, bb)
+    dot = np.empty(len(x), dtype=np.float64)
+    _gather(B, final, dot)  # dot = B[final]: the last rotation, straight into the output
+    return dot
+
+
+def _itransform_blocks(
+    Ms: Sequence[np.ndarray],
+    lower: Sequence[bool],
+    x: np.ndarray,
+    m: int,
+    buckets: np.ndarray,
+    padpos: np.ndarray,
+    between: np.ndarray,
+    final: np.ndarray,
+) -> np.ndarray:
+    """O(m S n) per matrix
+
+    `itransform` for ``backend="blas"``.
+    """
+    solves = []
+    for M, low in zip(Ms, lower):
+        solves += [(M, low)] * m  # each matrix along every direction
+    last_M, last_low = solves.pop()  # the last solve is followed by the final gather
+    X, B = _buffers(x, padpos, len(between))
+    bx, bb = _blocks(buckets, X), _blocks(buckets, B)
+    for M, low in solves:
+        _solve_blocks(M, low, bx)
+        _gather(X, between, B)  # B[:S] = X[between]: rotate to the next direction
+        X, B = B, X
+        bx, bb = bb, bx
+    _solve_blocks(last_M, last_low, bx)
+    dot = np.empty(len(x), dtype=np.float64)
+    _gather(X, final, dot)  # dot = X[final]: the last rotation, straight into the output
+    return dot
+
+
+def _dtransform_blocks(
+    D: np.ndarray,
+    x: np.ndarray,
+    perm: np.ndarray,
+    buckets: np.ndarray,
+    padpos: np.ndarray,
+    between: np.ndarray,
+) -> np.ndarray:
+    """O(S n)
+
+    `dtransform` for ``backend="blas"``.
+    """
+    S = len(between)
+    X, B = _aligned_zeros(S + 1), _aligned_zeros(S + 1)
+    _move(x, perm, padpos, X)  # X[padpos] = x[perm]: the direction to the tubes, into the layout
+    _multiply_blocks(D, _blocks(buckets, X), _blocks(buckets, B))
+    dot = np.empty(len(x), dtype=np.float64)
+    _move(B, padpos, perm, dot)  # dot[perm] = B[padpos]: and back
+    return dot
 
 
 def _multiply_blocks(
     M: np.ndarray,
-    lower: bool,
     bx: list,
     bb: list,
 ) -> None:
     """O(S n)
 
     Bb <- M[:t, :t] @ Xb for every pair of blocks: the product along the current
-    direction. The zeros of the triangular M are multiplied like any entry, so `lower` is
-    not needed.
+    direction. The zeros of the triangular M are multiplied like any entry.
     """
     for (t, Xb), (_, Bb) in zip(bx, bb):
         np.matmul(M[:t, :t], Xb, out=Bb)
@@ -455,7 +595,33 @@ def _solve_blocks(
         _dtrsm(1.0, Mf, Xb.T, side=1, lower=lower, trans_a=1, diag=0, overwrite_b=1)
 
 
-# gathers and buffers
+def _blocks(
+    buckets: np.ndarray,
+    X: np.ndarray,
+) -> list:
+    """O(len(buckets))
+
+    Every bucket's stretch of the flat buffer X as a (length, width) matrix, paired with
+    its length: views, no copies, built once per call.
+    """
+    return [(t, X[b : b + t * w].reshape(t, w)) for t, b, w in buckets]
+
+
+def _buffers(
+    x: np.ndarray,
+    padpos: np.ndarray,
+    S: int,
+) -> Tuple[np.ndarray, np.ndarray]:
+    """O(S)
+
+    Two work buffers with the zero slot S, the first holding x in the layout.
+    """
+    X, B = _aligned_zeros(S + 1), _aligned_zeros(S + 1)
+    _scatter(x, padpos, X)  # X[padpos] = x
+    return X, B
+
+
+# gathers and helpers
 #
 # The gathers are numba loops rather than numpy's `take` or fancy indexing: numpy runs on
 # one thread and fancy indexing allocates a temporary, 3 to 11 times slower.
@@ -519,23 +685,6 @@ def _move(
             dst[idst[i]] = src[isrc[i]]
 
 
-def _blocks(
-    backend: str,
-    buckets: np.ndarray,
-    X: np.ndarray,
-):
-    """O(len(buckets))
-
-    The buckets of the flat buffer X, in the form the kernels of the backend take them,
-    built once per call. For "blas" every bucket's stretch of X as a (length, width)
-    matrix, paired with its length: views, no copies. For "tube" the buckets are single
-    tubes at their places in X, so the pair (buckets, X) is all the kernels need.
-    """
-    if backend == "blas":
-        return [(t, X[b : b + t * w].reshape(t, w)) for t, b, w in buckets]
-    return buckets, X
-
-
 def _aligned_zeros(n: int) -> np.ndarray:
     """O(n)
 
@@ -546,18 +695,15 @@ def _aligned_zeros(n: int) -> np.ndarray:
     return buf[off : off + n]
 
 
-def _buffers(
+def _vector(
     x: np.ndarray,
-    padpos: np.ndarray,
-    S: int,
-) -> Tuple[np.ndarray, np.ndarray]:
-    """O(S)
+    N: int,
+) -> np.ndarray:
+    """O(N)
 
-    Two work buffers with the zero slot S, the first holding x in the layout.
+    x as a contiguous vector of N doubles; no copy if it is one already.
     """
     x = np.ascontiguousarray(x, dtype=np.float64)
-    if x.shape != padpos.shape:
-        raise ValueError(f"x must have shape {padpos.shape}, but got {x.shape}.")
-    X, B = _aligned_zeros(S + 1), _aligned_zeros(S + 1)
-    _scatter(x, padpos, X)  # X[padpos] = x
-    return X, B
+    if x.shape != (N,):
+        raise ValueError(f"x must have shape {(N,)}, but got {x.shape}.")
+    return x

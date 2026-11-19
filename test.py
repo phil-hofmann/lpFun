@@ -254,7 +254,7 @@ def test_function_state(pr: bool, be: str):
     # order of application, each with its flag "lower triangular"
     kw = dict(backend=be, precomputation=pr, precompilation=False, report=False)
     g = lpfun.Function(3, 5, basis="chebyshev", **kw)
-    assert set(g._plan) == {"m", "backend", "buckets", "padpos", "between", "final", "serial"}
+    assert set(g._plan) == {"m", "backend", "buckets", "pi", "padpos", "between", "final", "serial"}
     assert g._plan["backend"] == be and g._plan["m"] == 3
     assert len(g._eval_factors) == len(g._interp_factors) == 2
     assert g._eval_lower == (False, True) and g._interp_lower == (True, False)
@@ -269,15 +269,17 @@ def test_function_state(pr: bool, be: str):
 @pytest.mark.parametrize("m, n, p", [(1, 9, 2.0), (2, 12, 1.0), (3, 7, 2.0), (4, 5, np.inf), (5, 4, 0.5)])
 def test_tube_layout(m: int, n: int, p: float):
     """With backend="tube" every tube is a bucket of its own: nothing is padded, the layout
-    is the vector itself and the gather between two directions is the transposition."""
+    is the vector itself and the plan keeps the transposition instead of the gathers."""
+    from lpfun.core import transform as tr
     fun = lpfun.Function(m, n, p, backend="tube", precompilation=False, report=False)
-    plan, N = fun._plan, len(fun)
+    plan = fun._plan
     assert np.array_equal(plan["buckets"][:, 0], fun._T)
     assert np.array_equal(plan["buckets"][:, 1], fun._cs_T[:-1])
     assert np.all(plan["buckets"][:, 2] == 1)
-    assert np.array_equal(plan["padpos"], np.arange(N)) and len(plan["between"]) == N
-    assert np.array_equal(plan["between"], plan["final"])
-    assert np.array_equal(plan["between"][fun._pi], np.arange(N))  # the inverse of pi
+    assert np.array_equal(plan["pi"], fun._pi) and plan["pi"].dtype == np.int32
+    assert plan["padpos"] is None and plan["between"] is None and plan["final"] is None
+    blas = tr.transform_plan(fun._T, fun._cs_T, fun._pi, m, "blas")
+    assert blas["pi"] is None and blas["serial"] is False and set(blas) == set(plan)
 
 
 @pytest.mark.parametrize("m, n, ba, pr", list(product([1, 2, 3, 5], [3, 9], ["newton", "chebyshev"], precomputation)))
@@ -299,6 +301,19 @@ def test_tube_serial_kernels(m: int, n: int, ba: str, pr: bool):
         np.testing.assert_array_equal(a, b)
     big = lpfun.Function(3, 60, backend="tube", precompilation=False, report=False)
     assert big._plan["serial"] is False
+
+
+@pytest.mark.parametrize("m, be, pr", list(product([1, 2, 3], ["tube", "blas"], precomputation)))
+def test_input_untouched(m: int, be: str, pr: bool):
+    """The transforms read the input and never write to it: the tube-wise kernels work on
+    the input itself, and every result is a new array."""
+    kw = dict(basis="chebyshev", backend=be, precomputation=pr, precompilation=False, report=False)
+    fun = lpfun.Function(m, 6, **kw)
+    x = np.random.default_rng(m).uniform(-1, 1, len(fun))
+    kept = x.copy()
+    for y in (fun.interp(x), fun.eval(x), fun.diff(x, 0), fun.diffT(x, m - 1)):
+        np.testing.assert_array_equal(x, kept)
+        assert not np.shares_memory(x, y)
 
 
 @pytest.mark.parametrize(
