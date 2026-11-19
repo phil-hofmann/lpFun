@@ -1,7 +1,7 @@
 """
 Measure the two constants of the bucket cost of the BLAS backend and how much they matter.
 
-The BLAS backend (`lpfun.core.blas`) groups the tubes into buckets by minimising a model
+The BLAS backend (`lpfun.core.transform`, ``backend="blas"``) groups the tubes into buckets by minimising a model
 of the time of its matrix products, ``CALL + L^2 (w + W0)`` per bucket in units of one
 multiply-add. ``CALL`` and ``W0`` belong to the machine and its BLAS library. This script
 has two commands:
@@ -25,7 +25,7 @@ Usage::
     python scripts/tune_fnt_blas.py sweep --constant call --values 0 1e4 5e4 2e5 1e6
     python scripts/tune_fnt_blas.py sweep --cases 2,1024,2 3,128,0.5 --csv sweep.csv
 
-To use measured values, assign ``lpfun.core.blas.CALL`` and ``lpfun.core.blas.W0`` before
+To use measured values, assign ``lpfun.core.transform.CALL`` and ``lpfun.core.transform.W0`` before
 constructing a `Function`. Run on a quiet machine: the timings are minima over a few
 repetitions, which removes most but not all of the disturbance from other processes.
 """
@@ -39,7 +39,7 @@ import time
 import numpy as np
 
 import lpfun
-from lpfun.core import blas
+from lpfun.core import transform as blas
 
 FIT_LENGTHS = (16, 32, 64, 128, 256, 512, 1024, 2000)
 FIT_WIDTHS = (8, 16, 32, 64, 128, 256, 512, 1024, 2048)
@@ -144,11 +144,11 @@ def sweep(args) -> None:
     for m, n, p in cases:
         fun = lpfun.Function(m, n, lp_degree=p, basis=args.basis, backend="blas", report=False, precompilation=False)
         N, x = len(fun), np.random.default_rng(0).uniform(-1, 1, len(fun))
-        plans = [blas.blas_plan(fun._T, fun._cs_T, fun._pi, m, **{args.constant: v}) for v in values]
+        plans = [blas.transform_plan(fun._T, fun._cs_T, fun._pi, m, "blas", **{args.constant: v}) for v in values]
         runs = []
         for plan in plans:
-            runs.append(lambda plan=plan: blas.transform_blas(fun._blas_fwd, x, **plan))
-            runs.append(lambda plan=plan: blas.transform_blas(fun._blas_inv, x, **plan))
+            runs.append(lambda plan=plan: blas.transform(fun._eval_factors, fun._eval_lower, x, **plan))
+            runs.append(lambda plan=plan: blas.transform(fun._interp_factors, fun._interp_lower, x, **plan))
         # interleave the candidates, so that a disturbance hits all of them alike
         for f in runs:
             f()

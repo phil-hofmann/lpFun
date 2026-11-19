@@ -204,7 +204,7 @@ backends give the same results up to rounding.
 | `backend`          | Description                                                                                       |
 | ------------------ | ------------------------------------------------------------------------------------------------- |
 | `"auto"` (default) | `"blas"` for spatial dimension 2 and higher, `"tube"` in one dimension.                           |
-| `"tube"`           | Applies the triangular factors tube by tube. Needs no memory beyond the input and output vectors. |
+| `"tube"`           | Applies the triangular factors tube by tube, without padding.                                     |
 | `"blas"`           | Pads the tubes and applies the factors as dense BLAS products. Faster, and uses more memory.      |
 
 ### Main methods
