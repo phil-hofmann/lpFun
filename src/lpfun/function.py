@@ -53,8 +53,23 @@ from lpfun.basis.nodes import (
 from lpfun.basis.vander import (
     newton2lagrange,
     chebyshev2lagrange,
+    chebyshev2lagrange_lobatto,
     legendre2lagrange,
 )
+
+
+def _lobatto_indices(x: np.ndarray):
+    """Integer indices l with x = cos(l pi / n), n = len(x) - 1, if `x` are the n + 1
+    Chebyshev-Lobatto points in any order; None otherwise."""
+    n = len(x) - 1
+    if n < 1:
+        return None
+    lidx = np.rint(np.arccos(np.clip(x, -1.0, 1.0)) * n / np.pi).astype(np.int64)
+    if len(np.unique(lidx)) != n + 1:
+        return None
+    if not np.allclose(np.cos(lidx * np.pi / n), x, rtol=0.0, atol=1e-15):
+        return None
+    return lidx
 
 
 class AbstractFunction(ABC):
@@ -158,6 +173,12 @@ class Function(AbstractFunction):
             Typical choices are Chebyshev nodes `cheb2nd_nodes` or Leja nodes `leja_nodes`.
         basis: str, optional
             The polynomial basis used for constructing Vandermonde and differentiation matrices.
+            For the Chebyshev basis on the Chebyshev-Lobatto points cos(l pi / n),
+            l = 0, ..., n, in any order (the default nodes), the 1D Vandermonde matrix is
+            built from the exact angles, T_k(cos(l pi / n)) = cos(k l pi / n) with the
+            integer angle k l reduced first, so every entry is accurate to about one ulp;
+            at other nodes the three-term recurrence typically loses k * eps in column k,
+            and up to k^2 * eps near the nodes +-1.
             The default is "newton".
         precomputation : bool, optional
             If True, precompute the inverse of the Vandermonde matrix.
@@ -250,6 +271,9 @@ class Function(AbstractFunction):
         self._leja_order = get_leja_order(x)
         self._x = x[self._leja_order]
 
+        # exact Lobatto angles of the nodes, if they are the Chebyshev-Lobatto points
+        lidx = _lobatto_indices(self._x) if basis == "chebyshev" else None
+
         # grid
         self._spinner_label = "Constructing grid..."
         self._grid = get_grid(self._x, self._A, self._m, self._n, self._p)
@@ -262,7 +286,10 @@ class Function(AbstractFunction):
             Vx = newton2lagrange(self._x)
             Dx = newton2derivative(self._x)
         elif basis == "chebyshev":
-            Vx = chebyshev2lagrange(self._x)
+            if lidx is not None:
+                Vx = chebyshev2lagrange_lobatto(lidx, self._n)
+            else:
+                Vx = chebyshev2lagrange(self._x)
             Dx = chebyshev2derivative(self._x)
         elif basis == "legendre":
             Vx = legendre2lagrange(self._x)
